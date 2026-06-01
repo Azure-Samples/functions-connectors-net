@@ -8,6 +8,7 @@
 > - The **Function App, Storage Account** and **Application Insights** resource are accessible only to the mailbox owner (or an appropriately authorized set of users).
 > - Your organization's data-handling and privacy policies permit storing email content in the configured Storage account.
 > - You tear down the sample (`azd down --purge`) promptly after testing to avoid retaining personal data.
+> - You **scope the trigger** to limit which emails fire the function. By default this sample only triggers on high-importance emails in the Inbox. Before deploying, review and adjust the trigger parameters in `infra/scripts/postdeploy.ps1` (or `.sh`) to match your scenario — for example, filter by `folderPath` to a specific subfolder, or change `importance` to reduce the volume of emails processed.
 
 > **More triggers and operations:** See the full [Operations to Azure Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) for all supported connector triggers and their .NET, Python, and TypeScript signatures.
 
@@ -23,9 +24,6 @@ The post-deploy script creates a trigger config on the Connector Namespace with 
 | `authentication.type` | `ManagedServiceIdentity` | The connector mints an AAD token using the trigger UAMI. |
 
 To change these defaults, edit the trigger parameters in `infra/scripts/postdeploy.ps1` (Windows) or `infra/scripts/postdeploy.sh` (Linux/macOS) before running `azd up`.
-
-> [!TIP]
-> **Scope the trigger to limit which emails fire the function.** By default this sample only triggers on high-importance emails in the Inbox. Before deploying, review and adjust the trigger parameters to match your scenario — for example, filter by `folderPath` to a specific subfolder, or change `importance` to reduce the volume of emails processed. The narrower the scope, the less unwanted data flows through the sample.
 
 ## Deploy and test
 
