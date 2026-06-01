@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Azure Developer CLI
+.azure/
+
 # User-specific files
 *.rsuser
 *.suo
@@ -427,3 +430,13 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+.azurite-data/
+
+# Azure Functions local settings — may contain connection strings / secrets.
+# Use src/local.settings.json.sample as the committed template instead.
+local.settings.json
+
+# Azurite local storage files
+__azurite_db*
+__blobstorage__/*
+AzuriteConfig
