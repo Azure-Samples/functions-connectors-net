@@ -22,68 +22,69 @@ resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
 connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
 connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
 functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
-office365FunctionName=$(echo "$outputs" | jq -r '.office365FunctionName')
-entraAppClientId=$(echo "$outputs" | jq -r '.entraAppClientId')
-triggerIdentityResourceId=$(echo "$outputs" | jq -r '.triggerIdentityResourceId')
 
-# --- Create Connector Namespace trigger config ---
-echo -e "${YELLOW}Creating Connector Namespace trigger config...${NC}"
+# Fetch the connector extension system key
+echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
+connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
 
-triggerName="${connectorNamespaceConnectionName}-trigger"
+# --- Helper: create a trigger config on the Connector Namespace ---
+create_trigger_config() {
+  local functionName="$1"
+  local operationName="$2"
+  local description="$3"
+  local parametersJson="$4"  # JSON array string
 
-# Anonymous webhook auth on /runtime/webhooks/connector is opted into via
-# `extensions.connector.system.webhookAuthorizationLevel = "Anonymous"` in
-# host.json. That drops the `code=` requirement, leaving built-in
-# authentication (validating the trigger UAMI's AAD token) as the single
-# enforcement point.
-callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${office365FunctionName}"
+  local triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
+  local callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+  local apiUrl="https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.Web/connectorGateways/${connectorNamespaceName}/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
 
-apiUrl="https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/${resourceGroupName}/providers/Microsoft.Web/connectorGateways/${connectorNamespaceName}/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
-
-# notificationDetails.authentication tells the connector to attach an Entra ID
-# token (minted from the user-assigned MI referenced by `identity`) when calling
-# the callbackUrl. The token's audience must match an allowedAudience configured
-# on the function app's EasyAuth -- we use the Entra app's clientId.
-body=$(cat <<JSON
+  local body
+  body=$(cat <<JSON
 {
   "properties": {
-    "description": "Office 365 Outlook trigger config (secured with MI + built-in authentication)",
+    "description": "${description}",
     "connectionDetails": {
       "connectorName": "office365",
       "connectionName": "${connectorNamespaceConnectionName}"
     },
-    "operationName": "OnNewEmailV3",
-    "parameters": [
-      {
-        "name": "folderPath",
-        "value": "Inbox"
-      },
-      {
-        "name": "importance",
-        "value": "High"
-      }
-    ],
+    "operationName": "${operationName}",
+    "parameters": ${parametersJson},
     "notificationDetails": {
-      "callbackUrl": "${callbackUrl}",
-      "httpMethod": "Post",
-      "authentication": {
-        "type": "ManagedServiceIdentity",
-        "audience": "${entraAppClientId}",
-        "identity": "${triggerIdentityResourceId}"
-      }
+      "callbackUrl": "${callbackUrl}"
     }
   }
 }
 JSON
 )
 
-echo -e "${CYAN}  API URL: ${apiUrl}${NC}"
-echo -e "${CYAN}  Callback URL: ${callbackUrl}${NC}"
-echo -e "${CYAN}  Token audience: ${entraAppClientId}${NC}"
+  echo -e "${CYAN}  Creating trigger: ${functionName} -> ${operationName}${NC}"
+  az rest --method PUT --url "${apiUrl}" --body "${body}" > /dev/null
+}
 
-az rest --method PUT --url "${apiUrl}" --body "${body}"
+# --- Create trigger configs for all 5 functions ---
+echo -e "${YELLOW}Creating Connector Namespace trigger configs...${NC}"
 
-echo -e "${GREEN}✅ Connector Namespace trigger config created.${NC}"
+create_trigger_config "OnNewEmail" "OnNewEmailV3" \
+  "When a new email arrives" \
+  '[{"name":"folderPath","value":"Inbox"},{"name":"importance","value":"High"}]'
+
+create_trigger_config "OnFlaggedEmail" "OnFlaggedEmailV4" \
+  "When an email is flagged" \
+  '[{"name":"folderPath","value":"Inbox"}]'
+
+create_trigger_config "OnNewMentionMeEmail" "OnNewMentionMeEmailV3" \
+  "When a new email mentioning me arrives" \
+  '[{"name":"folderPath","value":"Inbox"}]'
+
+create_trigger_config "OnNewCalendarEvent" "CalendarGetOnNewItemsV3" \
+  "When a new calendar event is created" \
+  '[{"name":"table","value":"Calendar"}]'
+
+create_trigger_config "OnUpcomingEvent" "OnUpcomingEventsV3" \
+  "When an upcoming event is starting soon" \
+  '[{"name":"table","value":"Calendar"}]'
+
+echo -e "${GREEN}✅ All trigger configs created.${NC}"
 
 # --- Authorize the office365 connection via Azure CLI ---
 echo ""
@@ -103,6 +104,6 @@ az connector-namespace connection authorize \
   --name "${connectorNamespaceConnectionName}"
 
 echo ""
-echo -e "${GREEN}✅ Done. New emails in the connected Inbox will fire the OnNewEmail function.${NC}"
+echo -e "${GREEN}✅ Done. All 5 Office 365 triggers are configured.${NC}"
 echo -e "${GREEN}   Tail logs:  az functionapp log tail -g ${resourceGroupName} -n ${functionAppName}${NC}"
 echo ""
