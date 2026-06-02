@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/office365App/">
+    <Project Path="office365App/functions-connectors-net.csproj" />
+  </Folder>
+</Solution>
