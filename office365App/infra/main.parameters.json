@@ -10,15 +10,6 @@
     },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
-    },
-    "office365FunctionName": {
-      "value": "OnNewEmail"
-    },
-    "serviceManagementReference": {
-      "value": "${SERVICE_MANAGEMENT_REFERENCE=}"
-    },
-    "createConnectorNamespace": {
-      "value": "${CREATE_CONNECTOR_NAMESPACE=true}"
     }
   }
 }

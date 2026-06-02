@@ -13,8 +13,8 @@ param environmentName string
 @description('Location for all resources except the Connector Namespace (which is pinned to westcentralus while in preview).')
 param location string
 
-metadata name = 'Azure Functions M365 Email Secured (MI + built-in authentication)'
-metadata description = 'Hello-world Connector Namespace trigger sample where the namespace authenticates to the function app via system-assigned MI + built-in authentication (no function key).'
+metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
+metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -24,15 +24,6 @@ metadata description = 'Hello-world Connector Namespace trigger sample where the
 })
 param userPrincipalId string = deployer().objectId
 
-@description('Name of the Azure Function that handles the Office 365 connector trigger.')
-param office365FunctionName string = 'OnNewEmail'
-
-@description('Optional. Service Management Reference (e.g. a service tree GUID) attached to the Entra app registration. Required by some tenant policies — see https://aka.ms/service-management-reference-error.')
-param serviceManagementReference string = ''
-
-@description('When false, the Connector Namespace is referenced as existing and not re-PUT. Workaround for the RP rejecting identity in update PUTs after creation. Set this to false (via `azd env set CREATE_CONNECTOR_NAMESPACE false`) after the first successful provision to make `azd up` idempotent.')
-param createConnectorNamespace bool = true
-
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
@@ -40,14 +31,12 @@ var tags = { 'azd-env-name': environmentName }
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
 var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
-var triggerIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}trigger-${resourceToken}'
 var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
 var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
 var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
 var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
-var entraAppUniqueName = 'fn-${resourceToken}'
 
 var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-${take(toLower(uniqueString(functionAppName, environmentName)), 7)}'
 var storageBlobDataOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
@@ -79,19 +68,6 @@ module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigne
     location: location
     tags: tags
     name: functionAppIdentityName
-  }
-}
-
-// Dedicated identity attached to the Connector Namespace. The trigger config
-// references this UAMI by resource ID; the namespace runtime uses it to mint
-// AAD tokens when calling the function app callback URL.
-module triggerUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'triggerUserAssignedIdentity'
-  scope: rg
-  params: {
-    location: location
-    tags: tags
-    name: triggerIdentityName
   }
 }
 
@@ -185,16 +161,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection. A dedicated user-assigned MI is
-// attached so the trigger can mint AAD tokens; built-in authentication on the function app
-// validates those tokens and gates everything else out.
-//
-// NOTE: The Connector Namespace RP rejects `identity` in update PUTs after creation
-// ("ManagedIdentityInvalid: user assigned identities can not be changed") even when
-// the body is identical to current state. After the first successful provision, run:
-//   azd env set CREATE_CONNECTOR_NAMESPACE false
-// so subsequent `azd up`/`azd provision` skips the namespace PUT and only manages
-// children (connection + access policies).
+// Connector Namespace + office365 connection.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -203,26 +170,8 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: 'westcentralus' // Connector Namespace preview region.
     tags: tags
     connectionName: connectorNamespaceConnectionName
-    triggerIdentityResourceId: triggerUserAssignedIdentity.outputs.resourceId
-    triggerIdentityPrincipalId: triggerUserAssignedIdentity.outputs.principalId
     functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
     userPrincipalId: userPrincipalId
-    createConnectorNamespace: createConnectorNamespace
-  }
-}
-
-// Entra app registration that built-in authentication validates incoming tokens against.
-// The function MI federates against this app so built-in auth needs no client secret.
-module entraApp './app/entra.bicep' = {
-  scope: rg
-  name: 'entraApp'
-  params: {
-    appUniqueName: entraAppUniqueName
-    appDisplayName: 'M365 Email Secured Function (${functionAppName})'
-    serviceManagementReference: serviceManagementReference
-    managedIdentityPrincipalId: funcUserAssignedIdentity.outputs.principalId
-    functionAppHostname: '${functionAppName}.azurewebsites.net'
-    tags: tags
   }
 }
 
@@ -234,9 +183,6 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
-  // Magic value: tells built-in authentication to use the named user-assigned MI to mint
-  // a federated client assertion against the Entra app, in place of a client secret.
-  OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID: funcUserAssignedIdentity.outputs.clientId
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -282,68 +228,6 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
         name: 'appsettings'
         properties: allAppSettings
       }
-      {
-        // Built-in authentication: every incoming request (including the connector callback)
-        // must carry a valid Entra ID token whose audience matches our app and
-        // whose caller object ID is the Connector Namespace's system-assigned MI.
-        name: 'authsettingsV2'
-        properties: {
-          globalValidation: {
-            requireAuthentication: true
-            unauthenticatedClientAction: 'Return401'
-            redirectToProvider: 'azureactivedirectory'
-          }
-          httpSettings: {
-            requireHttps: true
-            routes: {
-              apiPrefix: '/.auth'
-            }
-            forwardProxy: {
-              convention: 'NoProxy'
-            }
-          }
-          identityProviders: {
-            azureActiveDirectory: {
-              enabled: true
-              registration: {
-                openIdIssuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
-                clientId: entraApp.outputs.applicationId
-                // FIC instead of a client secret -- built-in authentication reads the
-                // user-assigned MI from the named app setting and uses it to
-                // mint client assertions for the Entra app.
-                clientSecretSettingName: 'OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID'
-              }
-              validation: {
-                jwtClaimChecks: {}
-                allowedAudiences: [
-                  entraApp.outputs.applicationId
-                  entraApp.outputs.identifierUri
-                ]
-                defaultAuthorizationPolicy: {
-                  allowedPrincipals: {
-                    // Only the Connector Namespace's trigger UAMI is allowed in.
-                    // Tokens are matched by oid (the UAMI's principalId).
-                    identities: [
-                      triggerUserAssignedIdentity.outputs.principalId
-                    ]
-                  }
-                }
-              }
-              isAutoProvisioned: false
-            }
-          }
-          login: {
-            tokenStore: {
-              enabled: false
-            }
-            preserveUrlFragmentsForLogins: false
-          }
-          platform: {
-            enabled: true
-            runtimeVersion: '~1'
-          }
-        }
-      }
     ]
   }
 }
@@ -365,15 +249,3 @@ output connectorNamespaceName string = connectorNamespace.outputs.name
 
 @description('The name of the created Office 365 connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
-
-@description('The name of the function that handles the Office 365 connector trigger.')
-output office365FunctionName string = office365FunctionName
-
-@description('App (client) ID of the Entra app registration built-in authentication validates against. Connector Namespace requests tokens for this audience.')
-output entraAppClientId string = entraApp.outputs.applicationId
-
-@description('Identifier URI of the Entra app registration (alternative audience value).')
-output entraAppIdentifierUri string = entraApp.outputs.identifierUri
-
-@description('Resource ID of the user-assigned MI attached to the Connector Namespace (referenced by the trigger config notificationDetails.authentication.identity).')
-output triggerIdentityResourceId string = triggerUserAssignedIdentity.outputs.resourceId

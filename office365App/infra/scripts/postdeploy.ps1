@@ -8,61 +8,97 @@ $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
 $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
-$office365FunctionName = $outputs.office365FunctionName
-$entraAppClientId = $outputs.entraAppClientId
-$triggerIdentityResourceId = $outputs.triggerIdentityResourceId
 
-# --- Create Connector Namespace trigger config ---
-Write-Host "Creating Connector Namespace trigger config..." -ForegroundColor Yellow
+# Fetch the connector extension system key
+Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
+$connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
 
-$triggerName = "$connectorNamespaceConnectionName-trigger"
-
-# Anonymous webhook auth on /runtime/webhooks/connector is opted into via
-# extensions.connector.system.webhookAuthorizationLevel = "Anonymous" in
-# host.json. That drops the `code=` requirement, leaving built-in
-# authentication (validating the trigger UAMI's AAD token) as the single
-# enforcement point.
-$callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$office365FunctionName"
-
-$apiUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
-
-$body = @{
-  properties = @{
-    description = "Office 365 Outlook trigger config (secured with MI + built-in authentication)"
-    connectionDetails = @{
-      connectorName = "office365"
-      connectionName = $connectorNamespaceConnectionName
-    }
-    operationName = "OnNewEmailV3"
-    parameters = @(
-      @{ name = "folderPath"; value = "Inbox" }
-      @{ name = "importance"; value = "High" }
+# --- Helper: create a trigger config on the Connector Namespace ---
+function New-TriggerConfig {
+    param(
+        [Parameter(Mandatory)] [string] $FunctionName,
+        [Parameter(Mandatory)] [string] $OperationName,
+        [Parameter(Mandatory)] [string] $Description,
+        [object[]] $Parameters = @()
     )
-    notificationDetails = @{
-      callbackUrl = $callbackUrl
-      httpMethod = "Post"
-      authentication = @{
-        type = "ManagedServiceIdentity"
-        audience = $entraAppClientId
-        identity = $triggerIdentityResourceId
-      }
+
+    $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
+    $callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$FunctionName&code=$connectorExtensionKey"
+    $apiUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
+
+    $body = @{
+        properties = @{
+            description = $Description
+            connectionDetails = @{
+                connectorName = "office365"
+                connectionName = $connectorNamespaceConnectionName
+            }
+            operationName = $OperationName
+            parameters = $Parameters
+            notificationDetails = @{
+                callbackUrl = $callbackUrl
+            }
+        }
+    } | ConvertTo-Json -Depth 5
+
+    Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
+
+    $bodyFile = [System.IO.Path]::GetTempFileName()
+    $body | Out-File -FilePath $bodyFile -Encoding utf8
+    az rest --method PUT --url $apiUrl --body "@$bodyFile" --headers "Content-Type=application/json" | Out-Null
+    Remove-Item $bodyFile -ErrorAction SilentlyContinue
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
+        exit 1
     }
-  }
-} | ConvertTo-Json -Depth 10 -Compress
+}
 
-Write-Host "  API URL: $apiUrl" -ForegroundColor Cyan
-Write-Host "  Callback URL: $callbackUrl" -ForegroundColor Cyan
-Write-Host "  Token audience: $entraAppClientId" -ForegroundColor Cyan
+# --- Create trigger configs for all 5 functions ---
+Write-Host "Creating Connector Namespace trigger configs..." -ForegroundColor Yellow
 
-$bodyJson = $body
-$tmpFile = [System.IO.Path]::GetTempFileName()
-$bodyJson | Out-File -FilePath $tmpFile -Encoding utf8
+New-TriggerConfig `
+    -FunctionName "OnNewEmail" `
+    -OperationName "OnNewEmailV3" `
+    -Description "When a new email arrives" `
+    -Parameters @(
+        @{ name = "folderPath"; value = "Inbox" }
+        @{ name = "importance"; value = "High" }
+    )
 
-az rest --method PUT --url $apiUrl --body "@$tmpFile" --headers "Content-Type=application/json" | Out-Null
+New-TriggerConfig `
+    -FunctionName "OnFlaggedEmail" `
+    -OperationName "OnFlaggedEmailV4" `
+    -Description "When an email is flagged" `
+    -Parameters @(
+        @{ name = "folderPath"; value = "Inbox" }
+    )
 
-Remove-Item $tmpFile
+New-TriggerConfig `
+    -FunctionName "OnNewMentionMeEmail" `
+    -OperationName "OnNewMentionMeEmailV3" `
+    -Description "When a new email mentioning me arrives" `
+    -Parameters @(
+        @{ name = "folderPath"; value = "Inbox" }
+    )
 
-Write-Host "Connector Namespace trigger config created." -ForegroundColor Green
+New-TriggerConfig `
+    -FunctionName "OnNewCalendarEvent" `
+    -OperationName "CalendarGetOnNewItemsV3" `
+    -Description "When a new calendar event is created" `
+    -Parameters @(
+        @{ name = "table"; value = "Calendar" }
+    )
+
+New-TriggerConfig `
+    -FunctionName "OnUpcomingEvent" `
+    -OperationName "OnUpcomingEventsV3" `
+    -Description "When an upcoming event is starting soon" `
+    -Parameters @(
+        @{ name = "table"; value = "Calendar" }
+    )
+
+Write-Host "All trigger configs created." -ForegroundColor Green
 
 # --- Authorize the office365 connection via Azure CLI ---
 Write-Host ""
@@ -83,6 +119,6 @@ az connector-namespace connection authorize `
   --name $connectorNamespaceConnectionName
 
 Write-Host ""
-Write-Host "Done. New emails in the connected Inbox will fire the OnNewEmail function." -ForegroundColor Green
+Write-Host "Done. All 5 Office 365 triggers are configured." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""
