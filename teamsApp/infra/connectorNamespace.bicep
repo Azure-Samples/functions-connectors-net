@@ -13,17 +13,17 @@ resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview'
   }
 }
 
-resource office365Connection 'Microsoft.Web/connectorGateways/connections@2026-05-01-preview' = {
+resource teamsConnection 'Microsoft.Web/connectorGateways/connections@2026-05-01-preview' = {
   parent: connectorNamespace
   name: connectionName
   properties: {
-    connectorName: 'office365'
+    connectorName: 'teams'
   }
 }
 
-// Connector Namespace system MI -> Office 365 connection (needed to poll triggers).
-resource office365ConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: office365Connection
+// Connector Namespace system MI -> Teams connection (needed to poll triggers).
+resource teamsConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
+  parent: teamsConnection
   name: 'connector-namespace-msi'
   properties: {
     principal: {
@@ -42,9 +42,8 @@ output resourceId string = connectorNamespace.id
 @description('The name of the Connector Namespace.')
 output name string = connectorNamespace.name
 
-@description('The name of the Office 365 connection on the namespace.')
-output connectionName string = office365Connection.name
+@description('The name of the Teams connection on the namespace.')
+output connectionName string = teamsConnection.name
 
-@description('Runtime URL for the Office 365 connection.')
-output office365ConnectionRuntimeUrl string = office365Connection.properties.connectionRuntimeUrl
-
+@description('Runtime URL for the Teams connection.')
+output teamsConnectionRuntimeUrl string = teamsConnection.properties.connectionRuntimeUrl
