@@ -13,10 +13,10 @@ param environmentName string
 @description('Location for all resources except the Connector Namespace (which is pinned to westcentralus while in preview).')
 param location string
 
-metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
+metadata name = 'Azure Functions Teams Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
-@description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
+@description('Id of the user identity to be used for testing and debugging. Granted access to the teams connection so the same code can be debugged locally with `az login`.')
 @metadata({
   azd: {
     type: 'principalId'
@@ -112,7 +112,10 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
     }
     minimumTlsVersion: 'TLS1_2'
     blobServices: {
-      containers: [{ name: deploymentStorageContainerName }]
+      containers: [
+        { name: deploymentStorageContainerName }
+        { name: 'connector-messages' }
+      ]
     }
     roleAssignments: [
       {
@@ -161,7 +164,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection.
+// Connector Namespace + teams connection.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -180,7 +183,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+  TEAMS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.teamsConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -245,5 +248,5 @@ output functionAppDefaultHostname string = functionApp.outputs.defaultHostname
 @description('The name of the created Connector Namespace.')
 output connectorNamespaceName string = connectorNamespace.outputs.name
 
-@description('The name of the created Office 365 connection on the Connector Namespace.')
+@description('The name of the created Teams connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName

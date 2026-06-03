@@ -4,9 +4,10 @@
 
 ## Samples
 
-| Sample | Description |
-| ------ | ----------- |
-| [office365App](office365App/) | Office 365 email trigger secured with Managed Identity + built-in authentication — saves incoming emails to blob storage. |
+| Folder | Connector | Triggers |
+| ------ | --------- | -------- |
+| [office365App](office365App/) | Office 365 Outlook | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
+| [teamsApp](teamsApp/) | Microsoft Teams | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
 
 Each sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.
 
