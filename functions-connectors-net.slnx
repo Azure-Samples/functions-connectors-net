@@ -14,4 +14,7 @@
   <Folder Name="/teamsApp/">
     <Project Path="teamsApp/functions-connectors-net.csproj" />
   </Folder>
+  <Folder Name="/genericApp/">
+    <Project Path="genericApp/functions-connectors-net.csproj" />
+  </Folder>
 </Solution>

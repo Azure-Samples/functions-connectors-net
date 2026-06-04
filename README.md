@@ -7,6 +7,7 @@
 | Folder | Connector | Triggers |
 | ------ | --------- | -------- |
 | [azureblobApp](azureblobApp/) | [Azure Blob Storage](https://learn.microsoft.com/en-us/connectors/azureblob/) | `onNewFile`, `onUpdatedFile` |
+| [genericApp](genericApp/) | Any connector | Generic untyped triggers — receives raw JSON `string` payloads without SDK model dependency |
 | [office365App](office365App/) | [Office 365 Outlook](https://learn.microsoft.com/en-us/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
 | [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
 | [sharepointApp](sharepointApp/) | [SharePoint Online](https://learn.microsoft.com/en-us/connectors/sharepointonline/) | `onNewFile`, `onUpdatedFile` |
