@@ -16,16 +16,22 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
+metadata name = 'Azure Functions SharePoint Online Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
-@description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
+@description('Id of the user identity to be used for testing and debugging. Granted access to the sharepointonline connection so the same code can be debugged locally with `az login`.')
 @metadata({
   azd: {
     type: 'principalId'
   }
 })
 param userPrincipalId string = deployer().objectId
+
+@description('SharePoint site URL to monitor (e.g., https://contoso.sharepoint.com/sites/mysite).')
+param sharepointSiteUrl string
+
+@description('SharePoint document library name to monitor (e.g., "Documents").')
+param sharepointLibraryName string = 'Documents'
 
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
@@ -164,7 +170,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection.
+// Connector Namespace + sharepointonline connection.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -173,6 +179,8 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: connectorNamespaceLocation
     tags: tags
     connectionName: connectorNamespaceConnectionName
+    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
+    userPrincipalId: userPrincipalId
   }
 }
 
@@ -183,7 +191,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+  SHAREPOINTONLINE_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.sharepointConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -248,5 +256,11 @@ output functionAppDefaultHostname string = functionApp.outputs.defaultHostname
 @description('The name of the created Connector Namespace.')
 output connectorNamespaceName string = connectorNamespace.outputs.name
 
-@description('The name of the created Office 365 connection on the Connector Namespace.')
+@description('The name of the created SharePoint connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
+
+@description('SharePoint site URL to monitor.')
+output sharepointSiteUrl string = sharepointSiteUrl
+
+@description('SharePoint document library name to monitor.')
+output sharepointLibraryName string = sharepointLibraryName

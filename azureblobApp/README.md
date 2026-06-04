@@ -1,15 +1,12 @@
-# Microsoft Teams Triggers (.NET)
+# Azure Blob Storage Trigger (.NET)
 
-Azure Functions sample app demonstrating **Microsoft Teams** connector triggers using the
+Azure Functions sample app demonstrating the **Azure Blob Storage** connector trigger using the
 [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the
 [Microsoft.Azure.Functions.Worker.Extensions.Connector](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) worker extension.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewChannelMessage` | [`OnNewChannelMessage`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-new-channel-message-is-added) | Fires when a new message is posted in a Teams channel |
-| `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/en-us/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Fires when a new message mentions the authenticated user |
-| `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-team-member-is-added) | Fires when a member is added to a Teams group |
-| `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-team-member-is-removed) | Fires when a member is removed from a Teams group |
+| `OnUpdatedFile` | [`OnUpdatedFiles_V2`](https://learn.microsoft.com/en-us/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)) | Fires when a blob is added or modified in the configured container |
 
 ## Prerequisites
 
@@ -33,7 +30,7 @@ Azure Functions sample app demonstrating **Microsoft Teams** connector triggers 
 ## Deploy to Azure
 
 ```bash
-cd teamsApp
+cd azureblobApp
 azd auth login
 az login
 azd up
@@ -44,16 +41,20 @@ azd up
 | Resource | Purpose |
 | --- | --- |
 | **Resource Group** | Contains all resources |
-| **Flex Consumption Function App** (.NET 10 isolated) | Hosts the connector trigger functions |
+| **Flex Consumption Function App** (.NET 10 isolated) | Hosts the connector trigger function |
 | **App Service Plan** (FC1) | Flex Consumption plan |
 | **User-Assigned Managed Identity** | Identity for the function app |
-| **Storage Account** | Deployment artifacts, function runtime state, and trigger payload output (`connector-messages` container) |
+| **Storage Account** (function app) | Deployment artifacts and function runtime state |
+| **Storage Account** (monitored) | Blob storage monitored by the trigger, with a `connector-input` container |
 | **Log Analytics Workspace** | Backing store for Application Insights |
 | **Application Insights** | Telemetry and logging |
-| **Connector Namespace** | Hosts the Teams connection and trigger configs |
-| **Teams Connection** (OAuth) | Authenticates to Microsoft Teams — requires interactive consent during post-deploy |
+| **Connector Namespace** | Hosts the Azure Blob connection and trigger config |
+| **Azure Blob Connection** (Managed Identity auth) | Connects to the monitored storage account using the Connector Namespace's system MI |
+| **Storage Blob Data Reader** role assignment | Grants the Connector Namespace MI read access to the monitored storage account |
 
-After provisioning, a post-deploy hook authorizes the Teams connection and creates trigger configs. To re-run:
+The Azure Blob connection uses **Managed Identity** authentication — no storage keys or OAuth consent required. The connection is immediately `Ready` after provisioning.
+
+After provisioning, a post-deploy hook creates the trigger config pointing at the function app's connector webhook URL. To re-run only the trigger setup:
 
 ```bash
 azd hooks run postdeploy
@@ -63,10 +64,10 @@ azd hooks run postdeploy
 
 After `azd up`, open the [Connector Namespaces portal](https://connectors.azure.com/) to verify:
 
-- One **Connection** (Teams) with status **Connected**
-- Trigger configs in **Enabled** state
+- One **Connection** (Azure Blob) with status **Ready**
+- One **Trigger** (`OnUpdatedFiles_V2`) in **Enabled** state
 
-Post a message in the configured Teams channel to fire the trigger. Tail logs with:
+Upload a file to the `connector-input` container to fire the trigger. Tail logs with:
 
 ```bash
 az functionapp log tail -g <resourceGroupName> -n <functionAppName>
@@ -75,4 +76,4 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [Teams connector reference](https://learn.microsoft.com/en-us/connectors/teams/)
+- [Azure Blob connector reference](https://learn.microsoft.com/en-us/connectors/azureblob/)

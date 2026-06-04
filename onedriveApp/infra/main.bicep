@@ -16,10 +16,10 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
+metadata name = 'Azure Functions OneDrive for Business Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
-@description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
+@description('Id of the user identity to be used for testing and debugging. Granted access to the onedriveforbusiness connection so the same code can be debugged locally with `az login`.')
 @metadata({
   azd: {
     type: 'principalId'
@@ -164,7 +164,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection.
+// Connector Namespace + onedriveforbusiness connection.
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -183,7 +183,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+  ONEDRIVEFORBUSINESS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.onedriveConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -248,5 +248,5 @@ output functionAppDefaultHostname string = functionApp.outputs.defaultHostname
 @description('The name of the created Connector Namespace.')
 output connectorNamespaceName string = connectorNamespace.outputs.name
 
-@description('The name of the created Office 365 connection on the Connector Namespace.')
+@description('The name of the created OneDrive connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName

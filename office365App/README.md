@@ -1,14 +1,16 @@
 # Office 365 Outlook Triggers (.NET)
 
-Demonstrates five Office 365 Outlook connector triggers — each fires an Azure Function and writes the payload to Blob Storage.
+Azure Functions sample app demonstrating **Office 365 Outlook** connector triggers using the
+[Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the
+[Microsoft.Azure.Functions.Worker.Extensions.Connector](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) worker extension.
 
-| Function | Trigger operation |
-| --- | --- |
-| `OnNewEmail` | `OnNewEmailV3` |
-| `OnFlaggedEmail` | `OnFlaggedEmailV4` |
-| `OnNewMentionMeEmail` | `OnNewMentionMeEmailV3` |
-| `OnNewCalendarEvent` | `CalendarGetOnNewItemsV3` |
-| `OnUpcomingEvent` | `OnUpcomingEventsV3` |
+| Function | Connector operation | Description |
+| --- | --- | --- |
+| `OnNewEmail` | [`OnNewEmailV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-email-arrives-(v3)) | Fires when a new email arrives |
+| `OnFlaggedEmail` | [`OnFlaggedEmailV4`](https://learn.microsoft.com/en-us/connectors/office365/#when-an-email-is-flagged-(v4)) | Fires when an email is flagged |
+| `OnNewMentionMeEmail` | [`OnNewMentionMeEmailV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-email-mentioning-me-arrives-(v3)) | Fires when a new email mentions the authenticated user |
+| `OnNewCalendarEvent` | [`CalendarGetOnNewItemsV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-event-is-created-(v3)) | Fires when a new calendar event is created |
+| `OnUpcomingEvent` | [`OnUpcomingEventsV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-an-upcoming-event-is-starting-soon-(v3)) | Fires when an upcoming calendar event is starting soon |
 
 > [!CAUTION]
 > **Personal data.** This sample writes email/calendar content to Blob Storage for demonstration only. Restrict access to the resources to appropriate users only, and run `azd down --purge` when done.
@@ -16,11 +18,23 @@ Demonstrates five Office 365 Outlook connector triggers — each fires an Azure 
 ## Prerequisites
 
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli)
+- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- `jq` (macOS/Linux only, for the bash post-deploy script)
+- [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
 
-## Quickstart
+ ```bash
+  # Bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
+
+  or
+
+  ```pwsh
+  # PowerShell
+  irm https://aka.ms/connector-namespace-cli-install-ps | iex
+  ```
+
+## Deploy to Azure
 
 ```bash
 cd office365App
@@ -29,13 +43,27 @@ az login
 azd up
 ```
 
-The post-deploy hook creates the trigger config on the Connector Namespace and opens a browser to authorize the Office 365 connection.
+### Resources provisioned
 
-## Verify
+| Resource | Purpose |
+| --- | --- |
+| **Resource Group** | Contains all resources |
+| **Flex Consumption Function App** (.NET 10 isolated) | Hosts the 5 connector trigger functions |
+| **App Service Plan** (FC1) | Flex Consumption plan |
+| **User-Assigned Managed Identity** | Identity for the function app |
+| **Storage Account** | Deployment artifacts, function runtime state, and trigger payload output |
+| **Log Analytics Workspace** | Backing store for Application Insights |
+| **Application Insights** | Telemetry and logging |
+| **Connector Namespace** | Hosts the Office 365 connection and trigger configs |
+| **Office 365 Outlook Connection** (OAuth) | Authenticates to Office 365 — requires interactive consent during post-deploy |
 
-Send yourself a high-importance email, then check Application Insights traces for `Received OnNewEmail trigger`.
+After provisioning, a post-deploy hook authorizes the Office 365 connection and creates trigger configs. To re-run:
 
-## Trigger configuration
+```bash
+azd hooks run postdeploy
+```
+
+### Trigger configuration
 
 The post-deploy script configures the `OnNewEmail` trigger with these defaults:
 
@@ -47,21 +75,21 @@ The post-deploy script configures the `OnNewEmail` trigger with these defaults:
 
 Edit `infra/scripts/postdeploy.ps1` (or `.sh`) to change folder, importance, or add trigger configs for the other functions.
 
-## What gets deployed
+## Verify
 
-| Resource | Purpose |
-| --- | --- |
-| Function App (Flex Consumption) | Hosts the 5 trigger functions |
-| Connector Namespace | Manages the Office 365 connection and trigger |
-| Storage Account | Blob output for trigger payloads |
-| Application Insights | Telemetry (OpenTelemetry) |
-| User-Assigned Managed Identity | Function app identity |
+After `azd up`, open the [Connector Namespaces portal](https://connectors.azure.com/) to verify:
 
-## Re-deploying
+- One **Connection** (Office 365 Outlook) with status **Connected**
+- Trigger configs in **Enabled** state
 
-For code-only changes: `azd deploy`
+Send yourself a high-importance email to fire the trigger. Tail logs with:
+
+```bash
+az functionapp log tail -g <resourceGroupName> -n <functionAppName>
+```
 
 ## More
 
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) — all supported triggers and their .NET, Python, and TypeScript signatures.
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Office 365 Outlook connector reference](https://learn.microsoft.com/en-us/connectors/office365/)
 - [Built-in auth sample](https://github.com/Azure-Samples/functions-connectors-net-builtinauth) — secretless authentication using managed identity + Easy Auth.

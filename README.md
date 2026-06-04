@@ -6,8 +6,11 @@
 
 | Folder | Connector | Triggers |
 | ------ | --------- | -------- |
-| [office365App](office365App/) | Office 365 Outlook | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
-| [teamsApp](teamsApp/) | Microsoft Teams | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
+| [azureblobApp](azureblobApp/) | [Azure Blob Storage](https://learn.microsoft.com/en-us/connectors/azureblob/) | `onNewFile`, `onUpdatedFile` |
+| [office365App](office365App/) | [Office 365 Outlook](https://learn.microsoft.com/en-us/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
+| [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
+| [sharepointApp](sharepointApp/) | [SharePoint Online](https://learn.microsoft.com/en-us/connectors/sharepointonline/) | `onNewFile`, `onUpdatedFile` |
+| [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/en-us/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
 
 Each sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.
 
@@ -18,8 +21,22 @@ See the full [Operations to Azure Functions Signature Mapping](https://github.co
 ## Prerequisites
 
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli)
+- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
+
+  ```bash
+  # Bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
+
+  or
+
+  ```pwsh
+  # PowerShell
+  irm https://aka.ms/connector-namespace-cli-install-ps | iex
+  ```
+
 - `jq` (for bash post-deploy scripts on macOS/Linux)
 
 ## Related .NET samples

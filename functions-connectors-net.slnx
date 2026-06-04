@@ -2,4 +2,16 @@
   <Folder Name="/office365App/">
     <Project Path="office365App/functions-connectors-net.csproj" />
   </Folder>
+  <Folder Name="/azureblobApp/">
+    <Project Path="azureblobApp/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/onedriveApp/">
+    <Project Path="onedriveApp/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/sharepointApp/">
+    <Project Path="sharepointApp/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/teamsApp/">
+    <Project Path="teamsApp/functions-connectors-net.csproj" />
+  </Folder>
 </Solution>

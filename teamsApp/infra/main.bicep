@@ -10,8 +10,11 @@ param environmentName string
     type: 'location'
   }
 })
-@description('Location for all resources except the Connector Namespace (which is pinned to westcentralus while in preview).')
+@description('Location for all resources except the Connector Namespace.')
 param location string
+
+@description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
+param connectorNamespaceLocation string = 'westcentralus'
 
 metadata name = 'Azure Functions Teams Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
@@ -170,7 +173,7 @@ module connectorNamespace './connectorNamespace.bicep' = {
   name: connectorNamespaceName
   params: {
     name: connectorNamespaceName
-    location: 'westcentralus' // Connector Namespace preview region.
+    location: connectorNamespaceLocation
     tags: tags
     connectionName: connectorNamespaceConnectionName
   }

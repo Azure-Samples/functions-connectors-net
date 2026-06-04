@@ -13,6 +13,12 @@
     },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "sharepointSiteUrl": {
+      "value": "${SHAREPOINT_SITE_URL}"
+    },
+    "sharepointLibraryName": {
+      "value": "${SHAREPOINT_LIBRARY_NAME=Documents}"
     }
   }
 }
