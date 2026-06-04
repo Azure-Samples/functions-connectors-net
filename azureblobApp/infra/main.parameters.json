@@ -13,6 +13,9 @@
     },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "monitoredContainerName": {
+      "value": "${BLOB_CONTAINER_NAME=connector-input}"
     }
   }
 }

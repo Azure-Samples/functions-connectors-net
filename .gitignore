@@ -6,6 +6,10 @@
 # Azure Developer CLI
 .azure/
 
+# Postdeploy temp files
+.consent-params-*.json
+.notification-details-*.json
+
 # User-specific files
 *.rsuser
 *.suo

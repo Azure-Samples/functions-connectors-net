@@ -1,13 +1,19 @@
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 
+if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
+    Write-Host "ERROR: The 'connector-namespace' Azure CLI extension is required." -ForegroundColor Red
+    Write-Host "Install: irm https://aka.ms/connector-namespace-cli-install-ps | iex" -ForegroundColor Red
+    exit 1
+}
+
 # Outputs from azd
 $outputs = azd env get-values --output json | ConvertFrom-Json
 
-$subscriptionId = (az account show --query id -o tsv)
 $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
 $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
+$subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
 
 # --- Required Teams identifiers ---
 # Teams triggers are scoped to a specific team (and channel for message triggers).
@@ -44,6 +50,16 @@ function Invoke-Graph {
     $raw = az rest --method get --url $Url --resource https://graph.microsoft.com 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
     return ($raw | ConvertFrom-Json)
+}
+
+function Get-ConnectionOverallStatus {
+    $status = az connector-namespace connection show `
+        -g $resourceGroupName --namespace $connectorNamespaceName `
+        -n $connectorNamespaceConnectionName `
+        --query "properties.overallStatus" -o tsv 2>$null
+
+    if ($LASTEXITCODE -ne 0 -or -not $status) { return $null }
+    return $status
 }
 
 if (-not $teamsGroupId -or -not $teamsChannelId) {
@@ -83,7 +99,6 @@ if (-not $teamsGroupId -or -not $teamsChannelId) {
 Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
 $connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
 
-# --- Helper: create a trigger config on the Connector Namespace ---
 function New-TriggerConfig {
     param(
         [Parameter(Mandatory)] [string] $FunctionName,
@@ -94,33 +109,35 @@ function New-TriggerConfig {
 
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
     $callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$FunctionName&code=$connectorExtensionKey"
-    $apiUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/triggerconfigs/${triggerName}?api-version=2026-05-01-preview"
-
-    $body = @{
-        properties = @{
-            description = $Description
-            connectionDetails = @{
-                connectorName = "teams"
-                connectionName = $connectorNamespaceConnectionName
-            }
-            operationName = $OperationName
-            parameters = $Parameters
-            notificationDetails = @{
-                callbackUrl = $callbackUrl
-            }
-        }
-    } | ConvertTo-Json -Depth 5
+    $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
+    $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
+    @{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
 
     Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
 
-    $bodyFile = [System.IO.Path]::GetTempFileName()
-    $body | Out-File -FilePath $bodyFile -Encoding utf8
-    az rest --method PUT --url $apiUrl --body "@$bodyFile" --headers "Content-Type=application/json" | Out-Null
-    Remove-Item $bodyFile -ErrorAction SilentlyContinue
+    try {
+        az connector-namespace trigger delete `
+            -g $resourceGroupName --namespace $connectorNamespaceName `
+            -n $triggerName --yes 2>$null | Out-Null
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
-        exit 1
+        az connector-namespace trigger create `
+            -g $resourceGroupName --namespace $connectorNamespaceName `
+            -n $triggerName `
+            --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:teams}" `
+            --operation-name $OperationName `
+            --parameters $parametersShorthand `
+            --notification-details "@$notifFile" `
+            --description $Description `
+            --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
+            -o none
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
+            exit 1
+        }
+    }
+    finally {
+        Remove-Item $notifFile -ErrorAction SilentlyContinue
     }
 }
 
@@ -163,23 +180,74 @@ New-TriggerConfig `
 
 Write-Host "All trigger configs created." -ForegroundColor Green
 
-# --- Authorize the teams connection via Azure CLI ---
 Write-Host ""
 Write-Host "Authorizing teams connection..." -ForegroundColor Yellow
 
-$ext = az extension show --name connector-namespace 2>$null
-if (-not $ext) {
-  Write-Host "Installing 'connector-namespace' Azure CLI extension..." -ForegroundColor Cyan
-  az extension add `
-    --source https://github.com/anthonychu/azure-cli-extensions/releases/download/connector-namespace-0.1.0/connector_namespace-0.1.0-py2.py3-none-any.whl `
-    --yes
+$currentStatus = Get-ConnectionOverallStatus
+if ($currentStatus -eq 'Connected') {
+    Write-Host "Teams connection already Connected. Skipping consent." -ForegroundColor Green
 }
+else {
+    Write-Host "-> A browser tab will open. Sign in with the Teams account you want to monitor." -ForegroundColor Cyan
 
-Write-Host "-> A browser tab will open. Sign in with the Teams account you want to monitor." -ForegroundColor Cyan
-az connector-namespace connection authorize `
-  --resource-group $resourceGroupName `
-  --namespace-name $connectorNamespaceName `
-  --name $connectorNamespaceConnectionName
+    $consentLink = $null
+    for ($attempt = 1; $attempt -le 5 -and -not $consentLink; $attempt++) {
+        $consentLink = az connector-namespace connection list-consent-links `
+            -g $resourceGroupName --namespace $connectorNamespaceName `
+            --connection-name $connectorNamespaceConnectionName `
+            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --query "value[0].link" -o tsv 2>$null
+
+        if (($LASTEXITCODE -ne 0 -or -not $consentLink) -and $attempt -lt 5) {
+            Write-Host "Consent link not ready yet. Retrying in 5 seconds..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 5
+        }
+    }
+
+    if (-not $consentLink) {
+        Write-Host "Failed to generate a consent URL for the Teams connection." -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "Consent URL: $consentLink" -ForegroundColor Cyan
+    try {
+        Start-Process $consentLink | Out-Null
+    }
+    catch {
+        Write-Host "Could not open a browser automatically. Paste the consent URL into a browser manually." -ForegroundColor Yellow
+    }
+    Write-Host "If the browser did not open, paste this URL into a browser:" -ForegroundColor Yellow
+    Write-Host $consentLink -ForegroundColor Cyan
+
+    $deadline = (Get-Date).AddMinutes(5)
+    $lastReportedStatus = $null
+    $pollStatus = $currentStatus
+
+    if ($currentStatus) {
+        $lastReportedStatus = $currentStatus
+        Write-Host "Connection status: $currentStatus" -ForegroundColor Cyan
+    }
+
+    while ((Get-Date) -lt $deadline) {
+        $pollStatus = Get-ConnectionOverallStatus
+        if ($pollStatus -and $pollStatus -ne $lastReportedStatus) {
+            Write-Host "Connection status: $pollStatus" -ForegroundColor Cyan
+            $lastReportedStatus = $pollStatus
+        }
+
+        if ($pollStatus -eq 'Connected') {
+            Write-Host "Teams connection authorized." -ForegroundColor Green
+            break
+        }
+
+        Start-Sleep -Seconds 3
+    }
+
+    if ($pollStatus -ne 'Connected') {
+        Write-Host "Timed out waiting for the Teams connection to reach Connected status." -ForegroundColor Red
+        exit 1
+    }
+}
 
 Write-Host ""
 Write-Host "Done. All 4 Teams triggers are configured." -ForegroundColor Green

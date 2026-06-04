@@ -1,0 +1,101 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.36.177.2456",
+      "templateHash": "6565657427916151029"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {}
+    },
+    "connectionName": {
+      "type": "string"
+    },
+    "tenantId": {
+      "type": "string",
+      "defaultValue": "[tenant().tenantId]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connectorGateways",
+      "apiVersion": "2026-05-01-preview",
+      "name": "[parameters('name')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      }
+    },
+    {
+      "type": "Microsoft.Web/connectorGateways/connections",
+      "apiVersion": "2026-05-01-preview",
+      "name": "[format('{0}/{1}', parameters('name'), parameters('connectionName'))]",
+      "properties": {
+        "connectorName": "onedriveforbusiness"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connectorGateways', parameters('name'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/connectorGateways/connections/accessPolicies",
+      "apiVersion": "2026-05-01-preview",
+      "name": "[format('{0}/{1}/{2}', parameters('name'), parameters('connectionName'), 'connector-namespace-msi')]",
+      "properties": {
+        "principal": {
+          "type": "ActiveDirectory",
+          "identity": {
+            "objectId": "[reference(resourceId('Microsoft.Web/connectorGateways', parameters('name')), '2026-05-01-preview', 'full').identity.principalId]",
+            "tenantId": "[parameters('tenantId')]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connectorGateways', parameters('name'))]",
+        "[resourceId('Microsoft.Web/connectorGateways/connections', parameters('name'), parameters('connectionName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "resourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource ID of the Connector Namespace."
+      },
+      "value": "[resourceId('Microsoft.Web/connectorGateways', parameters('name'))]"
+    },
+    "name": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Connector Namespace."
+      },
+      "value": "[parameters('name')]"
+    },
+    "connectionName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the OneDrive connection on the namespace."
+      },
+      "value": "[parameters('connectionName')]"
+    },
+    "onedriveConnectionRuntimeUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Runtime URL for the OneDrive connection."
+      },
+      "value": "[reference(resourceId('Microsoft.Web/connectorGateways/connections', parameters('name'), parameters('connectionName')), '2026-05-01-preview').connectionRuntimeUrl]"
+    }
+  }
+}

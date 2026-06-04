@@ -16,10 +16,13 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
+@description('Name of the blob container to monitor for trigger events.')
+param monitoredContainerName string = 'connector-input'
+
+metadata name = 'Azure Functions Azure Blob Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
-@description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
+@description('Id of the user identity to be used for testing and debugging. Granted access to the azureblob connection so the same code can be debugged locally with `az login`.')
 @metadata({
   azd: {
     type: 'principalId'
@@ -40,6 +43,7 @@ var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
 var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
 var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
+var monitoredStorageAccountName = '${abbrs.storageStorageAccounts}mon${take(resourceToken, 20)}'
 
 var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-${take(toLower(uniqueString(functionAppName, environmentName)), 7)}'
 var storageBlobDataOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
@@ -164,7 +168,30 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection.
+// Storage account for the blob trigger to monitor (separate from function app storage).
+module monitoredStorageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
+  scope: rg
+  name: monitoredStorageAccountName
+  params: {
+    name: monitoredStorageAccountName
+    location: location
+    tags: tags
+    skuName: 'Standard_LRS'
+    kind: 'StorageV2'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+    }
+    minimumTlsVersion: 'TLS1_2'
+    blobServices: {
+      containers: [{ name: monitoredContainerName }]
+    }
+  }
+}
+
+// Connector Namespace + azureblob connection (Entra ID OAuth).
 module connectorNamespace './connectorNamespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
@@ -183,7 +210,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+  AZUREBLOB_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.azureblobConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -248,5 +275,14 @@ output functionAppDefaultHostname string = functionApp.outputs.defaultHostname
 @description('The name of the created Connector Namespace.')
 output connectorNamespaceName string = connectorNamespace.outputs.name
 
-@description('The name of the created Office 365 connection on the Connector Namespace.')
+@description('The name of the Azure Blob connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
+
+@description('The name of the Azure Function that handles the blob trigger.')
+output azureblobFunctionName string = 'OnUpdatedFile'
+
+@description('The name of the storage account monitored by the blob trigger.')
+output monitoredStorageAccountName string = monitoredStorageAccount.outputs.name
+
+@description('The name of the blob container monitored by the trigger.')
+output monitoredContainerName string = monitoredContainerName

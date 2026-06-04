@@ -8,6 +8,9 @@
     "location": {
       "value": "${AZURE_LOCATION}"
     },
+    "connectorNamespaceLocation": {
+      "value": "${CONNECTOR_NAMESPACE_LOCATION=westcentralus}"
+    },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     }
