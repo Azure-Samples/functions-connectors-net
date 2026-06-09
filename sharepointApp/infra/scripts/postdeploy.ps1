@@ -12,6 +12,7 @@ $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
 $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
+$functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
 $sharepointSiteUrl = $outputs.sharepointSiteUrl
 $sharepointLibraryName = $outputs.sharepointLibraryName
@@ -48,7 +49,7 @@ $triggerConfigs = @(
 foreach ($trigger in $triggerConfigs) {
     $functionName = $trigger.FunctionName
     $triggerName = "$connectorNamespaceConnectionName-$($functionName.ToLower())"
-    $callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
+    $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     @{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
 

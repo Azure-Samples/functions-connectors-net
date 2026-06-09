@@ -21,6 +21,7 @@ $resourceGroupName        = $outputs.resourceGroupName
 $connectorNamespaceName   = $outputs.connectorNamespaceName
 $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName          = $outputs.functionAppName
+$functionAppHostname      = $outputs.functionAppDefaultHostname
 $subscriptionId           = $outputs.AZURE_SUBSCRIPTION_ID
 $monitoredStorageAccountName = $outputs.monitoredStorageAccountName
 
@@ -123,7 +124,7 @@ if (-not $connectorExtensionKey) {
 $functionName  = 'OnUpdatedFile'
 $operationName = 'OnUpdatedFiles_V2'
 $triggerName   = "$connectorNamespaceConnectionName-$($functionName.ToLower())"
-$callbackUrl   = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
+$callbackUrl   = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
 $notifFile     = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
 @{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
 

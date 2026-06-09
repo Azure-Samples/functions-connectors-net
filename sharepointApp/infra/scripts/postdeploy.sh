@@ -32,8 +32,11 @@ resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
 connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
 connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
 functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
+functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
 sharepointSiteUrl=$(echo "$outputs" | jq -r '.sharepointSiteUrl')
 sharepointLibraryName=$(echo "$outputs" | jq -r '.sharepointLibraryName')
+
+: "${functionAppDefaultHostname:?required azd output missing}"
 
 if [[ -z "${resourceGroupName}" || -z "${connectorNamespaceName}" || -z "${connectorNamespaceConnectionName}" || -z "${functionAppName}" || -z "${sharepointSiteUrl}" || -z "${sharepointLibraryName}" || "${resourceGroupName}" == "null" || "${connectorNamespaceName}" == "null" || "${connectorNamespaceConnectionName}" == "null" || "${functionAppName}" == "null" || "${sharepointSiteUrl}" == "null" || "${sharepointLibraryName}" == "null" ]]; then
   echo -e "${RED}ERROR: required azd outputs missing. Run 'azd provision' first.${NC}"
@@ -57,7 +60,7 @@ for triggerSpec in \
 do
   IFS='|' read -r functionName operationName description <<< "${triggerSpec}"
   triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
-  callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+  callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
   notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
   _notif_files+=("$notifFile")
   printf '{"callbackUrl":"%s"}' "$callbackUrl" > "$notifFile"

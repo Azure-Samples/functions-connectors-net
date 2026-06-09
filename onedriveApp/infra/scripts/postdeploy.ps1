@@ -20,6 +20,7 @@ $resourceGroupName      = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
 $onedriveConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName        = $outputs.functionAppName
+$functionAppHostname    = $outputs.functionAppDefaultHostname
 $subscriptionId         = $outputs.AZURE_SUBSCRIPTION_ID
 $onedriveFolderId       = $outputs.ONEDRIVE_FOLDER_ID
 
@@ -279,7 +280,7 @@ foreach ($trigger in $triggers) {
     $functionName = $trigger.functionName
     $operationName = $trigger.operationName
     $triggerName = "$onedriveConnectionName-$($functionName.ToLower())"
-    $callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
+    $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
     $parametersJson = "[{name:folderId,value:'$onedriveFolderId'}]"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     @{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
