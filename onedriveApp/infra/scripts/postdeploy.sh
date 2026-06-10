@@ -22,6 +22,7 @@ eval "$(azd env get-values)"
 : "${connectorNamespaceName:?required azd output missing}"
 : "${connectorNamespaceConnectionName:?required azd output missing}"
 : "${functionAppName:?required azd output missing}"
+: "${functionAppDefaultHostname:?required azd output missing}"
 
 onedriveConnectionName="$connectorNamespaceConnectionName"
 
@@ -135,7 +136,7 @@ create_trigger() {
     local operationName="$2"
     local parameters="$3"
     local triggerName="${onedriveConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
-    local callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+    local callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
     local notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
     _notif_files+=("$notifFile")
     printf '{"callbackUrl":"%s"}' "$callbackUrl" > "$notifFile"

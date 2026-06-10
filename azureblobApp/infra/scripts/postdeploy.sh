@@ -28,6 +28,7 @@ eval "$(azd env get-values)"
 : "${connectorNamespaceName:?required azd output missing}"
 : "${connectorNamespaceConnectionName:?required azd output missing}"
 : "${functionAppName:?required azd output missing}"
+: "${functionAppDefaultHostname:?required azd output missing}"
 : "${monitoredStorageAccountName:?required azd output missing}"
 
 # --- Authorize the Azure Blob connection (OAuth consent) --------------------
@@ -113,7 +114,7 @@ fi
 functionName="OnUpdatedFile"
 operationName="OnUpdatedFiles_V2"
 triggerName="${connectorNamespaceConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
-callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
 notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
 _notif_files+=("$notifFile")
 printf '{"callbackUrl":"%s"}' "$callbackUrl" > "$notifFile"

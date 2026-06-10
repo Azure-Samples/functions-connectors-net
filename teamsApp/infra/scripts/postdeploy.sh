@@ -32,6 +32,9 @@ resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
 connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
 connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
 functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
+functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
+
+: "${functionAppDefaultHostname:?required azd output missing}"
 
 # --- Required Teams identifiers ---
 teamsGroupId=$(echo "$outputs" | jq -r '.TEAMS_GROUP_ID // empty')
@@ -118,7 +121,7 @@ create_trigger_config() {
   local description="$3"
   local parametersShorthand="$4"
   local triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
-  local callbackUrl="https://${functionAppName}.azurewebsites.net/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+  local callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
   local notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
   _notif_files+=("$notifFile")
   printf '{"callbackUrl":"%s"}' "$callbackUrl" > "$notifFile"

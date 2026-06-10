@@ -13,6 +13,7 @@ $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
 $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
+$functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
 
 # --- Required Teams identifiers ---
@@ -108,7 +109,7 @@ function New-TriggerConfig {
     )
 
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
-    $callbackUrl = "https://$functionAppName.azurewebsites.net/runtime/webhooks/connector?functionName=$FunctionName&code=$connectorExtensionKey"
+    $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName&code=$connectorExtensionKey"
     $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     @{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
