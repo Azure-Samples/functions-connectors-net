@@ -6,12 +6,13 @@
 
 | Folder | Connector | Triggers |
 | ------ | --------- | -------- |
-| [azureblobApp](azureblobApp/) | [Azure Blob Storage](https://learn.microsoft.com/en-us/connectors/azureblob/) | `onNewFile`, `onUpdatedFile` |
+| [azureblobApp](azureblobApp/) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) | `onNewFile`, `onUpdatedFile` |
+| [dataverseApp](dataverseApp/) | [Microsoft Dataverse](https://learn.microsoft.com/connectors/commondataservice/) | `onDataverseRowChanged` (+ `listDataverseRows` SDK action) |
 | [genericApp](genericApp/) | Any connector | Generic untyped triggers — receives raw JSON `string` payloads without SDK model dependency |
-| [office365App](office365App/) | [Office 365 Outlook](https://learn.microsoft.com/en-us/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
-| [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
-| [sharepointApp](sharepointApp/) | [SharePoint Online](https://learn.microsoft.com/en-us/connectors/sharepointonline/) | `onNewFile`, `onUpdatedFile` |
-| [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/en-us/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
+| [office365App](office365App/) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
+| [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
+| [sharepointApp](sharepointApp/) | [SharePoint Online](https://learn.microsoft.com/connectors/sharepointonline/) | `onNewFile`, `onUpdatedFile` |
+| [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
 
 Each sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.
 

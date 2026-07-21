@@ -6,11 +6,11 @@ Azure Functions sample app demonstrating **Office 365 Outlook** connector trigge
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewEmail` | [`OnNewEmailV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-email-arrives-(v3)) | Fires when a new email arrives |
-| `OnFlaggedEmail` | [`OnFlaggedEmailV4`](https://learn.microsoft.com/en-us/connectors/office365/#when-an-email-is-flagged-(v4)) | Fires when an email is flagged |
-| `OnNewMentionMeEmail` | [`OnNewMentionMeEmailV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-email-mentioning-me-arrives-(v3)) | Fires when a new email mentions the authenticated user |
-| `OnNewCalendarEvent` | [`CalendarGetOnNewItemsV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-a-new-event-is-created-(v3)) | Fires when a new calendar event is created |
-| `OnUpcomingEvent` | [`OnUpcomingEventsV3`](https://learn.microsoft.com/en-us/connectors/office365/#when-an-upcoming-event-is-starting-soon-(v3)) | Fires when an upcoming calendar event is starting soon |
+| `OnNewEmail` | [`OnNewEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-(v3)) | Fires when a new email arrives |
+| `OnFlaggedEmail` | [`OnFlaggedEmailV4`](https://learn.microsoft.com/connectors/office365/#when-an-email-is-flagged-(v4)) | Fires when an email is flagged |
+| `OnNewMentionMeEmail` | [`OnNewMentionMeEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-mentioning-me-arrives-(v3)) | Fires when a new email mentions the authenticated user |
+| `OnNewCalendarEvent` | [`CalendarGetOnNewItemsV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-event-is-created-(v3)) | Fires when a new calendar event is created |
+| `OnUpcomingEvent` | [`OnUpcomingEventsV3`](https://learn.microsoft.com/connectors/office365/#when-an-upcoming-event-is-starting-soon-(v3)) | Fires when an upcoming calendar event is starting soon |
 
 > [!CAUTION]
 > **Personal data.** This sample writes email/calendar content to Blob Storage for demonstration only. Restrict access to the resources to appropriate users only, and run `azd down --purge` when done.
@@ -91,5 +91,5 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [Office 365 Outlook connector reference](https://learn.microsoft.com/en-us/connectors/office365/)
+- [Office 365 Outlook connector reference](https://learn.microsoft.com/connectors/office365/)
 - [Built-in auth sample](https://github.com/Azure-Samples/functions-connectors-net-builtinauth) — secretless authentication using managed identity + Easy Auth.

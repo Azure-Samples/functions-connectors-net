@@ -443,4 +443,6 @@ local.settings.json
 # Azurite local storage files
 __azurite_db*
 __blobstorage__/*
+__queuestorage__/*
+.azurite/
 AzuriteConfig

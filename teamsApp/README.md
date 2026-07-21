@@ -6,10 +6,10 @@ Azure Functions sample app demonstrating **Microsoft Teams** connector triggers 
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewChannelMessage` | [`OnNewChannelMessage`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-new-channel-message-is-added) | Fires when a new message is posted in a Teams channel |
-| `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/en-us/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Fires when a new message mentions the authenticated user |
-| `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-team-member-is-added) | Fires when a member is added to a Teams group |
-| `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/en-us/connectors/teams/#when-a-team-member-is-removed) | Fires when a member is removed from a Teams group |
+| `OnNewChannelMessage` | [`OnNewChannelMessage`](https://learn.microsoft.com/connectors/teams/#when-a-new-channel-message-is-added) | Fires when a new message is posted in a Teams channel |
+| `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Fires when a new message mentions the authenticated user |
+| `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/connectors/teams/#when-a-team-member-is-added) | Fires when a member is added to a Teams group |
+| `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/connectors/teams/#when-a-team-member-is-removed) | Fires when a member is removed from a Teams group |
 
 ## Prerequisites
 
@@ -75,4 +75,4 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [Teams connector reference](https://learn.microsoft.com/en-us/connectors/teams/)
+- [Teams connector reference](https://learn.microsoft.com/connectors/teams/)

@@ -6,8 +6,8 @@ Azure Functions sample app demonstrating **OneDrive for Business** connector tri
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/#when-a-file-is-created) | Fires when a new file is created in OneDrive |
-| `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | Fires when a file is modified in OneDrive |
+| `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created) | Fires when a new file is created in OneDrive |
+| `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | Fires when a file is modified in OneDrive |
 
 ## Prerequisites
 
@@ -73,4 +73,4 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [OneDrive for Business connector reference](https://learn.microsoft.com/en-us/connectors/onedriveforbusiness/)
+- [OneDrive for Business connector reference](https://learn.microsoft.com/connectors/onedriveforbusiness/)
