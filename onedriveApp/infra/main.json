@@ -13180,7 +13180,7 @@
                 "__bicep_resource_derived_type!": {
                   "source": "Microsoft.Web/serverfarms@2025-03-01#properties/properties/properties/zoneRedundant"
                 },
-                "description": "Optional. Zone Redundant server farms can only be used on Premium or ElasticPremium SKU tiers within ZRS Supported regions (https://learn.microsoft.com/en-us/azure/storage/common/redundancy-regions-zrs)."
+                "description": "Optional. Zone Redundant server farms can only be used on Premium or ElasticPremium SKU tiers within ZRS Supported regions (https://learn.microsoft.com/azure/storage/common/redundancy-regions-zrs)."
               },
               "defaultValue": "[if(or(startsWith(parameters('skuName'), 'P'), startsWith(parameters('skuName'), 'EP')), true(), false())]"
             },
@@ -14510,7 +14510,7 @@
                   },
                   "nullable": true,
                   "metadata": {
-                    "description": "Optional. IP restriction rule headers.\nX-Forwarded-Host (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), all hosts(or lack of) are allowed.\n- A value is compared using ordinal-ignore-case (excluding port number).\n- Subdomain wildcards are permitted but don't match the root domain. For example, *.contoso.com matches the subdomain foo.contoso.com\nbut not the root domain contoso.com or multi-level foo.bar.contoso.com\n- Unicode host names are allowed but are converted to Punycode for matching.\n\nX-Forwarded-For (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), any forwarded-for chains (or lack of) are allowed.\n- If any address (excluding port number) in the chain (comma separated) matches the CIDR defined by the property.\n\nX-Azure-FDID and X-FD-HealthProbe.\nThe matching logic is exact match."
+                    "description": "Optional. IP restriction rule headers.\nX-Forwarded-Host (https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Forwarded-Host#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), all hosts(or lack of) are allowed.\n- A value is compared using ordinal-ignore-case (excluding port number).\n- Subdomain wildcards are permitted but don't match the root domain. For example, *.contoso.com matches the subdomain foo.contoso.com\nbut not the root domain contoso.com or multi-level foo.bar.contoso.com\n- Unicode host names are allowed but are converted to Punycode for matching.\n\nX-Forwarded-For (https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Forwarded-For#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), any forwarded-for chains (or lack of) are allowed.\n- If any address (excluding port number) in the chain (comma separated) matches the CIDR defined by the property.\n\nX-Azure-FDID and X-FD-HealthProbe.\nThe matching logic is exact match."
                   }
                 },
                 "ipAddress": {
@@ -14938,7 +14938,7 @@
                       },
                       "nullable": true,
                       "metadata": {
-                        "description": "Optional. The OAuth 2.0 scopes that will be requested as part of Microsoft Account authentication. This setting is optional. If not specified, \"wl.basic\" is used as the default scope. Microsoft Account Scopes and permissions [documentation](https://msdn.microsoft.com/en-us/library/dn631845.aspx)."
+                        "description": "Optional. The OAuth 2.0 scopes that will be requested as part of Microsoft Account authentication. This setting is optional. If not specified, \"wl.basic\" is used as the default scope. Microsoft Account Scopes and permissions [documentation](https://msdn.microsoft.com/library/dn631845.aspx)."
                       }
                     },
                     "runtimeVersion": {
@@ -17527,7 +17527,7 @@
                           "type": "bool",
                           "nullable": true,
                           "metadata": {
-                            "description": "Optional. Gets or sets whether CORS requests with credentials are allowed. See [ref](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#Requests_with_credentials) for more details."
+                            "description": "Optional. Gets or sets whether CORS requests with credentials are allowed. See [ref](https://developer.mozilla.org/docs/Web/HTTP/CORS#Requests_with_credentials) for more details."
                           }
                         }
                       },
@@ -19820,7 +19820,7 @@
                               },
                               "nullable": true,
                               "metadata": {
-                                "description": "Optional. The OAuth 2.0 scopes that will be requested as part of Microsoft Account authentication. This setting is optional. If not specified, \"wl.basic\" is used as the default scope. Microsoft Account Scopes and permissions [documentation](https://msdn.microsoft.com/en-us/library/dn631845.aspx)."
+                                "description": "Optional. The OAuth 2.0 scopes that will be requested as part of Microsoft Account authentication. This setting is optional. If not specified, \"wl.basic\" is used as the default scope. Microsoft Account Scopes and permissions [documentation](https://msdn.microsoft.com/library/dn631845.aspx)."
                               }
                             },
                             "runtimeVersion": {
@@ -21986,7 +21986,7 @@
                                   "type": "bool",
                                   "nullable": true,
                                   "metadata": {
-                                    "description": "Optional. Gets or sets whether CORS requests with credentials are allowed. See [ref](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#Requests_with_credentials) for more details."
+                                    "description": "Optional. Gets or sets whether CORS requests with credentials are allowed. See [ref](https://developer.mozilla.org/docs/Web/HTTP/CORS#Requests_with_credentials) for more details."
                                   }
                                 }
                               },
@@ -22804,7 +22804,7 @@
                           },
                           "nullable": true,
                           "metadata": {
-                            "description": "Optional. IP restriction rule headers.\nX-Forwarded-Host (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), all hosts(or lack of) are allowed.\n- A value is compared using ordinal-ignore-case (excluding port number).\n- Subdomain wildcards are permitted but don't match the root domain. For example, *.contoso.com matches the subdomain foo.contoso.com\nbut not the root domain contoso.com or multi-level foo.bar.contoso.com\n- Unicode host names are allowed but are converted to Punycode for matching.\n\nX-Forwarded-For (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), any forwarded-for chains (or lack of) are allowed.\n- If any address (excluding port number) in the chain (comma separated) matches the CIDR defined by the property.\n\nX-Azure-FDID and X-FD-HealthProbe.\nThe matching logic is exact match."
+                            "description": "Optional. IP restriction rule headers.\nX-Forwarded-Host (https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Forwarded-Host#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), all hosts(or lack of) are allowed.\n- A value is compared using ordinal-ignore-case (excluding port number).\n- Subdomain wildcards are permitted but don't match the root domain. For example, *.contoso.com matches the subdomain foo.contoso.com\nbut not the root domain contoso.com or multi-level foo.bar.contoso.com\n- Unicode host names are allowed but are converted to Punycode for matching.\n\nX-Forwarded-For (https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Forwarded-For#Examples).\nThe matching logic is ..\n- If the property is null or empty (default), any forwarded-for chains (or lack of) are allowed.\n- If any address (excluding port number) in the chain (comma separated) matches the CIDR defined by the property.\n\nX-Azure-FDID and X-FD-HealthProbe.\nThe matching logic is exact match."
                           }
                         },
                         "ipAddress": {

@@ -6,8 +6,8 @@ Azure Functions sample app demonstrating **SharePoint Online** connector trigger
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewFile` | [`GetOnNewFileItems`](https://learn.microsoft.com/en-us/connectors/sharepointonline/#when-a-file-is-created-(properties-only)) | Fires when a new file is created in a SharePoint library |
-| `OnUpdatedFile` | [`GetOnUpdatedFileItems`](https://learn.microsoft.com/en-us/connectors/sharepointonline/#when-a-file-is-created-or-modified-(properties-only)) | Fires when a file is modified in a SharePoint library |
+| `OnNewFile` | [`GetOnNewFileItems`](https://learn.microsoft.com/connectors/sharepointonline/#when-a-file-is-created-(properties-only)) | Fires when a new file is created in a SharePoint library |
+| `OnUpdatedFile` | [`GetOnUpdatedFileItems`](https://learn.microsoft.com/connectors/sharepointonline/#when-a-file-is-created-or-modified-(properties-only)) | Fires when a file is modified in a SharePoint library |
 
 ## Prerequisites
 
@@ -73,4 +73,4 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [SharePoint Online connector reference](https://learn.microsoft.com/en-us/connectors/sharepointonline/)
+- [SharePoint Online connector reference](https://learn.microsoft.com/connectors/sharepointonline/)

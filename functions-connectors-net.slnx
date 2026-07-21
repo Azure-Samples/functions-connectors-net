@@ -5,6 +5,9 @@
   <Folder Name="/azureblobApp/">
     <Project Path="azureblobApp/functions-connectors-net.csproj" />
   </Folder>
+  <Folder Name="/dataverseApp/">
+    <Project Path="dataverseApp/functions-connectors-net.csproj" />
+  </Folder>
   <Folder Name="/onedriveApp/">
     <Project Path="onedriveApp/functions-connectors-net.csproj" />
   </Folder>

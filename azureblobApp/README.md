@@ -6,7 +6,7 @@ Azure Functions sample app demonstrating the **Azure Blob Storage** connector tr
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnUpdatedFile` | [`OnUpdatedFiles_V2`](https://learn.microsoft.com/en-us/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)) | Fires when a blob is added or modified in the configured container |
+| `OnUpdatedFile` | [`OnUpdatedFiles_V2`](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)) | Fires when a blob is added or modified in the configured container |
 
 ## Prerequisites
 
@@ -76,4 +76,4 @@ az functionapp log tail -g <resourceGroupName> -n <functionAppName>
 ## More
 
 - [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [Azure Blob connector reference](https://learn.microsoft.com/en-us/connectors/azureblob/)
+- [Azure Blob connector reference](https://learn.microsoft.com/connectors/azureblob/)
