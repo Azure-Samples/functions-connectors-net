@@ -124,9 +124,16 @@ if (-not $connectorExtensionKey) {
 $functionName  = 'OnUpdatedFile'
 $operationName = 'OnUpdatedFiles_V2'
 $triggerName   = "$connectorNamespaceConnectionName-$($functionName.ToLower())"
-$callbackUrl   = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName&code=$connectorExtensionKey"
+$callbackUrl   = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName"
 $notifFile     = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-@{ callbackUrl = $callbackUrl } | ConvertTo-Json -Compress | Set-Content -Path $notifFile -NoNewline
+@{
+    callbackUrl = $callbackUrl
+    authentication = @{
+        type = "QueryString"
+        name = "code"
+        value = $connectorExtensionKey
+    }
+} | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
 
 Write-Host "Creating trigger '$triggerName' for $functionName ($operationName)..." -ForegroundColor Yellow
 
