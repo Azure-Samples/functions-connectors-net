@@ -114,10 +114,10 @@ fi
 functionName="OnUpdatedFile"
 operationName="OnUpdatedFiles_V2"
 triggerName="${connectorNamespaceConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
-callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}&code=${connectorExtensionKey}"
+callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
 notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
 _notif_files+=("$notifFile")
-printf '{"callbackUrl":"%s"}' "$callbackUrl" > "$notifFile"
+printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
 
 echo ""
 echo "Creating trigger '${triggerName}' for ${functionName} (${operationName})..."
