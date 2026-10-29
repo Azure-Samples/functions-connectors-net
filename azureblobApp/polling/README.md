@@ -15,6 +15,10 @@ payload persistence, public callback, or callback system key.
 - An Azure subscription with permission to deploy resources and role assignments.
 - For local execution: Azure Functions Core Tools v4 supporting .NET 10 and Azurite.
 
+The included `NuGet.config` supplies the public Azure Functions package feed,
+including Connector extension 1.0.0. No machine-level or parent NuGet
+configuration is required.
+
 ## Deploy
 
 Run from this directory and use a distinct environment name from the webhook app:

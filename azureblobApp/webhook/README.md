@@ -15,6 +15,10 @@ binding and does not persist payloads.
   `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh` in Bash.
 - Azure permissions to deploy resources and role assignments.
 
+The included `NuGet.config` supplies the public Azure Functions package feed,
+including Connector extension 1.0.0. No machine-level or parent NuGet
+configuration is required.
+
 ## Deploy
 
 ```powershell
