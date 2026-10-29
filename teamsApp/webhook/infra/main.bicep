@@ -117,7 +117,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
     blobServices: {
       containers: [
         { name: deploymentStorageContainerName }
-        { name: 'connector-messages' }
       ]
     }
     roleAssignments: [
@@ -186,7 +185,6 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  TEAMS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.teamsConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {

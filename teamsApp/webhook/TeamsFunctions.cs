@@ -23,42 +23,34 @@ public class TeamsFunctions
     }
 
     [Function("OnNewChannelMessage")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewChannelMessage(
+    public void OnNewChannelMessage(
         [ConnectorTrigger] TeamsOnNewChannelMessageTriggerPayload payload)
     {
         var count = payload.Body?.Value?.Count ?? 0;
         _logger.LogInformation("Received OnNewChannelMessage trigger ({Count} messages)", count);
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnNewChannelMessageMentioningMe")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewChannelMessageMentioningMe(
+    public void OnNewChannelMessageMentioningMe(
         [ConnectorTrigger] TeamsOnNewChannelMessageMentioningMeTriggerPayload payload)
     {
         var count = payload.Body?.Value?.Count ?? 0;
         _logger.LogInformation("Received OnNewChannelMessageMentioningMe trigger ({Count} messages)", count);
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnGroupMembershipAdd")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnGroupMembershipAdd(
+    public void OnGroupMembershipAdd(
         [ConnectorTrigger] TeamsOnTeamMemberAddedTriggerPayload payload)
     {
         var count = payload.Body?.Value?.Count ?? 0;
         _logger.LogInformation("Received OnGroupMembershipAdd trigger ({Count} members)", count);
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnGroupMembershipRemoval")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnGroupMembershipRemoval(
+    public void OnGroupMembershipRemoval(
         [ConnectorTrigger] TeamsOnTeamMemberRemovedTriggerPayload payload)
     {
         var count = payload.Body?.Value?.Count ?? 0;
         _logger.LogInformation("Received OnGroupMembershipRemoval trigger ({Count} members)", count);
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 }

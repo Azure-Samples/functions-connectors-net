@@ -1,78 +1,40 @@
-# Microsoft Teams Triggers (.NET)
+# Microsoft Teams Connector Triggers (.NET)
 
-Azure Functions sample app demonstrating **Microsoft Teams** connector triggers using the
-[Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the
-[Microsoft.Azure.Functions.Worker.Extensions.Connector](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) worker extension.
+Choose a standalone sample:
 
-| Function | Connector operation | Description |
+| Sample | Delivery to Functions | Local development |
 | --- | --- | --- |
-| `OnNewChannelMessage` | [`OnNewChannelMessage`](https://learn.microsoft.com/connectors/teams/#when-a-new-channel-message-is-added) | Fires when a new message is posted in a Teams channel |
-| `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Fires when a new message mentions the authenticated user |
-| `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/connectors/teams/#when-a-team-member-is-added) | Fires when a member is added to a Teams group |
-| `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/connectors/teams/#when-a-team-member-is-removed) | Fires when a member is removed from a Teams group |
+| [Polling](polling/README.md) | Function host receives and acknowledges events outbound from a Connector Namespace | No public callback or tunnel |
+| [Webhook](webhook/README.md) | Connector Namespace calls the function's authenticated callback | Requires a public HTTPS callback |
 
-## Prerequisites
+Both samples implement the same four Teams operations:
 
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
-
-  ```bash
-  # Bash
-  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
-  ```
-
-  or
-
-  ```pwsh
-  # PowerShell
-  irm https://aka.ms/connector-namespace-cli-install-ps | iex
-  ```
-
-## Deploy to Azure
-
-```bash
-cd teamsApp
-azd auth login
-az login
-azd up
-```
-
-### Resources provisioned
-
-| Resource | Purpose |
+| Function / connector operation | Source |
 | --- | --- |
-| **Resource Group** | Contains all resources |
-| **Flex Consumption Function App** (.NET 10 isolated) | Hosts the connector trigger functions |
-| **App Service Plan** (FC1) | Flex Consumption plan |
-| **User-Assigned Managed Identity** | Identity for the function app |
-| **Storage Account** | Deployment artifacts, function runtime state, and trigger payload output (`connector-messages` container) |
-| **Log Analytics Workspace** | Backing store for Application Insights |
-| **Application Insights** | Telemetry and logging |
-| **Connector Namespace** | Hosts the Teams connection and trigger configs |
-| **Teams Connection** (OAuth) | Authenticates to Microsoft Teams — requires interactive consent during post-deploy |
+| `OnNewChannelMessage` | New root message in the configured channel |
+| `OnNewChannelMessageMentioningMe` | Channel message mentioning the authorized user |
+| `OnGroupMembershipAdd` | Member added to the configured team |
+| `OnGroupMembershipRemoval` | Member removed from the configured team |
 
-After provisioning, a post-deploy hook authorizes the Teams connection and creates trigger configs. To re-run:
+Poll versus Webhook is the Connector Namespace's **delivery to Functions**, not
+the Teams connector's upstream change-detection mechanism. The existing Teams
+operations and typed payloads are used in both modes; this sample does not
+substitute the separate `Webhook*` Teams operations.
 
-```bash
-azd hooks run postdeploy
-```
+Each function logs only the trigger name and message/member count. There is no
+Blob output binding, payload serialization, or application output container.
+Storage remains necessary for the Functions host and deployment packages.
+Connector payload collections are independent of Poll invocation batching; these
+samples do not enable batched invocation.
 
-## Verify
+Run commands inside the chosen subfolder, not this folder. Each subfolder includes
+its own project, package feed, host configuration, deployment templates, settings
+example, and license, and can be copied to a separate repository.
 
-After `azd up`, open the [Connector Namespaces portal](https://connectors.azure.com/) to verify:
+Existing Teams code and deployment files have moved to `webhook`. For an existing
+deployment, preserve the same azd environment values and environment name when
+running from that folder; the resource naming inputs have not changed.
+Do not use the same environment for Poll and Webhook samples.
 
-- One **Connection** (Teams) with status **Connected**
-- Trigger configs in **Enabled** state
-
-Post a message in the configured Teams channel to fire the trigger. Tail logs with:
-
-```bash
-az functionapp log tail -g <resourceGroupName> -n <functionAppName>
-```
-
-## More
-
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [Teams connector reference](https://learn.microsoft.com/connectors/teams/)
+See the [Teams connector reference](https://learn.microsoft.com/connectors/teams/)
+and [connector delivery configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md).

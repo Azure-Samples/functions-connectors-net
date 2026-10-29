@@ -44,6 +44,3 @@ output name string = connectorNamespace.name
 
 @description('The name of the Teams connection on the namespace.')
 output connectionName string = teamsConnection.name
-
-@description('Runtime URL for the Teams connection.')
-output teamsConnectionRuntimeUrl string = teamsConnection.properties.connectionRuntimeUrl
