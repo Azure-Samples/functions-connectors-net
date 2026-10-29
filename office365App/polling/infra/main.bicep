@@ -2,7 +2,7 @@ targetScope = 'subscription'
 
 @minLength(1)
 @maxLength(64)
-@description('Name of the the environment which is used to generate a short unique hash used in all resources.')
+@description('Environment name. Use a different name from the webhook sample.')
 param environmentName string
 
 @metadata({
@@ -13,51 +13,43 @@ param environmentName string
 @description('Location for all resources except the Connector Namespace.')
 param location string
 
-@description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
+@description('Region for the Connector Namespace.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
-metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
-
-@description('Id of the user identity to be used for testing and debugging. Granted access to the office365 connection so the same code can be debugged locally with `az login`.')
 @metadata({
   azd: {
     type: 'principalId'
   }
 })
+@description('Developer identity granted access to the connection and storage for local development.')
 param userPrincipalId string = deployer().objectId
 
-var abbrs = loadJsonContent('./abbreviations.json')
+param mailFolderPath string = 'Inbox'
+param calendarId string = 'Calendar'
+
+metadata name = 'Azure Functions Office 365 Polling Connector Trigger (.NET)'
+metadata description = 'Connector Namespace Poll delivery using managed identity, without a callback URL.'
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
-
-var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
-var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
-var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
-var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
-var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
-var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
-var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
-var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
-var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
-
-var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-${take(toLower(uniqueString(functionAppName, environmentName)), 7)}'
+var functionAppName = 'func-${resourceToken}'
+var deploymentStorageContainerName = 'app-package-${resourceToken}'
 var storageBlobDataOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageQueueDataContributor = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributor = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var monitoringMetricsPublisherRoleId = '3913510d-42f4-4e42-8a64-420c390055eb'
 
 resource rg 'Microsoft.Resources/resourceGroups@2025-04-01' = {
-  name: resourceGroupName
+  name: 'rg-${environmentName}'
   location: location
   tags: tags
 }
 
 module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = {
-  name: '${uniqueString(deployment().name, location)}-loganalytics'
+  name: 'loganalytics'
   scope: rg
   params: {
-    name: logAnalyticsName
+    name: 'log-${resourceToken}'
     location: location
     tags: tags
     dataRetention: 30
@@ -65,20 +57,20 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
 }
 
 module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'funcUserAssignedIdentity'
+  name: 'function-identity'
   scope: rg
   params: {
+    name: 'id-${resourceToken}'
     location: location
     tags: tags
-    name: functionAppIdentityName
   }
 }
 
 module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
-  name: '${uniqueString(deployment().name, location)}-appinsights'
+  name: 'appinsights'
   scope: rg
   params: {
-    name: appInsightsName
+    name: 'appi-${resourceToken}'
     location: location
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
@@ -99,10 +91,10 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
 }
 
 module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
+  name: 'storage'
   scope: rg
-  name: storageAccountName
   params: {
-    name: storageAccountName
+    name: 'st${resourceToken}'
     location: location
     tags: tags
     skuName: 'Standard_LRS'
@@ -153,10 +145,10 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
 }
 
 module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
+  name: 'function-plan'
   scope: rg
-  name: functionAppPlanName
   params: {
-    name: functionAppPlanName
+    name: 'plan-${resourceToken}'
     location: location
     tags: tags
     skuName: 'FC1'
@@ -164,31 +156,48 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-// Connector Namespace + office365 connection.
 module connectorNamespace './connectorNamespace.bicep' = {
+  name: 'connector-namespace'
   scope: rg
-  name: connectorNamespaceName
   params: {
-    name: connectorNamespaceName
+    name: 'cns-${resourceToken}'
     location: connectorNamespaceLocation
     tags: tags
-    connectionName: connectorNamespaceConnectionName
+    connectionName: 'cnsc-${resourceToken}'
+    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
+    userPrincipalId: userPrincipalId
   }
 }
 
-var allAppSettings = {
-  AzureWebJobsStorage__credential: 'managedidentity'
-  AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
-  AzureWebJobsStorage__accountName: storageAccount.outputs.name
-  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
-  APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
-  AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+module pollTriggers './poll-triggers.bicep' = {
+  name: 'poll-triggers'
+  scope: rg
+  params: {
+    namespaceName: connectorNamespace.outputs.name
+    connectionName: connectorNamespace.outputs.connectionName
+    mailFolderPath: mailFolderPath
+    calendarId: calendarId
+  }
 }
 
+var allAppSettings = union(
+  {
+    AzureWebJobsStorage__credential: 'managedidentity'
+    AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
+    AzureWebJobsStorage__accountName: storageAccount.outputs.name
+    APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
+    APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
+    AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
+    ConnectorNamespace__credential: 'managedidentity'
+    ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
+    ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
+  },
+  pollTriggers.outputs.triggerConfigSettings
+)
+
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
+  name: 'function-app'
   scope: rg
-  name: functionAppName
   params: {
     name: functionAppName
     location: location
@@ -197,9 +206,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     serverFarmResourceId: functionAppPlan.outputs.resourceId
     httpsOnly: true
     managedIdentities: {
-      userAssignedResourceIds: [
-        '${funcUserAssignedIdentity.outputs.resourceId}'
-      ]
+      userAssignedResourceIds: [funcUserAssignedIdentity.outputs.resourceId]
     }
     functionAppConfig: {
       deployment: {
@@ -221,8 +228,9 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
         version: '10.0'
       }
     }
+    // Override the module default without emitting AlwaysOn for Flex Consumption.
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
     }
     configs: [
       {
@@ -233,20 +241,9 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
-@description('The resource ID of the created Resource Group.')
-output resourceGroupResourceId string = rg.id
-
-@description('The name of the created Resource Group.')
 output resourceGroupName string = rg.name
-
-@description('The name of the created Function App.')
 output functionAppName string = functionApp.outputs.name
-
-@description('The default hostname of the created Function App.')
-output functionAppDefaultHostname string = functionApp.outputs.defaultHostname
-
-@description('The name of the created Connector Namespace.')
 output connectorNamespaceName string = connectorNamespace.outputs.name
-
-@description('The name of the created Office 365 connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
+output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
+output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings

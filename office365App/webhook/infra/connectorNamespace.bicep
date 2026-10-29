@@ -21,7 +21,7 @@ resource office365Connection 'Microsoft.Web/connectorGateways/connections@2026-0
   }
 }
 
-// Connector Namespace system MI -> Office 365 connection (needed to poll triggers).
+// The namespace identity checks Office 365 for events; delivery to the function uses a webhook.
 resource office365ConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
   parent: office365Connection
   name: 'connector-namespace-msi'
@@ -47,4 +47,3 @@ output connectionName string = office365Connection.name
 
 @description('Runtime URL for the Office 365 connection.')
 output office365ConnectionRuntimeUrl string = office365Connection.properties.connectionRuntimeUrl
-

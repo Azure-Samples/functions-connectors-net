@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "ConnectorNamespace__pollingEndpoint": "https://<connector-namespace-host>",
+    "OnNewEmailTriggerConfigName": "office365-onnewemail",
+    "OnFlaggedEmailTriggerConfigName": "office365-onflaggedemail",
+    "OnNewMentionMeEmailTriggerConfigName": "office365-onnewmentionmeemail",
+    "OnNewCalendarEventTriggerConfigName": "office365-onnewcalendarevent",
+    "OnUpcomingEventTriggerConfigName": "office365-onupcomingevent"
+  }
+}
