@@ -16,17 +16,15 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-@description('URL of the Dataverse environment to monitor, e.g. https://orgb2e33949.crm.dynamics.com. Used as the trigger "dataset" value. If empty, it is resolved from dataverseEnvironmentName during post-deploy.')
-param dataverseEnvironmentUrl string = ''
-
-@description('Friendly name of the Dataverse environment, e.g. "Contoso (default)". When dataverseEnvironmentUrl is empty, the org URL is auto-resolved from this name via the Dataverse Global Discovery Service during post-deploy.')
-param dataverseEnvironmentName string = ''
+@minLength(1)
+@description('Dataverse org URL, e.g. https://contoso.crm.dynamics.com. Required to provision the Poll trigger.')
+param dataverseEnvironmentUrl string
 
 @description('Entity set (plural logical) name of the Dataverse table whose new rows fire the trigger, e.g. accounts, contacts.')
 param dataverseTableName string = 'accounts'
 
-metadata name = 'Azure Functions Microsoft Dataverse Connector Trigger (.NET)'
-metadata description = 'Connector Namespace trigger sample: fires when a new Dataverse row is added.'
+metadata name = 'Azure Functions Microsoft Dataverse Poll Delivery (.NET)'
+metadata description = 'Connector-only new-row trigger with host-pull delivery and a List rows action.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -182,10 +180,22 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: connectorNamespaceLocation
     tags: tags
     connectionName: connectorNamespaceConnectionName
+    userPrincipalId: userPrincipalId
   }
 }
 
-var allAppSettings = {
+module pollTriggers './poll-triggers.bicep' = {
+  scope: rg
+  name: '${connectorNamespaceName}-poll-triggers'
+  params: {
+    namespaceName: connectorNamespace.outputs.name
+    connectionName: connectorNamespace.outputs.connectionName
+    environmentUrl: dataverseEnvironmentUrl
+    tableName: dataverseTableName
+  }
+}
+
+var allAppSettings = union({
   AzureWebJobsStorage__credential: 'managedidentity'
   AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
@@ -193,10 +203,12 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   DATAVERSE_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.dataverseConnectionRuntimeUrl
-  DATAVERSE_ENVIRONMENT_URL: dataverseEnvironmentUrl
-  DATAVERSE_ENVIRONMENT_NAME: dataverseEnvironmentName
+  DATAVERSE_ENVIRONMENT_URL: endsWith(dataverseEnvironmentUrl, '/') ? substring(dataverseEnvironmentUrl, 0, length(dataverseEnvironmentUrl) - 1) : dataverseEnvironmentUrl
   DATAVERSE_TABLE_NAME: dataverseTableName
-}
+  ConnectorNamespace__credential: 'managedidentity'
+  ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
+  ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
+}, pollTriggers.outputs.triggerConfigSettings)
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   scope: rg
@@ -235,7 +247,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
     }
     configs: [
       {
@@ -247,9 +259,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
 }
 
 // Grant the function app's user-assigned MI access to the Dataverse connection.
-// The ListDataverseRows action authenticates with DefaultAzureCredential, which honours
-// AZURE_CLIENT_ID and therefore runs as this user-assigned identity — so the connection
-// ACL must target the same principal.
+// The Poll listener and ListDataverseRows action use the same user-assigned identity.
 module functionAccessPolicy './functionAccessPolicy.bicep' = {
   scope: rg
   name: '${connectorNamespaceName}-func-policy'
@@ -284,8 +294,9 @@ output dataverseFunctionName string = 'OnDataverseRowChanged'
 @description('The Dataverse environment URL monitored by the trigger.')
 output dataverseEnvironmentUrl string = dataverseEnvironmentUrl
 
-@description('The Dataverse environment friendly name (used to resolve the org URL when the URL is not set).')
-output dataverseEnvironmentName string = dataverseEnvironmentName
-
 @description('The Dataverse table (entity set / plural logical) name monitored by the trigger.')
 output dataverseTableName string = dataverseTableName
+
+output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
+output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
+output dataverseConnectionRuntimeUrl string = connectorNamespace.outputs.dataverseConnectionRuntimeUrl

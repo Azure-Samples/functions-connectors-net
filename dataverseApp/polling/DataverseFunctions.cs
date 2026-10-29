@@ -17,9 +17,8 @@ namespace DataverseApp;
 /// Microsoft Dataverse (Common Data Service) connector functions.
 ///
 /// <para><b>OnDataverseRowChanged</b> is a <see cref="ConnectorTriggerAttribute"/> binding: the
-/// Connector Namespace polls Dataverse and invokes this function whenever a new row is added to the
-/// configured table (operation <c>GetOnNewItems_V2</c>). The trigger config — environment, table and
-/// polling schedule — is created by the post-deploy script.</para>
+/// Connector Namespace checks Dataverse for new rows (operation <c>GetOnNewItems_V2</c>).
+/// The Functions host receives and acknowledges queued events using Poll delivery.</para>
 ///
 /// <para><b>ListDataverseRows</b> is an HTTP-triggered action that calls Dataverse through the generated
 /// <see cref="CommondataserviceClient"/> (operation <c>GetItems_V2</c>) to read rows on demand.</para>
@@ -37,16 +36,18 @@ public class DataverseFunctions
 
     /// <summary>
     /// Fires when a new row is added to the configured Dataverse table.
-    /// The serialized payload is written to blob storage for inspection.
+    /// Logs the number of received rows without storing their contents.
     /// </summary>
     [Function("OnDataverseRowChanged")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnDataverseRowChanged(
-        [ConnectorTrigger] CommondataserviceOnNewItemsTriggerPayload payload)
+    public void OnDataverseRowChanged(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnDataverseRowChangedTriggerConfigName%")]
+        CommondataserviceOnNewItemsTriggerPayload payload)
     {
         var rowCount = payload?.Body?.Value?.Count ?? 0;
         _logger.LogInformation("Received OnDataverseRowChanged trigger with {RowCount} row(s).", rowCount);
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     /// <summary>
@@ -61,7 +62,7 @@ public class DataverseFunctions
         _logger.LogInformation("ListDataverseRows: reading rows via CommondataserviceClient.");
 
         // The dataset for the Dataverse dataset APIs is the environment (org) URL, e.g.
-        // https://contoso.crm.dynamics.com. It is resolved and persisted by the post-deploy script.
+        // https://contoso.crm.dynamics.com. The same URL is configured for the Poll trigger.
         var environmentUrl = Environment.GetEnvironmentVariable("DATAVERSE_ENVIRONMENT_URL");
         var runtimeUrl = Environment.GetEnvironmentVariable("DATAVERSE_CONNECTION_RUNTIME_URL");
 
