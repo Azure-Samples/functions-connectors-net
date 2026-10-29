@@ -29,7 +29,7 @@ $localValues = @{
     FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
 }
-foreach ($functionName in @('OnNewFile', 'OnUpdatedFile')) {
+foreach ($functionName in @('OnNewFileContent', 'OnUpdatedFileContent', 'OnNewFile', 'OnUpdatedFile')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing trigger configuration setting $setting."
@@ -98,7 +98,7 @@ $deadline = (Get-Date).AddMinutes(5)
 do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'OneDrive connection authorized. Both Poll trigger configurations are provisioned.'
+        Write-Host 'OneDrive connection authorized. All four Poll trigger configurations are provisioned.'
         return
     }
 } while ((Get-Date) -lt $deadline)

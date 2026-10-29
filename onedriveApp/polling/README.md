@@ -6,14 +6,22 @@ public callback, function system key, or development tunnel.
 
 | Function | Connector operation | Payload |
 | --- | --- | --- |
+| `OnNewFileContent` | `OnNewFileV2` | `string` (raw JSON with file content) |
+| `OnUpdatedFileContent` | `OnUpdatedFileV2` | `string` (raw JSON with file content) |
 | `OnNewFile` | `OnNewFilesV2` | `OneDriveForBusinessOnNewFilesTriggerPayload` |
 | `OnUpdatedFile` | `OnUpdatedFilesV2` | `OneDriveForBusinessOnUpdatedFilesTriggerPayload` |
 
-These are the OneDrive for Business properties-only operations, not the
-similarly named single-file content operations. Both functions simply log that
+All four events shown by the OneDrive for Business connector are covered:
+file creation and modification, each with content or properties only.
+Content operations use raw JSON `string` bindings, as specified by the extension's
+operation mappings; properties-only operations use typed SDK payloads.
+All functions simply log that
 the trigger was received. No file content or metadata is logged or written to
 Blob Storage. Poll delivery is at least once, so duplicate log entries are
 possible. Production processing should be idempotent.
+
+The connector skips files larger than 50 MB for the content operations, and moving
+a file within OneDrive does not count as creating a new file.
 
 ## Prerequisites
 
@@ -54,7 +62,7 @@ namespace defaults to `westcentralus`; change it with
 
 Bicep provisions a resource group, .NET 10 Flex Consumption Function App,
 managed identity, storage account, Application Insights/Log Analytics, Connector
-Namespace, OneDrive connection, and two enabled `deliveryMode: 'Poll'` trigger
+Namespace, OneDrive connection, and four enabled `deliveryMode: 'Poll'` trigger
 configurations. It grants connection access separately to the namespace identity
 (source detection), Function App identity (receive/acknowledge), and developer
 identity (local receive/acknowledge). Storage is retained only for Functions
@@ -83,7 +91,7 @@ azd provision
 pwsh -File .\infra\scripts\postdeploy.ps1
 ```
 
-The hook supplies the deployed polling endpoint and both trigger-config names.
+The hook supplies the deployed polling endpoint and all four trigger-config names.
 Use `-ForceLocalSettings` to explicitly regenerate an existing settings file.
 Start Azurite separately, then run:
 
@@ -109,7 +117,7 @@ guessed hostname:
 | `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
 | `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
 
-Omit the operation path and query string. Set both `*TriggerConfigName` values
+Omit the operation path and query string. Set all four `*TriggerConfigName` values
 to existing enabled Poll trigger configs for the authorized OneDrive connection.
 `Connection = "ConnectorNamespace"` in the binding is a configuration prefix,
 not the connection resource name. Both the namespace and receiving identity need
@@ -118,9 +126,10 @@ connection access policies. Poll trigger configs must not contain webhook
 
 ## Verify and clean up
 
-Create a new file, then modify a file in the configured folder. Allow time for
-OneDrive source detection and inspect the function logs for
-`Received OnNewFile trigger` and `Received OnUpdatedFile trigger`.
+Create a new file smaller than 50 MB, then modify it in the configured folder.
+Allow time for OneDrive source detection and inspect the function logs for
+`Received OnNewFileContent trigger`, `Received OnUpdatedFileContent trigger`,
+`Received OnNewFile trigger`, and `Received OnUpdatedFile trigger`.
 The sample does not create a `connector-messages` output container.
 
 ```powershell

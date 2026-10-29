@@ -17,6 +17,18 @@ public class OneDriveFunctions
         _logger = logger;
     }
 
+    [Function("OnNewFileContent")]
+    public void OnNewFileContent([ConnectorTrigger] string payload)
+    {
+        _logger.LogInformation("Received OnNewFileContent trigger");
+    }
+
+    [Function("OnUpdatedFileContent")]
+    public void OnUpdatedFileContent([ConnectorTrigger] string payload)
+    {
+        _logger.LogInformation("Received OnUpdatedFileContent trigger");
+    }
+
     [Function("OnNewFile")]
     public void OnNewFile(
         [ConnectorTrigger] OneDriveForBusinessOnNewFilesTriggerPayload payload)

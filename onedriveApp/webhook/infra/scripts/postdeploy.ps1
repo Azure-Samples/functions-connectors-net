@@ -271,6 +271,8 @@ if (-not $connectorExtensionKey) {
 }
 
 $triggers = @(
+    @{ functionName = 'OnNewFileContent'; operationName = 'OnNewFileV2' },
+    @{ functionName = 'OnUpdatedFileContent'; operationName = 'OnUpdatedFileV2' },
     @{ functionName = 'OnNewFile'; operationName = 'OnNewFilesV2' },
     @{ functionName = 'OnUpdatedFile'; operationName = 'OnUpdatedFilesV2' }
 )

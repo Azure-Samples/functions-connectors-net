@@ -17,6 +17,28 @@ public class OneDriveFunctions
         _logger = logger;
     }
 
+    [Function("OnNewFileContent")]
+    public void OnNewFileContent(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnNewFileContentTriggerConfigName%")]
+        string payload)
+    {
+        _logger.LogInformation("Received OnNewFileContent trigger");
+    }
+
+    [Function("OnUpdatedFileContent")]
+    public void OnUpdatedFileContent(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnUpdatedFileContentTriggerConfigName%")]
+        string payload)
+    {
+        _logger.LogInformation("Received OnUpdatedFileContent trigger");
+    }
+
     [Function("OnNewFile")]
     public void OnNewFile(
         [ConnectorTrigger(

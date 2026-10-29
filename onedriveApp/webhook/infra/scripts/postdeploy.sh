@@ -162,6 +162,8 @@ create_trigger() {
     rm -f "$notifFile"
 }
 
+create_trigger "OnNewFileContent" "OnNewFileV2" "[{name:folderId,value:'$onedriveFolderId'}]"
+create_trigger "OnUpdatedFileContent" "OnUpdatedFileV2" "[{name:folderId,value:'$onedriveFolderId'}]"
 create_trigger "OnNewFile" "OnNewFilesV2" "[{name:folderId,value:'$onedriveFolderId'}]"
 create_trigger "OnUpdatedFile" "OnUpdatedFilesV2" "[{name:folderId,value:'$onedriveFolderId'}]"
 

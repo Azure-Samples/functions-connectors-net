@@ -6,14 +6,20 @@ connector webhook, authenticated with the `connector_extension` system key.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
+| `OnNewFileContent` | `OnNewFileV2` | File created, including content |
+| `OnUpdatedFileContent` | `OnUpdatedFileV2` | File modified, including content |
 | `OnNewFile` | `OnNewFilesV2` | File created (properties only) |
 | `OnUpdatedFile` | `OnUpdatedFilesV2` | File modified (properties only) |
 
-Both functions receive typed payloads and only log that the trigger was received.
+Content operations receive raw JSON as `string`; properties-only operations
+receive typed SDK payloads. All four functions only log that the trigger was received.
 There is no Blob output binding or payload serialization. File content and
 metadata are not logged. Storage is retained for Functions host state and
 deployment artifacts, not connector outputs.
 `NuGet.config` supplies the public Azure Functions package feed for standalone builds.
+
+The connector skips files larger than 50 MB for the content operations, and moving
+a file within OneDrive does not count as creating a new file.
 
 ## Prerequisites
 
@@ -42,7 +48,7 @@ azd up
 Bicep provisions the Flex Consumption .NET 10 Function App, managed identity,
 host/deployment storage, Application Insights/Log Analytics, Connector Namespace,
 and OneDrive connection. The post-deploy hook authorizes the connection, lets
-you select a OneDrive folder, and creates the two trigger configurations with
+you select a OneDrive folder, and creates the four trigger configurations with
 authenticated callbacks. To preselect the folder instead of browsing:
 
 ```powershell
@@ -56,9 +62,10 @@ Use the connector folder ID, not a display path. The namespace defaults to
 ## Verify
 
 Check the [Connector Namespaces portal](https://connectors.azure.com/) for a
-**Connected** OneDrive connection and both triggers **Enabled**. Create a file
-and modify a file in the monitored folder. Allow time for connector detection,
-then inspect the logs for `Received OnNewFile trigger` and
+**Connected** OneDrive connection and all four triggers **Enabled**. Create a file
+smaller than 50 MB and modify it in the monitored folder. Allow time for connector detection,
+then inspect the logs for `Received OnNewFileContent trigger`,
+`Received OnUpdatedFileContent trigger`, `Received OnNewFile trigger`, and
 `Received OnUpdatedFile trigger`:
 
 ```powershell
