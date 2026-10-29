@@ -1,74 +1,24 @@
-# Generic Connector Triggers (.NET — untyped)
+# Generic Connector Triggers (.NET)
 
-Azure Functions sample demonstrating the **generic (untyped) `ConnectorTrigger` binding**
-with `string` payloads instead of strongly-typed SDK models.
+These standalone samples receive connector payloads as raw JSON `string` values,
+without `Azure.Connectors.Sdk` or connector-specific models.
 
-Use the generic API when you want to:
+| Sample | Delivery | Setup |
+| --- | --- | --- |
+| [polling](polling/README.md) | Outbound receive and acknowledgement; no callback or tunnel | Existing authorized connection and enabled Poll trigger configuration |
+| [webhook](webhook/README.md) | Public HTTPS callback | Existing authorized connection and webhook trigger configuration |
 
-- Bind a trigger for a connector that does **not** have a first-class wrapper in `Azure.Connectors.Sdk`.
-- Forward the payload as-is (e.g. to a queue, blob, or AI model) without deserializing.
-- Keep a minimal dependency footprint without the generated SDK package.
+Each folder contains its own project, host configuration, package sources, and
+local settings template. Copy either folder on its own to build and run it.
+Handlers log the function name and payload length only, never the payload itself,
+and do not write event data to Blob Storage.
 
-> The function **name** still binds to the connector + operation on the host side. The
-> generic API only changes the parameter type in C# — it does **not** change which
-> operation the function listens to.
+Generic binding changes the C# payload type, not the connector operation. Polling
+selects an existing trigger configuration by name; webhook delivery routes by the
+callback's `functionName`. Neither sample automatically discovers a connector or
+provisions Azure resources. Choose the connector, operation, parameters, and
+authorization appropriate to your scenario using the
+[Connector Namespace CLI](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli).
 
-## Triggers included
-
-| Function | Connector | Description |
-|---|---|---|
-| `OnGenericOffice365NewEmail` | Office 365 | Fires on new email — raw JSON payload |
-| `OnGenericAzureBlobUpdated` | Azure Blob | Fires on blob add/modify — raw JSON payload |
-| `OnGenericSharepointNewFile` | SharePoint Online | Fires on new file — raw JSON payload |
-| `OnGenericTeamsChannelMessage` | Teams | Fires on channel message — raw JSON payload |
-| `OnGenericCustomConnectorEvent` | _any connector_ | Placeholder for custom connectors — raw JSON payload |
-
-Each handler receives the raw JSON as a `string` via `[ConnectorTrigger] string payload`.
-
-## When to use this vs. the typed API
-
-| Use case | Approach |
-|---|---|
-| Connector with a generated SDK model (e.g. Office 365, Teams) | Use the typed payload class (see `office365App`, `teamsApp`) |
-| Connector without a first-class SDK wrapper | Use `[ConnectorTrigger] string payload` (this sample) |
-| Forward payload as-is to storage or downstream service | Use `[ConnectorTrigger] string payload` (this sample) |
-
-## Prerequisites
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-- [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors)
-
-  ```powershell
-  # PowerShell
-  irm https://aka.ms/connector-namespace-cli-install-ps | iex
-  ```
-
-  ```bash
-  # Bash
-  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
-  ```
-
-## Deploy
-
-```bash
-azd auth login
-cd genericApp
-azd up
-```
-
-This sample does **not** include infrastructure or post-deploy scripts because the
-connector and trigger configuration depends on which connector you want to use.
-Copy the `infra/` folder from one of the other apps (e.g. `office365App`) and adjust
-the connector name and trigger parameters to match your scenario.
-
-## Project layout
-
-```text
-genericApp/
-├── GenericFunctions.cs       # All generic trigger functions (string payload)
-├── Program.cs                # Host builder with OpenTelemetry
-├── host.json
-└── functions-connectors-net.csproj
-```
+Functions host storage (`AzureWebJobsStorage`) and Azure deployment storage remain
+required; removing Blob output does not remove those platform requirements.
