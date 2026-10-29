@@ -1,6 +1,6 @@
 <Solution>
-  <Folder Name="/office365App/">
-    <Project Path="office365App/functions-connectors-net.csproj" />
+  <Folder Name="/office365App/webhook/">
+    <Project Path="office365App/webhook/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/azureblobApp/">
     <Project Path="azureblobApp/functions-connectors-net.csproj" />

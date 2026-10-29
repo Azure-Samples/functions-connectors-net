@@ -1,3 +1,19 @@
+param(
+    [string] $CallbackBaseUrl,
+    [string] $ConnectorExtensionKey
+)
+
+$ErrorActionPreference = 'Stop'
+
+if ($CallbackBaseUrl -and (
+    -not $CallbackBaseUrl.StartsWith('https://', [System.StringComparison]::OrdinalIgnoreCase) -or
+    [string]::IsNullOrWhiteSpace($ConnectorExtensionKey))) {
+    throw 'Local callbacks require a public HTTPS CallbackBaseUrl and the local ConnectorExtensionKey.'
+}
+if ($ConnectorExtensionKey -and -not $CallbackBaseUrl) {
+    throw 'CallbackBaseUrl is required when supplying ConnectorExtensionKey.'
+}
+
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
@@ -8,6 +24,7 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 
 # Outputs from azd
 $outputs = azd env get-values --output json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
 
 $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
@@ -17,8 +34,15 @@ $functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
 
 # Fetch the connector extension system key
-Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
-$connectorExtensionKey = az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv
+if (-not $CallbackBaseUrl) {
+    Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
+    $ConnectorExtensionKey = az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ConnectorExtensionKey)) {
+        throw 'Could not retrieve the connector_extension system key. Deploy the function first.'
+    }
+    $CallbackBaseUrl = "https://$functionAppHostname"
+}
+$CallbackBaseUrl = $CallbackBaseUrl.TrimEnd('/')
 
 # --- Helper: create a trigger config on the Connector Namespace ---
 function New-TriggerConfig {
@@ -30,7 +54,7 @@ function New-TriggerConfig {
     )
 
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
-    $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName"
+    $callbackUrl = "$CallbackBaseUrl/runtime/webhooks/connector?functionName=$FunctionName"
     $connectionDetails = "{connectionName:$connectorNamespaceConnectionName,connectorName:office365}"
     $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
@@ -39,7 +63,7 @@ function New-TriggerConfig {
         authentication = @{
             type = "QueryString"
             name = "code"
-            value = $connectorExtensionKey
+            value = $ConnectorExtensionKey
         }
     } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
 

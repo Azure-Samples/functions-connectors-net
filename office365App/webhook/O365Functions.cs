@@ -9,7 +9,7 @@ using Azure.Connectors.Sdk.Office365.Models;
 namespace Office365App;
 
 /// <summary>
-/// Office 365 Outlook connector trigger functions.
+/// Office 365 Outlook connector webhook trigger functions.
 /// Each function receives a different event type from the Connector Namespace.
 /// </summary>
 public class O365Functions
