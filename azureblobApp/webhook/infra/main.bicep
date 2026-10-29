@@ -188,6 +188,13 @@ module monitoredStorageAccount 'br/public:avm/res/storage/storage-account:0.32.0
     blobServices: {
       containers: [{ name: monitoredContainerName }]
     }
+    roleAssignments: [
+      {
+        roleDefinitionIdOrName: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+        principalId: userPrincipalId
+        principalType: 'User'
+      }
+    ]
   }
 }
 
@@ -249,7 +256,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
     }
     configs: [
       {
