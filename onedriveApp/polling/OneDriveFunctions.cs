@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+using Azure.Connectors.Sdk.OneDriveForBusiness.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
 using Microsoft.Extensions.Logging;
-using Azure.Connectors.Sdk.OneDriveForBusiness.Models;
 
 namespace OneDriveApp;
 
@@ -18,20 +18,24 @@ public class OneDriveFunctions
     }
 
     [Function("OnNewFile")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewFile(
-        [ConnectorTrigger] OneDriveForBusinessOnNewFilesTriggerPayload payload)
+    public void OnNewFile(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnNewFileTriggerConfigName%")]
+        OneDriveForBusinessOnNewFilesTriggerPayload payload)
     {
         _logger.LogInformation("Received OnNewFile trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnUpdatedFile")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnUpdatedFile(
-        [ConnectorTrigger] OneDriveForBusinessOnUpdatedFilesTriggerPayload payload)
+    public void OnUpdatedFile(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnUpdatedFileTriggerConfigName%")]
+        OneDriveForBusinessOnUpdatedFilesTriggerPayload payload)
     {
         _logger.LogInformation("Received OnUpdatedFile trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 }

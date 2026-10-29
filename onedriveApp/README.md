@@ -1,76 +1,20 @@
-# OneDrive for Business Triggers (.NET)
+# OneDrive for Business connector triggers (.NET)
 
-Azure Functions sample app demonstrating **OneDrive for Business** connector triggers using the
-[Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the
-[Microsoft.Azure.Functions.Worker.Extensions.Connector](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) worker extension.
+Choose one standalone sample:
 
-| Function | Connector operation | Description |
+| Sample | Delivery to Functions | Local development |
 | --- | --- | --- |
-| `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created) | Fires when a new file is created in OneDrive |
-| `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | Fires when a file is modified in OneDrive |
+| [Polling](polling/README.md) | The host receives and acknowledges events from the Connector Namespace using identity | No public callback or tunnel |
+| [Webhook](webhook/README.md) | The Connector Namespace posts events to the Functions webhook | Requires a public, authenticated callback for live connector events |
 
-## Prerequisites
+Both samples retain `OnNewFile` (`OnNewFilesV2`) and `OnUpdatedFile`
+(`OnUpdatedFilesV2`) with typed properties-only payloads. Functions only log that
+the trigger was received; there is no Blob output binding and file payloads are
+not serialized or logged. Azure Storage remains for Functions host state and
+deployment artifacts.
 
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
-
-  ```bash
-  # Bash
-  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
-  ```
-
-  or
-
-  ```pwsh
-  # PowerShell
-  irm https://aka.ms/connector-namespace-cli-install-ps | iex
-  ```
-
-## Deploy to Azure
-
-```bash
-cd onedriveApp
-azd auth login
-az login
-azd up
-```
-
-### Resources provisioned
-
-| Resource | Purpose |
-| --- | --- |
-| **Resource Group** | Contains all resources |
-| **Flex Consumption Function App** (.NET 10 isolated) | Hosts the connector trigger functions |
-| **App Service Plan** (FC1) | Flex Consumption plan |
-| **User-Assigned Managed Identity** | Identity for the function app |
-| **Storage Account** | Deployment artifacts and function runtime state |
-| **Log Analytics Workspace** | Backing store for Application Insights |
-| **Application Insights** | Telemetry and logging |
-| **Connector Namespace** | Hosts the OneDrive connection and trigger configs |
-| **OneDrive for Business Connection** (OAuth) | Authenticates to OneDrive — requires interactive consent during post-deploy |
-
-After provisioning, a post-deploy hook authorizes the OneDrive connection and creates trigger configs. To re-run:
-
-```bash
-azd hooks run postdeploy
-```
-
-## Verify
-
-After `azd up`, open the [Connector Namespaces portal](https://connectors.azure.com/) to verify:
-
-- One **Connection** (OneDrive for Business) with status **Connected**
-- Trigger configs in **Enabled** state
-
-Create or modify a file in OneDrive to fire the trigger. Tail logs with:
-
-```bash
-az functionapp log tail -g <resourceGroupName> -n <functionAppName>
-```
-
-## More
-
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
-- [OneDrive for Business connector reference](https://learn.microsoft.com/connectors/onedriveforbusiness/)
+Poll versus Webhook describes delivery **from the namespace to the Functions
+host**, not how the OneDrive connector detects changes. Each sample has its own
+project, dependencies, infrastructure, deployment hook, and local-settings
+template. Copy an entire sample folder to use it independently. Use different
+`azd` environment names for polling and webhook deployments.

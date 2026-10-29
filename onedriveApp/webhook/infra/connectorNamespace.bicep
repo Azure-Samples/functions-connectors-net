@@ -44,6 +44,3 @@ output name string = connectorNamespace.name
 
 @description('The name of the OneDrive connection on the namespace.')
 output connectionName string = onedriveConnection.name
-
-@description('Runtime URL for the OneDrive connection.')
-output onedriveConnectionRuntimeUrl string = onedriveConnection.properties.connectionRuntimeUrl

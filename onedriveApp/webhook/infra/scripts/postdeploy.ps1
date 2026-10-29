@@ -1,4 +1,4 @@
-# Post-deployment configuration for the onedriveApp.
+# Post-deployment configuration for the OneDrive webhook sample.
 #
 # Uses the connector-namespace Azure CLI extension to authorize the OneDrive
 # for Business connection, browse folders interactively, and create Connector

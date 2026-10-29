@@ -183,7 +183,6 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  ONEDRIVEFORBUSINESS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.onedriveConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -222,7 +221,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
     }
     configs: [
       {
