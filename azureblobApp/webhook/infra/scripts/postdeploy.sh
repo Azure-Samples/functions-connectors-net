@@ -43,7 +43,7 @@ currentStatus=$(az connector-namespace connection show \
 if [ "$(echo "$currentStatus" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
     echo "   already Connected; skipping consent flow"
 else
-    consentParams="[{parameterName:token,redirectUrl:'https://portal.azure.com'}]"
+    consentParams="[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
     link=""
     for attempt in 1 2 3 4 5; do
         link=$(az connector-namespace connection list-consent-links \
@@ -52,7 +52,7 @@ else
             --parameters "$consentParams" \
             --query "value[0].link" -o tsv 2>/dev/null || true)
 
-        if [ -z "$link" ]; then
+        if [ -z "$link" ] || [ "$link" = "null" ]; then
             link=$(az connector-namespace connection list-consent-links \
                 -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
                 --connection-name "$connectorNamespaceConnectionName" \
@@ -60,9 +60,12 @@ else
                 --query "link" -o tsv 2>/dev/null || true)
         fi
 
-        [ -n "$link" ] && break
-        echo "   list-consent-links attempt ${attempt} failed; retrying in 5s..."
-        sleep 5
+        [ -n "$link" ] && [ "$link" != "null" ] && break
+        link=""
+        if [ "$attempt" -lt 5 ]; then
+            echo "   list-consent-links attempt ${attempt} failed; retrying in 5s..."
+            sleep 5
+        fi
     done
 
     if [ -z "$link" ]; then

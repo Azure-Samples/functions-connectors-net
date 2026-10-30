@@ -38,38 +38,34 @@ $currentStatus = az connector-namespace connection show `
     -g $resourceGroupName --namespace $connectorNamespaceName `
     -n $connectorNamespaceConnectionName `
     --query "properties.overallStatus" -o tsv 2>$null
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection status.' }
 
 if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
     Write-Host "   already Connected; skipping consent flow" -ForegroundColor Green
 } else {
-    $consentParameters = "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]"
-    $consentJson = $null
+    $consentParameters = "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
     $link = $null
 
     for ($i = 0; $i -lt 5; $i++) {
-        $consentJson = az connector-namespace connection list-consent-links `
+        $link = az connector-namespace connection list-consent-links `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $connectorNamespaceConnectionName `
             --parameters $consentParameters `
-            -o json 2>$null | Out-String
-        if ($LASTEXITCODE -eq 0 -and $consentJson) {
+            --query "value[0].link" -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $link -or $link -eq 'null') {
             $link = az connector-namespace connection list-consent-links `
                 -g $resourceGroupName --namespace $connectorNamespaceName `
                 --connection-name $connectorNamespaceConnectionName `
                 --parameters $consentParameters `
-                --query "value[0].link" -o tsv 2>$null
-            if (-not $link) {
-                $link = az connector-namespace connection list-consent-links `
-                    -g $resourceGroupName --namespace $connectorNamespaceName `
-                    --connection-name $connectorNamespaceConnectionName `
-                    --parameters $consentParameters `
-                    --query "link" -o tsv 2>$null
-            }
-            if ($link) { break }
+                --query "link" -o tsv 2>$null
         }
+        if ($LASTEXITCODE -eq 0 -and $link -and $link -ne 'null') { break }
+        $link = $null
 
-        Write-Host "   list-consent-links attempt $($i + 1) failed; retrying in 5s..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 5
+        if ($i -lt 4) {
+            Write-Host "   list-consent-links attempt $($i + 1) failed; retrying in 5s..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 5
+        }
     }
 
     if (-not $link) {
@@ -79,7 +75,7 @@ if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
 
     Write-Host "   opening browser for OAuth consent..." -ForegroundColor Cyan
     Write-Host "   (if no tab opens, paste this URL manually: $link)" -ForegroundColor Cyan
-    try { Start-Process $link | Out-Null } catch { Write-Host "   Start-Process failed: $_" -ForegroundColor Yellow }
+    try { Start-Process $link | Out-Null } catch { Write-Warning "Could not open the browser: $_. Open the printed consent URL manually." }
 
     $deadline = (Get-Date).AddMinutes(5)
     $authorized = $false
@@ -89,6 +85,7 @@ if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $connectorNamespaceConnectionName `
             --query "properties.overallStatus" -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection status.' }
         Write-Host "   status: $status"
         if ($status -and $status.ToLower() -eq 'connected') {
             $authorized = $true

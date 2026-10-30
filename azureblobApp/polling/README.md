@@ -46,8 +46,10 @@ storage account, an OAuth Azure Blob connection, and an enabled Poll trigger
 configuration. The source container ID is base64 of `%2f<container-name>`, as
 required by the connector. `dataset` identifies the monitored storage account.
 
-The postdeploy hook opens OAuth consent. Sign in with the developer account
-represented by `AZURE_PRINCIPAL_ID`; it receives Storage Blob Data Contributor
+The postdeploy hook prints and opens the returned OAuth consent link, redirecting
+to `https://connectors.azure.com`. Already `Connected` connections skip consent.
+Sign in with the developer account represented by `AZURE_PRINCIPAL_ID`;
+it receives Storage Blob Data Contributor
 on the monitored account so it can upload test blobs and authorize source access.
 If consenting with a different account, grant that account suitable source data
 access separately. Storage role assignments may take time to propagate.

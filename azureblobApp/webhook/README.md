@@ -48,7 +48,9 @@ appropriate source data access. Allow time for role assignments to propagate.
 
 The interactive postdeploy hook authorizes the connection, fetches the
 `connector_extension` system key, and registers the callback with query-string
-authentication. The callback is
+authentication. It prints and opens the returned OAuth consent link, redirecting
+to `https://connectors.azure.com`; already `Connected` connections skip consent.
+The callback is
 `https://<function-app-host>/runtime/webhooks/connector?functionName=OnUpdatedFile`.
 Rerun setup with `azd hooks run postdeploy`. Do not share or commit callback keys.
 
