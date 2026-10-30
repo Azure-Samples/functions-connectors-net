@@ -168,7 +168,7 @@ $currentStatus = az connector-namespace connection show `
 if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
     Write-Host "   already Connected; skipping consent flow" -ForegroundColor Green
 } else {
-    $consentParameters = "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]"
+    $consentParameters = "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
     $consentJson = $null
     $link = $null
 

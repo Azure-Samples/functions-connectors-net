@@ -41,7 +41,7 @@ currentStatus="$(get_connection_status)"
 if [ "${currentStatus,,}" = "connected" ]; then
     echo "   already Connected; skipping consent flow"
 else
-    consentParameters="[{parameterName:token,redirectUrl:'https://portal.azure.com'}]"
+    consentParameters="[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
     consentJson=""
     link=""
 
