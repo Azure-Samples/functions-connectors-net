@@ -3,6 +3,11 @@
 These standalone samples receive connector payloads as raw JSON `string` values,
 without `Azure.Connectors.Sdk` or connector-specific models.
 
+Generic is the deliberate **untyped exception** in this collection.
+Connector-specific samples use strongly typed SDK payloads; these samples instead
+demonstrate receiving operations without a generated model. A raw JSON `string`
+is not a strongly typed SDK payload.
+
 | Sample | Delivery | Setup |
 | --- | --- | --- |
 | [polling](polling/README.md) | Outbound receive and acknowledgement; no callback or tunnel | Existing authorized connection and enabled Poll trigger configuration |

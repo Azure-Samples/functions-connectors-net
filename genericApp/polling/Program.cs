@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using Azure.Monitor.OpenTelemetry.Exporter;
+using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +17,13 @@ var host = new HostBuilder()
         {
             services.AddOpenTelemetry()
                 .UseFunctionsWorkerDefaults()
-                .UseAzureMonitorExporter();
+                .UseAzureMonitorExporter(options =>
+                {
+                    if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_AUTHENTICATION_STRING")))
+                    {
+                        options.Credential = new DefaultAzureCredential();
+                    }
+                });
         }
     })
     .Build();

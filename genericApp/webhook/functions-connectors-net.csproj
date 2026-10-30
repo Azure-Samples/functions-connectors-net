@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.9.0" />
+    <PackageReference Include="Azure.Core" Version="1.62.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Connector" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>

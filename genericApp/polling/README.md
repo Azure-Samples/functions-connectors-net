@@ -113,6 +113,11 @@ policy. Retain the app's `AzureWebJobsStorage` configuration (or its
 identity-based `AzureWebJobsStorage__*` settings) and deployment storage. Azurite's
 `UseDevelopmentStorage=true` is only for local use. Optionally configure
 `APPLICATIONINSIGHTS_CONNECTION_STRING` for telemetry.
+For Microsoft Entra-authenticated telemetry, also set
+`APPLICATIONINSIGHTS_AUTHENTICATION_STRING` (for example `Authorization=AAD`).
+The worker exporter then uses `DefaultAzureCredential`; assign its identity the
+Monitoring Metrics Publisher role on Application Insights. For a user-assigned
+identity, set `AZURE_CLIENT_ID` to its client ID for worker credential selection.
 
 ## Verify delivery
 
