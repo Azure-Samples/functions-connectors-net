@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Application Insights region; defaults to the resource location.')
+param applicationInsightsLocation string = ''
+
 @metadata({
   azd: {
     type: 'principalId'
@@ -26,6 +29,10 @@ param userPrincipalId string = deployer().objectId
 
 param mailFolderPath string = 'Inbox'
 param calendarId string = 'Calendar'
+param sharedMailboxAddress string = ''
+param sharedMailboxFolderId string = 'Inbox'
+@description('Disable source triggers while preparing deployment before mailbox/calendar selection and consent.')
+param enableTriggers bool = true
 
 metadata name = 'Azure Functions Office 365 Polling Connector Trigger (.NET)'
 metadata description = 'Connector Namespace Poll delivery using managed identity, without a callback URL.'
@@ -71,7 +78,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: 'appi-${resourceToken}'
-    location: location
+    location: empty(applicationInsightsLocation) ? location : applicationInsightsLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
@@ -177,6 +184,9 @@ module pollTriggers './poll-triggers.bicep' = {
     connectionName: connectorNamespace.outputs.connectionName
     mailFolderPath: mailFolderPath
     calendarId: calendarId
+    sharedMailboxAddress: sharedMailboxAddress
+    sharedMailboxFolderId: sharedMailboxFolderId
+    enableTriggers: enableTriggers
   }
 }
 
@@ -191,6 +201,7 @@ var allAppSettings = union(
     ConnectorNamespace__credential: 'managedidentity'
     ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
     ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
+    'AzureWebJobs.OnSharedMailboxNewEmail.Disabled': string(empty(sharedMailboxAddress))
   },
   pollTriggers.outputs.triggerConfigSettings
 )
@@ -222,6 +233,17 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
+        alwaysReady: concat([
+          { name: 'function:OnNewEmail', instanceCount: 1 }
+          { name: 'function:OnFlaggedEmail', instanceCount: 1 }
+          { name: 'function:OnNewMentionMeEmail', instanceCount: 1 }
+          { name: 'function:OnNewCalendarEvent', instanceCount: 1 }
+          { name: 'function:OnUpcomingEvent', instanceCount: 1 }
+          { name: 'function:OnCalendarChangedItems', instanceCount: 1 }
+          { name: 'function:OnCalendarUpdatedItems', instanceCount: 1 }
+        ], empty(sharedMailboxAddress) ? [] : [
+          { name: 'function:OnSharedMailboxNewEmail', instanceCount: 1 }
+        ])
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -247,3 +269,5 @@ output connectorNamespaceName string = connectorNamespace.outputs.name
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
 output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
 output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
+output office365SharedMailboxAddress string = sharedMailboxAddress
+output office365TriggerState string = enableTriggers ? 'Enabled' : 'Disabled'

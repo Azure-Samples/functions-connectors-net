@@ -18,8 +18,7 @@ public class O365Functions
     }
 
     [Function("OnNewEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewEmail(
+    public void OnNewEmail(
         [ConnectorTrigger(
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
@@ -27,12 +26,10 @@ public class O365Functions
         Office365OnNewEmailTriggerPayload payload)
     {
         _logger.LogInformation("Received OnNewEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnFlaggedEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnFlaggedEmail(
+    public void OnFlaggedEmail(
         [ConnectorTrigger(
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
@@ -40,12 +37,10 @@ public class O365Functions
         Office365OnFlaggedEmailTriggerPayload payload)
     {
         _logger.LogInformation("Received OnFlaggedEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnNewMentionMeEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewMentionMeEmail(
+    public void OnNewMentionMeEmail(
         [ConnectorTrigger(
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
@@ -53,12 +48,10 @@ public class O365Functions
         Office365OnNewEmailMentioningMeTriggerPayload payload)
     {
         _logger.LogInformation("Received OnNewMentionMeEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnNewCalendarEvent")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewCalendarEvent(
+    public void OnNewCalendarEvent(
         [ConnectorTrigger(
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
@@ -66,12 +59,10 @@ public class O365Functions
         Office365OnCalendarNewItemsTriggerPayload payload)
     {
         _logger.LogInformation("Received OnNewCalendarEvent trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
     }
 
     [Function("OnUpcomingEvent")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnUpcomingEvent(
+    public void OnUpcomingEvent(
         [ConnectorTrigger(
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
@@ -79,6 +70,38 @@ public class O365Functions
         Office365OnUpcomingEventsTriggerPayload payload)
     {
         _logger.LogInformation("Received OnUpcomingEvent trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+    }
+
+    [Function("OnSharedMailboxNewEmail")]
+    public void OnSharedMailboxNewEmail(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnSharedMailboxNewEmailTriggerConfigName%")]
+        Office365OnSharedMailboxNewEmailTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger");
+    }
+
+    [Function("OnCalendarChangedItems")]
+    public void OnCalendarChangedItems(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnCalendarChangedItemsTriggerConfigName%")]
+        Office365OnCalendarChangedItemsTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnCalendarChangedItems trigger");
+    }
+
+    [Function("OnCalendarUpdatedItems")]
+    public void OnCalendarUpdatedItems(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnCalendarUpdatedItemsTriggerConfigName%")]
+        Office365OnCalendarUpdatedItemsTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnCalendarUpdatedItems trigger");
     }
 }

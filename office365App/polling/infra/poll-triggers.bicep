@@ -2,6 +2,9 @@ param namespaceName string
 param connectionName string
 param mailFolderPath string = 'Inbox'
 param calendarId string = 'Calendar'
+param sharedMailboxAddress string = ''
+param sharedMailboxFolderId string = 'Inbox'
+param enableTriggers bool = true
 
 var triggers = [
   {
@@ -9,7 +12,6 @@ var triggers = [
     operationName: 'OnNewEmailV3'
     parameters: [
       { name: 'folderPath', value: mailFolderPath }
-      { name: 'importance', value: 'High' }
     ]
   }
   {
@@ -34,6 +36,20 @@ var triggers = [
     ]
   }
   {
+    functionName: 'OnCalendarChangedItems'
+    operationName: 'CalendarGetOnChangedItemsV3'
+    parameters: [
+      { name: 'table', value: calendarId }
+    ]
+  }
+  {
+    functionName: 'OnCalendarUpdatedItems'
+    operationName: 'CalendarGetOnUpdatedItemsV3'
+    parameters: [
+      { name: 'table', value: calendarId }
+    ]
+  }
+  {
     functionName: 'OnUpcomingEvent'
     operationName: 'OnUpcomingEventsV3'
     parameters: [
@@ -42,12 +58,22 @@ var triggers = [
   }
 ]
 
+var sharedMailboxTrigger = {
+  functionName: 'OnSharedMailboxNewEmail'
+  operationName: 'SharedMailboxOnNewEmailV2'
+  parameters: [
+    { name: 'mailboxAddress', value: sharedMailboxAddress }
+    { name: 'folderId', value: sharedMailboxFolderId }
+  ]
+}
+var activeTriggers = concat(triggers, empty(sharedMailboxAddress) ? [] : [sharedMailboxTrigger])
+
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
   name: namespaceName
 }
 
 resource triggerConfigs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [
-  for trigger in triggers: {
+  for trigger in activeTriggers: {
     parent: connectorNamespace
     name: 'office365-${toLower(trigger.functionName)}'
     properties: {
@@ -58,7 +84,7 @@ resource triggerConfigs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-
       deliveryMode: 'Poll'
       operationName: trigger.operationName
       parameters: trigger.parameters
-      state: 'Enabled'
+      state: enableTriggers ? 'Enabled' : 'Disabled'
       type: 'NotSpecified'
       description: 'Office 365 ${trigger.functionName} with Poll delivery.'
     }
@@ -74,7 +100,7 @@ output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
   : endpointBase
 
 output triggerConfigSettings object = toObject(
-  triggers,
+  concat(triggers, [sharedMailboxTrigger]),
   trigger => '${trigger.functionName}TriggerConfigName',
   trigger => 'office365-${toLower(trigger.functionName)}'
 )

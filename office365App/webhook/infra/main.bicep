@@ -16,6 +16,16 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Application Insights region; defaults to the resource location.')
+param applicationInsightsLocation string = ''
+
+param mailFolderPath string = 'Inbox'
+param calendarId string = 'Calendar'
+param sharedMailboxAddress string = ''
+param sharedMailboxFolderId string = 'Inbox'
+@description('Disable source triggers while preparing deployment before mailbox/calendar selection and consent.')
+param enableTriggers bool = true
+
 metadata name = 'Azure Functions Office 365 Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
@@ -79,7 +89,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: empty(applicationInsightsLocation) ? location : applicationInsightsLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
@@ -184,6 +194,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   OFFICE365_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.office365ConnectionRuntimeUrl
+  'AzureWebJobs.OnSharedMailboxNewEmail.Disabled': string(empty(sharedMailboxAddress))
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -222,7 +233,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
     }
     configs: [
       {
@@ -250,3 +261,9 @@ output connectorNamespaceName string = connectorNamespace.outputs.name
 
 @description('The name of the created Office 365 connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
+
+output office365MailFolder string = mailFolderPath
+output office365CalendarId string = calendarId
+output office365SharedMailboxAddress string = sharedMailboxAddress
+output office365SharedMailboxFolderId string = sharedMailboxFolderId
+output office365TriggerState string = enableTriggers ? 'Enabled' : 'Disabled'
