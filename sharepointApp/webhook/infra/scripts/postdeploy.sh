@@ -35,6 +35,8 @@ functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
 functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
 sharepointSiteUrl=$(echo "$outputs" | jq -r '.sharepointSiteUrl')
 sharepointLibraryName=$(echo "$outputs" | jq -r '.sharepointLibraryName')
+triggerDefinitions=$(echo "$outputs" | jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
+existingNames=$(az connector-namespace trigger list -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" --query '[].name' -o json)
 
 : "${functionAppDefaultHostname:?required azd output missing}"
 
@@ -54,36 +56,51 @@ echo -e "${YELLOW}Creating Connector Namespace trigger configs...${NC}"
 echo -e "${CYAN}  SharePoint site: ${sharepointSiteUrl}${NC}"
 echo -e "${CYAN}  Library: ${sharepointLibraryName}${NC}"
 
-for triggerSpec in \
-  "OnNewFile|GetOnNewFileItems|When a file is created (properties only)" \
-  "OnUpdatedFile|GetOnUpdatedFileItems|When a file is created or modified (properties only)"
+while IFS= read -r triggerSpec
 do
-  IFS='|' read -r functionName operationName description <<< "${triggerSpec}"
+  functionName=$(echo "$triggerSpec" | jq -r '.functionName')
+  operationName=$(echo "$triggerSpec" | jq -r '.operationName')
+  description=$(echo "$triggerSpec" | jq -r '.description')
   triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$(echo "$triggerSpec" | jq -r '.enabled')" != "true" ]]; then
+    if echo "$existingNames" | jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
+      az connector-namespace trigger update \
+        -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
+        -n "${triggerName}" --state Disabled -o none
+    fi
+    echo "  Skipping opt-in trigger: ${functionName}"
+    continue
+  fi
   callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
   notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
   _notif_files+=("$notifFile")
-  printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
+  paramsFile="${SCRIPT_DIR}/.trigger-parameters.${RANDOM}.${RANDOM}.json"
+  _notif_files+=("$paramsFile")
+  jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
+    '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' > "$notifFile"
+  echo "$triggerSpec" | jq '.parameters' > "$paramsFile"
 
   echo -e "${CYAN}  Creating trigger: ${functionName} -> ${operationName}${NC}"
 
-  az connector-namespace trigger delete \
-    -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-    -n "${triggerName}" --yes 2>/dev/null || true
+  if echo "$existingNames" | jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
+    az connector-namespace trigger delete \
+      -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
+      -n "${triggerName}" --yes -o none
+  fi
 
   az connector-namespace trigger create \
     -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
     -n "${triggerName}" \
     --connection-details "{connectionName:${connectorNamespaceConnectionName},connectorName:sharepointonline}" \
     --operation-name "${operationName}" \
-    --parameters "[{name:dataset,value:'${sharepointSiteUrl}'},{name:table,value:'${sharepointLibraryName}'}]" \
+    --parameters "@${paramsFile}" \
     --notification-details "@${notifFile}" \
     --description "${description}" \
     --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${AZURE_SUBSCRIPTION_ID},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
     -o none
 
-  rm -f "$notifFile"
-done
+  rm -f "$notifFile" "$paramsFile"
+done < <(echo "$triggerDefinitions" | jq -c '.[]')
 
 echo -e "${GREEN}✅ All trigger configs created.${NC}"
 echo ""
@@ -104,14 +121,14 @@ else
     consentLink=$(az connector-namespace connection list-consent-links \
       -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
       --connection-name "${connectorNamespaceConnectionName}" \
-      --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" \
+      --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
       --query "value[0].link" -o tsv 2>/dev/null || true)
 
     if [[ -z "${consentLink}" || "${consentLink}" == "null" ]]; then
       consentLink=$(az connector-namespace connection list-consent-links \
         -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
         --connection-name "${connectorNamespaceConnectionName}" \
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" \
+        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
         --query "link" -o tsv 2>/dev/null || true)
     fi
 
@@ -168,6 +185,6 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}✅ Done. Both SharePoint triggers are configured.${NC}"
+echo -e "${GREEN}✅ Done. Selected SharePoint triggers are configured; prerequisite-dependent triggers remain opt-in.${NC}"
 echo -e "${GREEN}   Tail logs:  az functionapp log tail -g ${resourceGroupName} -n ${functionAppName}${NC}"
 echo ""
