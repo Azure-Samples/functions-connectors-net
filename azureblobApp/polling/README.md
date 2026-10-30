@@ -35,6 +35,11 @@ By default the Connector Namespace deploys in `westcentralus`. To override, run
 `azd env set CONNECTOR_NAMESPACE_LOCATION <region>` before provisioning. Set
 `BLOB_CONTAINER_NAME` to override the default `connector-input` source container.
 
+If the Function region does not offer Application Insights (for example,
+`westcentralus`), set `APPLICATIONINSIGHTS_LOCATION` to a supported region before
+provisioning. Only the Application Insights component uses that override;
+Functions, source/host storage, and the namespace retain their configured regions.
+
 Infrastructure provisions the Function App (Flex Consumption), managed identity,
 Application Insights/Log Analytics, host/deployment storage, a separate monitored
 storage account, an OAuth Azure Blob connection, and an enabled Poll trigger

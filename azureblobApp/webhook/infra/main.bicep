@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Application Insights region. Empty uses location; select a supported region when location does not offer Application Insights.')
+param applicationInsightsLocation string = ''
+
 @description('Name of the blob container to monitor for trigger events.')
 param monitoredContainerName string = 'connector-input'
 
@@ -83,7 +86,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: empty(applicationInsightsLocation) ? location : applicationInsightsLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true

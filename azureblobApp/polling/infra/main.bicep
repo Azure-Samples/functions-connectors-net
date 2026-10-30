@@ -14,6 +14,9 @@ param location string
 
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Application Insights region. Empty uses location; select a supported region when location does not offer Application Insights.')
+param applicationInsightsLocation string = ''
+
 @metadata({
   azd: {
     type: 'principalId'
@@ -67,7 +70,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: 'appi-${resourceToken}'
-    location: location
+    location: empty(applicationInsightsLocation) ? location : applicationInsightsLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true

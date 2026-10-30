@@ -33,6 +33,11 @@ Use an environment name different from the polling app. The Connector Namespace
 defaults to `westcentralus`; override with `CONNECTOR_NAMESPACE_LOCATION` in the
 azd environment. `BLOB_CONTAINER_NAME` overrides the `connector-input` container.
 
+If the Function region does not offer Application Insights (for example,
+`westcentralus`), set `APPLICATIONINSIGHTS_LOCATION` to a supported region before
+provisioning. Only the Application Insights component uses that override;
+Functions, source/host storage, and the namespace retain their configured regions.
+
 The deployment provisions the Flex Consumption Function App, its user-assigned
 managed identity, host/deployment storage, Application Insights/Log Analytics,
 a separate monitored storage account/container, and the Azure Blob connection.
