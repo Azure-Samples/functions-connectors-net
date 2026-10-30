@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "AzureWebJobs.OnNewFile.Disabled": "false",
+    "AzureWebJobs.OnUpdatedFile.Disabled": "false",
+    "AzureWebJobs.OnNewItem.Disabled": "false",
+    "AzureWebJobs.OnUpdatedItem.Disabled": "false",
+    "AzureWebJobs.OnChangedItem.Disabled": "false",
+    "AzureWebJobs.OnDeletedItem.Disabled": "true",
+    "AzureWebJobs.OnDeletedFile.Disabled": "true",
+    "AzureWebJobs.OnFormSubmitted.Disabled": "true",
+    "AzureWebJobs.OnFileClassified.Disabled": "true",
+    "AzureWebJobs.OnRecurringDigest.Disabled": "true"
+  }
+}
