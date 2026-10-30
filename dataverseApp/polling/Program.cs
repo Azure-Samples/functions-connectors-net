@@ -18,7 +18,7 @@ var host = new HostBuilder()
         {
             services.AddOpenTelemetry()
                 .UseFunctionsWorkerDefaults()
-                .UseAzureMonitorExporter();
+                .UseAzureMonitorExporter(options => options.Credential = new DefaultAzureCredential());
         }
 
         // Register a TokenCredential for the Dataverse SDK action.

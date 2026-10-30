@@ -1,7 +1,7 @@
 # Microsoft Dataverse Poll delivery + action (.NET)
 
-This standalone Functions app receives new Dataverse rows through **Poll delivery**.
-Connector Namespace checks Dataverse using `GetOnNewItems_V2`; the Functions connector
+This standalone Functions app receives Dataverse events through **Poll delivery**.
+Connector Namespace checks Dataverse for added, modified, and deleted rows; the Functions connector
 extension pulls queued events and acknowledges successful invocations. It logs row counts
 only, with no Blob output binding. `ListDataverseRows` retains the typed SDK List rows action
 (`GetItems_V2`) at `GET /api/rows?table=accounts&top=5`.
@@ -20,10 +20,14 @@ For inbound push delivery, use the separate [webhook app](../webhook/README.md).
 - A Dataverse environment URL and an OAuth account with **Global Read** on the target table.
 - For local execution: Functions Core Tools v4 and Azurite for host storage.
 
+See the [event matrix and SDK blockers](../README.md) for supported strongly typed handlers
+and the missing SDK models that block combined-change and action-performed subscriptions.
+
 The legacy `commondataservice` connector is intentional: `commondataserviceforapps` is
 not yet available in Connector Namespace. This sample uses only the existing new-row
-operation, not `SubscribeWebhookTrigger` (added, modified, or deleted). The latter has a
-known trigger-creation failure documented in the webhook app. Dataverse-specific Poll
+operations. `SubscribeWebhookTrigger` and `BusinessEventsTrigger` are not registered because
+the SDK lacks their payload models; the former also has a previously observed service-side
+trigger-creation failure. Dataverse-specific Poll
 delivery still needs live verification against your namespace/region; source and build
 checks do not establish service-side availability.
 
@@ -44,9 +48,10 @@ before provisioning because Bicep creates the trigger configuration. The table d
 `accounts`; use the plural logical/entity-set name. Do not add `$top` to trigger parameters:
 the existing Dataverse trigger rejects it with Change Tracking enabled.
 
-Infrastructure provisions an enabled `deliveryMode: Poll` trigger named
-`dataverse-ondataverserowchanged`, operation `GetOnNewItems_V2`, with `dataset` and `table`
-parameters and a five-minute recurrence. ARM/Bicep is used because the current CLI
+Infrastructure provisions three enabled `deliveryMode: Poll` row triggers named
+`dataverse-ondataverserowchanged`, `dataverse-ondataverserowmodified`, and
+`dataverse-ondataverserowdeleted`, with `dataset` and `table` parameters and a five-minute
+recurrence. ARM/Bicep is used because the current CLI
 `trigger create` command does not expose `deliveryMode`. No notification details,
 public callback URL, connector extension key, or webhook registration is required.
 
@@ -62,7 +67,7 @@ an ignored `local.settings.json`, preserving an existing file unless invoked wit
 | App setting | Purpose |
 | --- | --- |
 | `ConnectorNamespace__pollingEndpoint` | Gateway-level base derived from service-returned `pollingEndpoints.receiveUri`; not the full `/receive` URL |
-| `OnDataverseRowChangedTriggerConfigName` | Name of the enabled Poll trigger |
+| `<FunctionName>TriggerConfigName` | Trigger name for each of the three typed row handlers |
 | `ConnectorNamespace__credential` / `ConnectorNamespace__clientId` | Deployed host-pull managed identity |
 | `AZURE_CLIENT_ID` | Managed identity used by the SDK action |
 | `DATAVERSE_CONNECTION_RUNTIME_URL` | Connection runtime URL used by the action |
@@ -103,9 +108,13 @@ az connector-namespace trigger show -g $rg --namespace $ns -n dataverse-ondatave
   --query "properties.{state:state,deliveryMode:deliveryMode,operation:operationName}" -o json
 ```
 
-Expect `Connected`, `Enabled`, `Poll`, and `GetOnNewItems_V2`. Add a new row after the
-trigger is initialized, allow at least one five-minute interval, then inspect
-Application Insights for `Received OnDataverseRowChanged trigger with ... row(s).`
+Expect `Connected`, `Enabled`, `Poll`, and the matching operation ID. Repeat the trigger
+query for each enabled trigger name. Create a clearly named sample-owned account after
+initialization, wait for the added-row log, update only that record and wait for the
+modified-row log, then delete only that record and wait for the deleted-row log.
+Allow at least one five-minute interval at each step. Inspect Application Insights for
+`OnDataverseRowChanged`, `OnDataverseRowModified`, and `OnDataverseRowDeleted` messages.
+Do not delete the row before observing the earlier events; never change existing business data.
 The SDK action returns rows to its authorized caller; it does not persist them:
 
 ```powershell

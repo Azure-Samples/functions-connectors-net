@@ -5,7 +5,7 @@
 # that has access to the target Dataverse environment), then creates the trigger
 # config pointing at the function's connector webhook URL.
 #
-# Trigger: GetOnNewItems_V2 — fires when a new row is added to the table.
+# Row triggers: GetOnNewItems_V2, GetOnUpdatedItems_V2, GetOnDeletedItems_V2.
 #   dataset = <Dataverse org URL>    (the DataSet name, e.g. https://org.crm.dynamics.com)
 #   table   = <DATAVERSE_TABLE_NAME> (entity set / plural logical name, e.g. accounts)
 #
@@ -15,6 +15,7 @@
 #     triggers are Admin Only); otherwise the poll returns 403 Forbidden.
 
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Stop'
 
 # --- Pre-flight: verify the connector-namespace CLI extension is installed ----
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
@@ -35,7 +36,7 @@ $dataverseEnvironmentUrl  = $outputs.dataverseEnvironmentUrl
 $dataverseEnvironmentName = $outputs.dataverseEnvironmentName
 $tableName                = $outputs.dataverseTableName
 
-if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $connectorNamespaceConnectionName -or -not $functionAppName) {
+if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $connectorNamespaceConnectionName -or -not $functionAppName -or -not $subscriptionId) {
     Write-Host "ERROR: required azd outputs missing. Run 'azd provision' first." -ForegroundColor Red
     exit 1
 }
@@ -176,9 +177,6 @@ if (-not $connectorExtensionKey) {
     exit 1
 }
 
-$functionName  = 'OnDataverseRowChanged'
-$operationName = 'GetOnNewItems_V2'
-$triggerName   = "$connectorNamespaceConnectionName-$($functionName.ToLower())"
 # Read the app's real default host rather than assuming ".azurewebsites.net" (which differs for
 # custom domains and sovereign clouds, e.g. .azurewebsites.us / .chinacloudsites.cn). Query at the
 # ARM resource level — `az functionapp show` can return empty host fields for Flex Consumption apps.
@@ -187,46 +185,62 @@ if (-not $functionHost) {
     Write-Host "ERROR: could not resolve defaultHostName for $functionAppName." -ForegroundColor Red
     exit 1
 }
-$callbackUrl   = "https://$functionHost/runtime/webhooks/connector?functionName=$functionName"
-$notifFile     = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-@{
-    callbackUrl = $callbackUrl
-    authentication = @{
-        type = "QueryString"
-        name = "code"
-        value = $connectorExtensionKey
+$rowParameters = @(
+    @{ name = 'dataset'; value = $dataset }
+    @{ name = 'table'; value = $tableName }
+)
+$triggers = @(
+    @{ functionName = 'OnDataverseRowChanged'; operationName = 'GetOnNewItems_V2'; parameters = $rowParameters }
+    @{ functionName = 'OnDataverseRowModified'; operationName = 'GetOnUpdatedItems_V2'; parameters = $rowParameters }
+    @{ functionName = 'OnDataverseRowDeleted'; operationName = 'GetOnDeletedItems_V2'; parameters = $rowParameters }
+)
+
+$failedTriggers = @()
+foreach ($trigger in $triggers) {
+    $functionName = $trigger.functionName
+    $triggerName = "$connectorNamespaceConnectionName-$($functionName.ToLowerInvariant())"
+    $bodyFile = Join-Path $PSScriptRoot ".notification-details-$([Guid]::NewGuid().ToString('N')).json"
+    $body = @{
+        properties = @{
+            connectionDetails = @{ connectionName = $connectorNamespaceConnectionName; connectorName = 'commondataservice' }
+            operationName = $trigger.operationName
+            parameters = $trigger.parameters
+            state = 'Enabled'
+            type = 'NotSpecified'
+            notificationDetails = @{
+                callbackUrl = "https://$functionHost/runtime/webhooks/connector?functionName=$functionName"
+                authentication = @{ type = 'QueryString'; name = 'code'; value = $connectorExtensionKey }
+            }
+            metadata = @{
+                destinationType = 'functionApp'
+                functionAppName = $functionAppName
+                functionAppResourceGroup = $resourceGroupName
+                functionAppSubscriptionId = $subscriptionId
+                functionName = $functionName
+                recurrenceFrequency = 'Minute'
+                recurrenceInterval = '5'
+            }
+        }
     }
-} | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-Write-Host "Creating trigger '$triggerName' for $functionName ($operationName)..." -ForegroundColor Yellow
-
-try {
-    az connector-namespace trigger delete `
-        -g $resourceGroupName --namespace $connectorNamespaceName `
-        -n $triggerName --yes 2>$null | Out-Null
-
-    az connector-namespace trigger create `
-        -g $resourceGroupName --namespace $connectorNamespaceName `
-        -n $triggerName `
-        --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:commondataservice}" `
-        --operation-name $operationName `
-        --parameters "[{name:dataset,value:'$dataset'},{name:table,value:'$tableName'}]" `
-        --notification-details "@$notifFile" `
-        --description "When a new row is added" `
-        --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$functionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
-        -o none
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Failed to create trigger config for $functionName." -ForegroundColor Red
-        exit 1
+    try {
+        [IO.File]::WriteAllText($bodyFile, ($body | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+        Write-Host "Creating webhook trigger '$triggerName' ($($trigger.operationName))..." -ForegroundColor Cyan
+        $uri = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/triggerConfigs/${triggerName}?api-version=2026-05-01-preview"
+        az rest --method put --url $uri --body "@$bodyFile" -o none
+        if ($LASTEXITCODE -ne 0) {
+            $failedTriggers += $functionName
+            Write-Host "ERROR: Failed to create trigger $functionName. See the service error above." -ForegroundColor Red
+        }
+    } finally {
+        Remove-Item -LiteralPath $bodyFile -ErrorAction SilentlyContinue
     }
 }
-finally {
-    Remove-Item $notifFile -ErrorAction SilentlyContinue
+if ($failedTriggers.Count -gt 0) {
+    throw "Trigger configuration failed: $($failedTriggers -join ', ')."
 }
 
 Write-Host ""
 Write-Host "Post-deployment configuration complete." -ForegroundColor Green
-Write-Host "Add a new '$tableName' row in '$dataverseEnvironmentUrl' to fire the trigger (allow one polling interval)." -ForegroundColor Green
+Write-Host "Create, update, and delete a sample-owned '$tableName' row in '$dataverseEnvironmentUrl' (allow one polling interval)." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""

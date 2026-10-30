@@ -50,6 +50,30 @@ public class DataverseFunctions
         _logger.LogInformation("Received OnDataverseRowChanged trigger with {RowCount} row(s).", rowCount);
     }
 
+    [Function("OnDataverseRowModified")]
+    public void OnDataverseRowModified(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnDataverseRowModifiedTriggerConfigName%")]
+        CommondataserviceOnUpdatedItemsTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnDataverseRowModified trigger with {RowCount} row(s).",
+            payload?.Body?.Value?.Count ?? 0);
+    }
+
+    [Function("OnDataverseRowDeleted")]
+    public void OnDataverseRowDeleted(
+        [ConnectorTrigger(
+            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
+            Connection = "ConnectorNamespace",
+            TriggerConfigName = "%OnDataverseRowDeletedTriggerConfigName%")]
+        CommondataserviceOnDeletedItemsTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnDataverseRowDeleted trigger with {RowCount} row(s).",
+            payload?.Body?.Value?.Count ?? 0);
+    }
+
     /// <summary>
     /// Reads rows from a Dataverse table on demand using the generated <see cref="CommondataserviceClient"/>.
     /// GET /api/rows?table=accounts&amp;top=10

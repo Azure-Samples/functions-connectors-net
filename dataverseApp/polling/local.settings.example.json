@@ -5,6 +5,8 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "ConnectorNamespace__pollingEndpoint": "https://<namespace-host>",
     "OnDataverseRowChangedTriggerConfigName": "dataverse-ondataverserowchanged",
+    "OnDataverseRowModifiedTriggerConfigName": "dataverse-ondataverserowmodified",
+    "OnDataverseRowDeletedTriggerConfigName": "dataverse-ondataverserowdeleted",
     "DATAVERSE_ENVIRONMENT_URL": "",
     "DATAVERSE_TABLE_NAME": "accounts",
     "DATAVERSE_CONNECTION_RUNTIME_URL": ""

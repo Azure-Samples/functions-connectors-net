@@ -8,6 +8,9 @@
     "location": {
       "value": "${AZURE_LOCATION}"
     },
+    "telemetryLocation": {
+      "value": "${TELEMETRY_LOCATION=}"
+    },
     "connectorNamespaceLocation": {
       "value": "${CONNECTOR_NAMESPACE_LOCATION=westcentralus}"
     },

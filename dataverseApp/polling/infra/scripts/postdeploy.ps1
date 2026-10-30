@@ -25,19 +25,21 @@ $triggerSettings = if ($outputs.triggerConfigSettings -is [string]) {
 } else {
     $outputs.triggerConfigSettings
 }
-$triggerName = $triggerSettings.OnDataverseRowChangedTriggerConfigName
-if ([string]::IsNullOrWhiteSpace($triggerName)) {
-    throw 'Missing OnDataverseRowChangedTriggerConfigName in triggerConfigSettings.'
-}
-
 $localValues = @{
     AzureWebJobsStorage = 'UseDevelopmentStorage=true'
     FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
-    OnDataverseRowChangedTriggerConfigName = $triggerName
     DATAVERSE_CONNECTION_RUNTIME_URL = $outputs.dataverseConnectionRuntimeUrl
     DATAVERSE_ENVIRONMENT_URL = $outputs.dataverseEnvironmentUrl.TrimEnd('/')
     DATAVERSE_TABLE_NAME = $outputs.dataverseTableName
+}
+foreach ($functionName in @(
+    'OnDataverseRowChanged', 'OnDataverseRowModified', 'OnDataverseRowDeleted')) {
+    $setting = "${functionName}TriggerConfigName"
+    if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
+        throw "Missing $setting in triggerConfigSettings."
+    }
+    $localValues[$setting] = $triggerSettings.$setting
 }
 $localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
 if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {

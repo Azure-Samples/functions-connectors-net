@@ -9,13 +9,15 @@ action through the typed [Azure.Connectors.Sdk](https://www.nuget.org/packages/A
 | Function | Type | Connector operation | Description |
 | --- | --- | --- | --- |
 | `OnDataverseRowChanged` | Trigger | [`GetOnNewItems_V2`](https://learn.microsoft.com/connectors/commondataservice/#when-a-row-is-added-(admin-only)-[deprecated]) | Fires when a **new row is added** to the configured Dataverse table |
+| `OnDataverseRowModified` | Trigger | `GetOnUpdatedItems_V2` | Fires when a row is modified |
+| `OnDataverseRowDeleted` | Trigger | `GetOnDeletedItems_V2` | Fires when a row is deleted |
 | `ListDataverseRows` | Action (HTTP) | [`GetItems_V2`](https://learn.microsoft.com/connectors/commondataservice/#list-rows-(legacy)-[deprecated]) (via `Azure.Connectors.Sdk`) | On-demand endpoint that **calls** the connector to list rows from the table |
 
-> **Trigger scope & known issue:** this sample uses the **new-row** trigger `GetOnNewItems_V2`
-> (*"When a row is created"*), validated end-to-end over Connector Namespace. The broader
-> `SubscribeWebhookTrigger` (*"added, modified or deleted"*) is **not usable via Connector Namespace
-> yet** — creating its trigger config currently fails with **HTTP 500** (`Regex.Match` null-reference).
-> The team is adding support; until then, use `GetOnNewItems_V2`.
+> **Known issue:** new-row webhook delivery was previously validated end-to-end. The combined
+> `SubscribeWebhookTrigger` previously failed trigger creation with **HTTP 500**
+> (`Regex.Match` null-reference). The current SDK also lacks payload models for that operation
+> and `BusinessEventsTrigger` (action performed). These two events are explicitly blocked,
+> not bound as raw JSON or custom DTOs. See [the full event matrix](../README.md).
 
 > **Why `commondataservice` (not `commondataserviceforapps`):** the successor connector ships only to
 > Power Automate and **isn't available for Logic Apps / Connector Namespaces yet**. The legacy
@@ -45,6 +47,7 @@ Provide **either** `DATAVERSE_ENVIRONMENT_NAME` (recommended — the URL is disc
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- PowerShell 7 (`pwsh`) on all platforms; the Bash hook delegates to the same PowerShell setup.
 - A Microsoft Dataverse environment and an account with access to the target table
 - [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
 
@@ -198,8 +201,11 @@ TRIGGER="${CONN}-$(echo "$FUNC" | tr '[:upper:]' '[:lower:]')"
     --query "{state:properties.state, operation:properties.operationName}" -o jsonc
   ```
 
-Now **add a new row** to the configured table (e.g. create an account), wait one polling interval
-(5 minutes in this sample), then tail the function logs to see the trigger fire:
+Create a clearly named sample-owned account and wait for the added-row log. Modify only that
+account and wait for `OnDataverseRowModified`, then delete only that account and wait for
+`OnDataverseRowDeleted`. Allow at least one five-minute interval per step; do not alter existing
+business data. The trigger-config name uses the connection name plus the lower-case Function
+name; repeat the status query for all enabled Functions.
 
 ```bash
 az functionapp log tail -g $RG -n $(azd env get-value functionAppName)

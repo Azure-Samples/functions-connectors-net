@@ -13,6 +13,9 @@ param environmentName string
 @description('Location for all resources except the Connector Namespace.')
 param location string
 
+@description('Optional region for Application Insights and Log Analytics when unavailable in the Function region.')
+param telemetryLocation string = ''
+
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
@@ -24,7 +27,7 @@ param dataverseEnvironmentUrl string
 param dataverseTableName string = 'accounts'
 
 metadata name = 'Azure Functions Microsoft Dataverse Poll Delivery (.NET)'
-metadata description = 'Connector-only new-row trigger with host-pull delivery and a List rows action.'
+metadata description = 'Typed added, modified, and deleted row triggers with host-pull delivery and a List rows action.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -37,6 +40,7 @@ param userPrincipalId string = deployer().objectId
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
+var effectiveTelemetryLocation = empty(telemetryLocation) ? location : telemetryLocation
 
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
@@ -65,7 +69,7 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   scope: rg
   params: {
     name: logAnalyticsName
-    location: location
+    location: effectiveTelemetryLocation
     tags: tags
     dataRetention: 30
   }
@@ -86,7 +90,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: effectiveTelemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
@@ -248,6 +252,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     }
     siteConfig: {
       minTlsVersion: '1.2'
+      functionsRuntimeScaleMonitoringEnabled: false
     }
     configs: [
       {
