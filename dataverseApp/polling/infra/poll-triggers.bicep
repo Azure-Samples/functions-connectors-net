@@ -2,46 +2,59 @@ param namespaceName string
 param connectionName string
 @minLength(1)
 param environmentUrl string
-param tableName string = 'accounts'
+param tableName string = 'account'
+param enableActionTrigger bool = false
+param eventCatalog string = ''
+param eventCategory string = ''
+param eventTable string = ''
+param eventAction string = ''
 
-var dataset = endsWith(environmentUrl, '/') ? substring(environmentUrl, 0, length(environmentUrl) - 1) : environmentUrl
-
-var rowTriggers = [
-  { functionName: 'OnDataverseRowChanged', operationName: 'GetOnNewItems_V2' }
-  { functionName: 'OnDataverseRowModified', operationName: 'GetOnUpdatedItems_V2' }
-  { functionName: 'OnDataverseRowDeleted', operationName: 'GetOnDeletedItems_V2' }
-]
+var organization = endsWith(environmentUrl, '/') ? substring(environmentUrl, 0, length(environmentUrl) - 1) : environmentUrl
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
   name: namespaceName
 }
 
-resource triggerConfigs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in rowTriggers: {
+resource rowTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = {
   parent: connectorNamespace
-  name: 'dataverse-${toLower(trigger.functionName)}'
+  name: 'dataverse-ondataverserowchanged'
   properties: {
-    connectionDetails: {
-      connectionName: connectionName
-      connectorName: 'commondataservice'
-    }
+    connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
     deliveryMode: 'Poll'
-    operationName: trigger.operationName
+    operationName: 'SubscribeWebhookTrigger'
     parameters: [
-      { name: 'dataset', value: dataset }
-      { name: 'table', value: tableName }
+      { name: 'organization', value: organization }
+      { name: 'entityname', value: tableName }
+      { name: 'message', value: '7' }
+      { name: 'scope', value: '4' }
     ]
     state: 'Enabled'
     type: 'NotSpecified'
-    description: 'Dataverse ${trigger.functionName} with Poll delivery.'
-    metadata: {
-      recurrenceFrequency: 'Minute'
-      recurrenceInterval: '5'
-    }
+    description: 'Current Dataverse added, modified, or deleted operation with Poll delivery.'
   }
-}]
+}
 
-// Use the service-generated endpoint, not an assumed namespace hostname.
-var receiveUri = split(string(triggerConfigs[0].properties.pollingEndpoints.receiveUri), '?')[0]
+resource actionTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = if (enableActionTrigger) {
+  parent: connectorNamespace
+  name: 'dataverse-ondataverseactionperformed'
+  properties: {
+    connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
+    deliveryMode: 'Poll'
+    operationName: 'BusinessEventsTrigger'
+    parameters: [
+      { name: 'organization', value: organization }
+      { name: 'catalog', value: eventCatalog }
+      { name: 'category', value: eventCategory }
+      { name: 'entityname', value: eventTable }
+      { name: 'sdkmessagename', value: eventAction }
+    ]
+    state: 'Enabled'
+    type: 'NotSpecified'
+    description: 'Current Dataverse action-performed operation with Poll delivery.'
+  }
+}
+
+var receiveUri = split(string(rowTrigger.properties.pollingEndpoints.receiveUri), '?')[0]
 var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
 
 output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
@@ -49,7 +62,7 @@ output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
   : endpointBase
 
 output triggerConfigSettings object = {
-  OnDataverseRowChangedTriggerConfigName: triggerConfigs[0].name
-  OnDataverseRowModifiedTriggerConfigName: triggerConfigs[1].name
-  OnDataverseRowDeletedTriggerConfigName: triggerConfigs[2].name
+  OnDataverseRowChangedTriggerConfigName: rowTrigger.name
+  OnDataverseActionPerformedTriggerConfigName: 'dataverse-ondataverseactionperformed'
+  'AzureWebJobs.OnDataverseActionPerformed.Disabled': string(!enableActionTrigger)
 }

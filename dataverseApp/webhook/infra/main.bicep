@@ -19,17 +19,21 @@ param telemetryLocation string = ''
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
-@description('URL of the Dataverse environment to monitor, e.g. https://orgb2e33949.crm.dynamics.com. Used as the trigger "dataset" value. If empty, it is resolved from dataverseEnvironmentName during post-deploy.')
-param dataverseEnvironmentUrl string = ''
+@minLength(1)
+@description('Dataverse organization URL used by the current subscription operations.')
+param dataverseEnvironmentUrl string
 
-@description('Friendly name of the Dataverse environment, e.g. "Contoso (default)". When dataverseEnvironmentUrl is empty, the org URL is auto-resolved from this name via the Dataverse Global Discovery Service during post-deploy.')
-param dataverseEnvironmentName string = ''
+@description('Dataverse logical table name for combined row changes, e.g. account (not the accounts entity set).')
+param dataverseTableName string = 'account'
 
-@description('Entity set (plural logical) name of the Dataverse table whose new rows fire the trigger, e.g. accounts, contacts.')
-param dataverseTableName string = 'accounts'
+param enableActionTrigger bool = false
+param eventCatalog string = ''
+param eventCategory string = ''
+param eventTable string = ''
+param eventAction string = ''
 
 metadata name = 'Azure Functions Microsoft Dataverse Connector Trigger (.NET)'
-metadata description = 'Typed added, modified, and deleted row triggers with webhook delivery and a List rows action.'
+metadata description = 'Current Dataverse combined row changes and optional action-performed events with webhook delivery.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -196,10 +200,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  DATAVERSE_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.dataverseConnectionRuntimeUrl
-  DATAVERSE_ENVIRONMENT_URL: dataverseEnvironmentUrl
-  DATAVERSE_ENVIRONMENT_NAME: dataverseEnvironmentName
-  DATAVERSE_TABLE_NAME: dataverseTableName
+  'AzureWebJobs.OnDataverseActionPerformed.Disabled': string(!enableActionTrigger)
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -251,20 +252,6 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
-// Grant the function app's user-assigned MI access to the Dataverse connection.
-// The ListDataverseRows action authenticates with DefaultAzureCredential, which honours
-// AZURE_CLIENT_ID and therefore runs as this user-assigned identity — so the connection
-// ACL must target the same principal.
-module functionAccessPolicy './functionAccessPolicy.bicep' = {
-  scope: rg
-  name: '${connectorNamespaceName}-func-policy'
-  params: {
-    connectorNamespaceName: connectorNamespace.outputs.name
-    connectionName: connectorNamespace.outputs.connectionName
-    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
-  }
-}
-
 @description('The resource ID of the created Resource Group.')
 output resourceGroupResourceId string = rg.id
 
@@ -289,8 +276,11 @@ output dataverseFunctionName string = 'OnDataverseRowChanged'
 @description('The Dataverse environment URL monitored by the trigger.')
 output dataverseEnvironmentUrl string = dataverseEnvironmentUrl
 
-@description('The Dataverse environment friendly name (used to resolve the org URL when the URL is not set).')
-output dataverseEnvironmentName string = dataverseEnvironmentName
-
-@description('The Dataverse table (entity set / plural logical) name monitored by the trigger.')
+@description('The Dataverse logical table name monitored by the trigger.')
 output dataverseTableName string = dataverseTableName
+
+output enableActionTrigger bool = enableActionTrigger
+output eventCatalog string = eventCatalog
+output eventCategory string = eventCategory
+output eventTable string = eventTable
+output eventAction string = eventAction

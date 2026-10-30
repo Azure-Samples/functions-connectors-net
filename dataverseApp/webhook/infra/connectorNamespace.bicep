@@ -48,6 +48,3 @@ output name string = connectorNamespace.name
 
 @description('The name of the Dataverse connection on the namespace.')
 output connectionName string = dataverseConnection.name
-
-@description('Runtime URL for the Dataverse connection.')
-output dataverseConnectionRuntimeUrl string = dataverseConnection.properties.connectionRuntimeUrl

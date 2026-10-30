@@ -1,35 +1,24 @@
-# Microsoft Dataverse Poll delivery + action (.NET)
+# Dataverse current events with Poll delivery
 
-This standalone Functions app receives Dataverse events through **Poll delivery**.
-Connector Namespace checks Dataverse for added, modified, and deleted rows; the Functions connector
-extension pulls queued events and acknowledges successful invocations. It logs row counts
-only, with no Blob output binding. `ListDataverseRows` retains the typed SDK List rows action
-(`GetItems_V2`) at `GET /api/rows?table=accounts&top=5`.
+The Functions connector extension pulls and acknowledges events from Connector Namespace.
+`OnDataverseRowChanged` uses the nondeprecated `SubscribeWebhookTrigger` operation for
+**added, modified, and deleted** rows. `OnDataverseActionPerformed` uses current
+`BusinessEventsTrigger` and is disabled until configured.
+See [SDK exceptions, required action identifiers, and service limitations](../README.md).
 
-The sample follows [Office 365 polling](../../office365App/polling/README.md) and uses
-connector extension 1.0.0. It is not a TimerTrigger that periodically calls List rows.
-For inbound push delivery, use the separate [webhook app](../webhook/README.md).
+Both handlers are approved `JsonElement` exceptions because the SDK lacks the current
+operation models. They log receipt and JSON kind only. There are no deprecated row
+listeners, HTTP List rows action, Blob bindings, or event-payload storage.
 
 ## Prerequisites
 
-- .NET 10 SDK, Azure CLI >= 2.75.0, Azure Developer CLI (`azd`), and PowerShell 7 (`pwsh`)
-  on every platform (the post-deploy hook runs PowerShell).
-- The `connector-namespace` CLI extension. Install with
+- .NET 10 SDK, Azure CLI >= 2.75.0, Azure Developer CLI (`azd`), PowerShell 7 (`pwsh`)
+- The `connector-namespace` CLI extension:
   `irm https://aka.ms/connector-namespace-cli-install-ps | iex` in PowerShell, or
-  `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh` in Bash.
-- A Dataverse environment URL and an OAuth account with **Global Read** on the target table.
-- For local execution: Functions Core Tools v4 and Azurite for host storage.
-
-See the [event matrix and SDK blockers](../README.md) for supported strongly typed handlers
-and the missing SDK models that block combined-change and action-performed subscriptions.
-
-The legacy `commondataservice` connector is intentional: `commondataserviceforapps` is
-not yet available in Connector Namespace. This sample uses only the existing new-row
-operations. `SubscribeWebhookTrigger` and `BusinessEventsTrigger` are not registered because
-the SDK lacks their payload models; the former also has a previously observed service-side
-trigger-creation failure. Dataverse-specific Poll
-delivery still needs live verification against your namespace/region; source and build
-checks do not establish service-side availability.
+  `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh` in Bash
+- A Dataverse organization URL and an OAuth identity authorized for organization-scoped
+  subscriptions on the selected table
+- For local execution: Functions Core Tools v4 and Azurite for host storage
 
 ## Deploy
 
@@ -39,96 +28,80 @@ azd auth login
 az login
 azd env new dataverse-polling
 azd env set DATAVERSE_ENVIRONMENT_URL "https://contoso.crm.dynamics.com"
-azd env set DATAVERSE_TABLE_NAME "accounts"
+azd env set DATAVERSE_TABLE_NAME "account"
+# If needed, choose an approved telemetry region:
+azd env set TELEMETRY_LOCATION "eastus2"
 azd up
 ```
 
-Use the **org URL**, not its friendly name. Unlike the webhook app, polling requires the URL
-before provisioning because Bicep creates the trigger configuration. The table defaults to
-`accounts`; use the plural logical/entity-set name. Do not add `$top` to trigger parameters:
-the existing Dataverse trigger rejects it with Change Tracking enabled.
+The org URL is required before provisioning. `DATAVERSE_TABLE_NAME` defaults to `account`,
+the logical table name, not the Web API entity set `accounts`. Infrastructure provisions
+an enabled Poll configuration `dataverse-ondataverserowchanged` with `organization`,
+`entityname`, `message=7`, and `scope=4`. The action subscription is created only when
+`DATAVERSE_ENABLE_ACTION_TRIGGER=true` and its four required identifiers are supplied.
+Do not add the legacy `dataset`/`table` parameters to these current operations.
 
-Infrastructure provisions three enabled `deliveryMode: Poll` row triggers named
-`dataverse-ondataverserowchanged`, `dataverse-ondataverserowmodified`, and
-`dataverse-ondataverserowdeleted`, with `dataset` and `table` parameters and a five-minute
-recurrence. ARM/Bicep is used because the current CLI
-`trigger create` command does not expose `deliveryMode`. No notification details,
-public callback URL, connector extension key, or webhook registration is required.
+ARM/Bicep is used because older CLI `trigger create` commands do not expose `deliveryMode`.
+The Functions host requires no inbound callback, tunnel, or connector system key.
+Infrastructure retains host/deployment storage and grants connection access to the namespace,
+Function identity, and provisioning user. The post-deploy hook preserves OAuth consent and
+generates ignored local settings without deployed managed-identity overrides.
 
-The deployment includes Flex Consumption hosting, host/deployment storage, telemetry,
-a user-assigned Function identity, and a Connector Namespace with an OAuth connection.
-Storage and its host permissions remain necessary; they do not store trigger payloads.
-Connection access policies authorize the namespace identity to check Dataverse, the
-Function identity to receive/acknowledge events and call List rows, and the provisioning
-user to run locally. The post-deploy hook obtains interactive OAuth consent and writes
-an ignored `local.settings.json`, preserving an existing file unless invoked with
-`-ForceLocalSettings`.
-
-| App setting | Purpose |
-| --- | --- |
-| `ConnectorNamespace__pollingEndpoint` | Gateway-level base derived from service-returned `pollingEndpoints.receiveUri`; not the full `/receive` URL |
-| `<FunctionName>TriggerConfigName` | Trigger name for each of the three typed row handlers |
-| `ConnectorNamespace__credential` / `ConnectorNamespace__clientId` | Deployed host-pull managed identity |
-| `AZURE_CLIENT_ID` | Managed identity used by the SDK action |
-| `DATAVERSE_CONNECTION_RUNTIME_URL` | Connection runtime URL used by the action |
-| `DATAVERSE_ENVIRONMENT_URL` / `DATAVERSE_TABLE_NAME` | Action dataset and default table |
-
-Change the environment/table with `azd env set`, then run `azd provision` and
-`azd hooks run postdeploy`. Regenerate stale local settings explicitly:
-
-```powershell
-.\infra\scripts\postdeploy.ps1 -ForceLocalSettings
-```
+**Cost:** one 2-GB always-ready instance remains allocated per enabled Poll Function,
+even while idle. There is one by default and two if action-performed is enabled.
+These user-approved settings are persistent, not temporary test warm-ups.
 
 ## Run locally
 
-Use the generated local settings, or copy `local.settings.example.json` to
-`local.settings.json` and fill in the endpoint, runtime URL, and org URL from your deployment.
-The example deliberately omits managed-identity settings so the host and SDK use your
-developer credentials. Sign in with `az login` as the provisioning user; other developers
-must first get a connection-level access policy. Start Azurite, then:
+Use the generated `local.settings.json`, or copy `local.settings.example.json` and fill
+in the service-returned polling endpoint. Sign in with `az login`, start Azurite, then:
 
 ```powershell
 dotnet build
 func start
 ```
 
-No tunnel is required. Do not run local and deployed listeners against the same trigger
-when expecting every event locally: they compete for queued events.
+`ConnectorNamespace__pollingEndpoint` must be a gateway-level base derived from the service's
+`pollingEndpoints.receiveUri`, not the complete receive URL.
+`<FunctionName>TriggerConfigName` selects each trigger, and
+`AzureWebJobs.OnDataverseActionPerformed.Disabled` defaults to `true`.
+To regenerate stale settings after provisioning:
+
+```powershell
+.\infra\scripts\postdeploy.ps1 -ForceLocalSettings
+```
+
+Local and deployed listeners sharing a trigger compete for its events.
 
 ## Verify
+
+OAuth must be `Connected`; current trigger configs must be `Enabled`, with `deliveryMode`
+equal to `Poll` and their matching current operation. Use raw ARM: older CLI response models
+drop the delivery-mode property.
 
 ```powershell
 $rg = azd env get-value resourceGroupName
 $ns = azd env get-value connectorNamespaceName
-$connection = azd env get-value connectorNamespaceConnectionName
-az connector-namespace connection show -g $rg --namespace $ns -n $connection `
-  --query "properties.overallStatus" -o tsv
-az connector-namespace trigger show -g $rg --namespace $ns -n dataverse-ondataverserowchanged `
-  --query "properties.{state:state,deliveryMode:deliveryMode,operation:operationName}" -o json
+$subscription = azd env get-value AZURE_SUBSCRIPTION_ID
+$uri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$rg/providers/Microsoft.Web/connectorGateways/$ns/triggerConfigs?api-version=2026-05-01-preview"
+az rest --method get --url $uri `
+  --query "value[].{name:name,state:properties.state,deliveryMode:properties.deliveryMode,operation:properties.operationName}" -o json
+$statusUri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$rg/providers/Microsoft.Web/connectorGateways/$ns/triggerConfigs/dataverse-ondataverserowchanged/triggerStatuses/latest?api-version=2026-05-01-preview"
+az rest --method get --url $statusUri `
+  --query "{status:lastExecutionStatus,code:lastExecutionStatusCode,error:lastExecutionOutputs.body.error}" -o json
 ```
 
-Expect `Connected`, `Enabled`, `Poll`, and the matching operation ID. Repeat the trigger
-query for each enabled trigger name. Create a clearly named sample-owned account after
-initialization, wait for the added-row log, update only that record and wait for the
-modified-row log, then delete only that record and wait for the deleted-row log.
-Allow at least one five-minute interval at each step. Inspect Application Insights for
-`OnDataverseRowChanged`, `OnDataverseRowModified`, and `OnDataverseRowDeleted` messages.
-Do not delete the row before observing the earlier events; never change existing business data.
-The SDK action returns rows to its authorized caller; it does not persist them:
+An enabled configuration can still have a failed source subscription. Resolve backend
+errors before source-event testing; using entity set `accounts` instead of logical table
+`account`, for example, fails with `0x80040203: Entity not present in cache: accounts`.
 
-```powershell
-$app = azd env get-value functionAppName
-$hostname = az resource show -g $rg -n $app --resource-type Microsoft.Web/sites `
-  --query properties.defaultHostName -o tsv
-Invoke-RestMethod "https://$hostname/api/rows?table=accounts&top=5&code=<function-key>"
-```
-
-If provisioning rejects Poll delivery or omits `pollingEndpoints.receiveUri`, retain
-the error as evidence of a service capability/region limitation; do not substitute a
-webhook URL. Use the webhook app independently until Poll support is available.
+Only after registration succeeds, create a clearly named sample-owned row, observe the
+`Received OnDataverseRowChanged trigger` log, modify only that row and observe another
+event, then delete only that row and observe deletion. Separately invoke the configured
+safe business action to verify `OnDataverseActionPerformed`. Do not modify business rows.
+Retain exact service errors if current-operation registration fails; do not substitute
+legacy operations or claim runtime success from an enabled configuration alone.
 
 ## Cleanup
 
-Run `azd down --purge` from this folder. Treat action responses as personal data, restrict
-resource/function-key access, and do not commit generated local settings.
+Run `azd down --purge` to delete resources and stop the always-ready baseline charges.

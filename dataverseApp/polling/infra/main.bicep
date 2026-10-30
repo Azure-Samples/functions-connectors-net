@@ -23,11 +23,17 @@ param connectorNamespaceLocation string = 'westcentralus'
 @description('Dataverse org URL, e.g. https://contoso.crm.dynamics.com. Required to provision the Poll trigger.')
 param dataverseEnvironmentUrl string
 
-@description('Entity set (plural logical) name of the Dataverse table whose new rows fire the trigger, e.g. accounts, contacts.')
-param dataverseTableName string = 'accounts'
+@description('Dataverse logical table name for combined row changes, e.g. account (not the accounts entity set).')
+param dataverseTableName string = 'account'
+
+param enableActionTrigger bool = false
+param eventCatalog string = ''
+param eventCategory string = ''
+param eventTable string = ''
+param eventAction string = ''
 
 metadata name = 'Azure Functions Microsoft Dataverse Poll Delivery (.NET)'
-metadata description = 'Typed added, modified, and deleted row triggers with host-pull delivery and a List rows action.'
+metadata description = 'Current Dataverse combined row changes and optional action-performed events with Poll delivery.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -196,6 +202,11 @@ module pollTriggers './poll-triggers.bicep' = {
     connectionName: connectorNamespace.outputs.connectionName
     environmentUrl: dataverseEnvironmentUrl
     tableName: dataverseTableName
+    enableActionTrigger: enableActionTrigger
+    eventCatalog: eventCatalog
+    eventCategory: eventCategory
+    eventTable: eventTable
+    eventAction: eventAction
   }
 }
 
@@ -206,9 +217,6 @@ var allAppSettings = union({
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  DATAVERSE_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.dataverseConnectionRuntimeUrl
-  DATAVERSE_ENVIRONMENT_URL: endsWith(dataverseEnvironmentUrl, '/') ? substring(dataverseEnvironmentUrl, 0, length(dataverseEnvironmentUrl) - 1) : dataverseEnvironmentUrl
-  DATAVERSE_TABLE_NAME: dataverseTableName
   ConnectorNamespace__credential: 'managedidentity'
   ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
   ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
@@ -244,6 +252,10 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
+        alwaysReady: concat(
+          [{ name: 'function:ondataverserowchanged', instanceCount: 1 }],
+          enableActionTrigger ? [{ name: 'function:ondataverseactionperformed', instanceCount: 1 }] : []
+        )
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -264,7 +276,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
 }
 
 // Grant the function app's user-assigned MI access to the Dataverse connection.
-// The Poll listener and ListDataverseRows action use the same user-assigned identity.
+// The Poll listeners use the function app's user-assigned identity.
 module functionAccessPolicy './functionAccessPolicy.bicep' = {
   scope: rg
   name: '${connectorNamespaceName}-func-policy'
@@ -299,9 +311,8 @@ output dataverseFunctionName string = 'OnDataverseRowChanged'
 @description('The Dataverse environment URL monitored by the trigger.')
 output dataverseEnvironmentUrl string = dataverseEnvironmentUrl
 
-@description('The Dataverse table (entity set / plural logical) name monitored by the trigger.')
+@description('The Dataverse logical table name monitored by the trigger.')
 output dataverseTableName string = dataverseTableName
 
 output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
 output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
-output dataverseConnectionRuntimeUrl string = connectorNamespace.outputs.dataverseConnectionRuntimeUrl

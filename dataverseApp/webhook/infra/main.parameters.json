@@ -18,13 +18,25 @@
       "value": "${AZURE_PRINCIPAL_ID}"
     },
     "dataverseEnvironmentUrl": {
-      "value": "${DATAVERSE_ENVIRONMENT_URL=}"
-    },
-    "dataverseEnvironmentName": {
-      "value": "${DATAVERSE_ENVIRONMENT_NAME=}"
+      "value": "${DATAVERSE_ENVIRONMENT_URL}"
     },
     "dataverseTableName": {
-      "value": "${DATAVERSE_TABLE_NAME=accounts}"
+      "value": "${DATAVERSE_TABLE_NAME=account}"
+    },
+    "enableActionTrigger": {
+      "value": "${DATAVERSE_ENABLE_ACTION_TRIGGER=false}"
+    },
+    "eventCatalog": {
+      "value": "${DATAVERSE_EVENT_CATALOG=}"
+    },
+    "eventCategory": {
+      "value": "${DATAVERSE_EVENT_CATEGORY=}"
+    },
+    "eventTable": {
+      "value": "${DATAVERSE_EVENT_TABLE=}"
+    },
+    "eventAction": {
+      "value": "${DATAVERSE_EVENT_ACTION=}"
     }
   }
 }

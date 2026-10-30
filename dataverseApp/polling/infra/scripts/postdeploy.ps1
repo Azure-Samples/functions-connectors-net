@@ -12,8 +12,7 @@ $outputs = ($raw -join "`n") | ConvertFrom-Json
 
 foreach ($name in @(
     'resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
-    'connectorPollingEndpoint', 'triggerConfigSettings', 'dataverseConnectionRuntimeUrl',
-    'dataverseEnvironmentUrl', 'dataverseTableName')) {
+    'connectorPollingEndpoint', 'triggerConfigSettings')) {
     if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) {
         throw "Missing azd output $name. Run azd provision first."
     }
@@ -29,18 +28,20 @@ $localValues = @{
     AzureWebJobsStorage = 'UseDevelopmentStorage=true'
     FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
-    DATAVERSE_CONNECTION_RUNTIME_URL = $outputs.dataverseConnectionRuntimeUrl
-    DATAVERSE_ENVIRONMENT_URL = $outputs.dataverseEnvironmentUrl.TrimEnd('/')
-    DATAVERSE_TABLE_NAME = $outputs.dataverseTableName
 }
 foreach ($functionName in @(
-    'OnDataverseRowChanged', 'OnDataverseRowModified', 'OnDataverseRowDeleted')) {
+    'OnDataverseRowChanged', 'OnDataverseActionPerformed')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing $setting in triggerConfigSettings."
     }
     $localValues[$setting] = $triggerSettings.$setting
 }
+$disabledSetting = 'AzureWebJobs.OnDataverseActionPerformed.Disabled'
+if ([string]::IsNullOrWhiteSpace([string]$triggerSettings.$disabledSetting)) {
+    throw "Missing $disabledSetting in triggerConfigSettings."
+}
+$localValues[$disabledSetting] = [string]$triggerSettings.$disabledSetting
 $localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
 if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
     Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
@@ -67,19 +68,19 @@ if ((Get-ConnectionStatus) -eq 'Connected') {
     return
 }
 
-Write-Host 'Authorize the Dataverse connection with an account that has Global Read on the target table.'
+Write-Host 'Authorize Dataverse with an account permitted to register organization-scoped event subscriptions.'
 $consentLink = $null
 for ($attempt = 1; $attempt -le 5; $attempt++) {
     $consentLink = az connector-namespace connection list-consent-links `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
         --connection-name $outputs.connectorNamespaceConnectionName `
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
         --query 'value[0].link' -o tsv 2>$null
     if (-not $consentLink -or $consentLink -eq 'null') {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
             --connection-name $outputs.connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query 'link' -o tsv 2>$null
     }
     if ($consentLink -and $consentLink -ne 'null') { break }
