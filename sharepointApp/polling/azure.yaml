@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: functions-connectors-net-sharepoint
+name: functions-connectors-net-sharepoint-polling
 services:
   function-app:
-    host: function
     project: .
-    language: csharp
+    language: dotnet
+    host: function
 hooks:
   postdeploy:
     shell: pwsh
