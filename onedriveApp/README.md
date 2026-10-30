@@ -22,6 +22,13 @@ the trigger was received; there is no Blob output binding and file payloads are
 not serialized or logged. Azure Storage remains for Functions host state and
 deployment artifacts.
 
+**SDK limitation:** `Azure.Connectors.Sdk` 0.14.0-preview.1 intentionally excludes
+the two content operations from its typed trigger registry: their upstream
+response schema is `type: string, format: binary`, with file metadata in response
+headers. No SDK content-trigger payload model exists. These two bindings follow
+the extension's documented raw-string mapping; they are not fully strongly typed.
+The properties-only events use the available SDK models.
+
 Poll versus Webhook describes delivery **from the namespace to the Functions
 host**, not how the OneDrive connector detects changes. Each sample has its own
 project, dependencies, infrastructure, deployment hook, and local-settings

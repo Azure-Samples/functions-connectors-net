@@ -13,6 +13,11 @@ connector webhook, authenticated with the `connector_extension` system key.
 
 Content operations receive raw JSON as `string`; properties-only operations
 receive typed SDK payloads. All four functions only log that the trigger was received.
+SDK 0.14.0-preview.1 excludes binary-content triggers from its typed registry:
+`OnNewFileV2` and `OnUpdatedFileV2` declare `type: string, format: binary`
+responses upstream, with file metadata in response headers. There is no SDK
+content-trigger payload model; those two raw bindings remain an explicit SDK
+limitation, not fully strongly typed samples.
 There is no Blob output binding or payload serialization. File content and
 metadata are not logged. Storage is retained for Functions host state and
 deployment artifacts, not connector outputs.

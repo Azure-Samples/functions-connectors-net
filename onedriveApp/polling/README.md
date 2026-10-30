@@ -15,6 +15,11 @@ All four events shown by the OneDrive for Business connector are covered:
 file creation and modification, each with content or properties only.
 Content operations use raw JSON `string` bindings, as specified by the extension's
 operation mappings; properties-only operations use typed SDK payloads.
+The SDK 0.14.0-preview.1 trigger registry explicitly excludes binary-content
+triggers. `OnNewFileV2` and `OnUpdatedFileV2` have upstream response schemas
+`type: string, format: binary`, with file metadata in response headers; no SDK
+content-trigger payload class is available. Strong typing for those two events
+requires SDK support for the Connector Namespace binary callback envelope.
 All functions simply log that
 the trigger was received. No file content or metadata is logged or written to
 Blob Storage. Poll delivery is at least once, so duplicate log entries are
