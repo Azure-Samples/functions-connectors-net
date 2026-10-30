@@ -14,6 +14,9 @@ param location string
 
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Region for Application Insights and Log Analytics.')
+param telemetryLocation string = 'eastus2'
+
 @metadata({
   azd: {
     type: 'principalId'
@@ -46,8 +49,8 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   name: 'loganalytics'
   scope: rg
   params: {
-    name: 'log-${resourceToken}'
-    location: location
+    name: 'log-${resourceToken}-${uniqueString(telemetryLocation)}'
+    location: telemetryLocation
     tags: tags
     dataRetention: 30
   }
@@ -68,7 +71,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: 'appi-${resourceToken}'
-    location: location
+    location: telemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true

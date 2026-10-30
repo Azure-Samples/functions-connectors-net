@@ -63,6 +63,10 @@ azd hooks run postdeploy
 
 Use the connector folder ID, not a display path. The namespace defaults to
 `westcentralus`; override via `CONNECTOR_NAMESPACE_LOCATION`.
+Application Insights/Log Analytics default to `eastus2` because Application
+Insights is unavailable in `westcentralus`. Override with
+`azd env set TELEMETRY_LOCATION <supported-region>` without moving the Function
+App or Connector Namespace.
 
 ## Verify
 

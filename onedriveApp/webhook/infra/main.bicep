@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Region for Application Insights and Log Analytics.')
+param telemetryLocation string = 'eastus2'
+
 metadata name = 'Azure Functions OneDrive for Business Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
@@ -57,8 +60,8 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   name: '${uniqueString(deployment().name, location)}-loganalytics'
   scope: rg
   params: {
-    name: logAnalyticsName
-    location: location
+    name: '${logAnalyticsName}-${uniqueString(telemetryLocation)}'
+    location: telemetryLocation
     tags: tags
     dataRetention: 30
   }
@@ -79,7 +82,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: telemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true

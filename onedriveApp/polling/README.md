@@ -64,6 +64,10 @@ azd up
 connector folder identifier (not its display path) before provisioning. The
 namespace defaults to `westcentralus`; change it with
 `azd env set CONNECTOR_NAMESPACE_LOCATION <supported-region>`.
+Telemetry defaults to `eastus2`, because Application Insights is unavailable in
+`westcentralus`. Override only Application Insights/Log Analytics with
+`azd env set TELEMETRY_LOCATION <supported-region>`; this does not move the
+Function App or Connector Namespace.
 
 Bicep provisions a resource group, .NET 10 Flex Consumption Function App,
 managed identity, storage account, Application Insights/Log Analytics, Connector
