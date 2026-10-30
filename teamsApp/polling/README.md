@@ -122,6 +122,8 @@ real event delivery; verify each selected event with its authorized source scope
 The post-deploy hook opens OAuth consent and creates ignored `local.settings.json`
 from deployment outputs if it does not exist. Re-run using
 `azd hooks run postdeploy`. Existing local settings are preserved.
+Consent uses the service-provided direct login link and returns to
+`https://connectors.azure.com`. Already-connected connections are not reauthorized.
 
 ## Run locally
 

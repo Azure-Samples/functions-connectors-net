@@ -64,7 +64,9 @@ function Get-ConnectionOverallStatus {
         -n $connectorNamespaceConnectionName `
         --query "properties.overallStatus" -o tsv 2>$null
 
-    if ($LASTEXITCODE -ne 0 -or -not $status) { return $null }
+    if ($LASTEXITCODE -ne 0 -or -not $status) {
+        throw 'Could not read the Teams connection status.'
+    }
     return $status
 }
 
@@ -104,6 +106,9 @@ if (-not $teamsGroupId -or -not $teamsChannelId) {
 # Fetch the connector extension system key
 Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
 $connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connectorExtensionKey)) {
+    throw 'Could not obtain the connector extension system key. Deploy the Function App before registering callbacks.'
+}
 
 function New-TriggerConfig {
     param(
@@ -219,10 +224,19 @@ else {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query "value[0].link" -o tsv 2>$null
 
-        if (($LASTEXITCODE -ne 0 -or -not $consentLink) -and $attempt -lt 5) {
+        if (-not $consentLink -or $consentLink -eq 'null') {
+            $consentLink = az connector-namespace connection list-consent-links `
+                -g $resourceGroupName --namespace $connectorNamespaceName `
+                --connection-name $connectorNamespaceConnectionName `
+                --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
+                --query "link" -o tsv 2>$null
+        }
+        if ($consentLink -and $consentLink -ne 'null') { break }
+        $consentLink = $null
+        if ($attempt -lt 5) {
             Write-Host "Consent link not ready yet. Retrying in 5 seconds..." -ForegroundColor Yellow
             Start-Sleep -Seconds 5
         }

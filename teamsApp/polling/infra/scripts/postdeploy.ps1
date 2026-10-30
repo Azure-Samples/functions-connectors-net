@@ -84,14 +84,14 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
     $consentLink = az connector-namespace connection list-consent-links `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
         --connection-name $outputs.connectorNamespaceConnectionName `
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
         --query 'value[0].link' -o tsv 2>$null
 
     if (-not $consentLink -or $consentLink -eq 'null') {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
             --connection-name $outputs.connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query 'link' -o tsv 2>$null
     }
     if ($consentLink -and $consentLink -ne 'null') { break }

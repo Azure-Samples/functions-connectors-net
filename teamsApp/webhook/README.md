@@ -69,6 +69,8 @@ Functions host/deployment storage, Application Insights/Log Analytics, Connector
 Namespace, and Teams OAuth connection. The post-deploy hook registers the selected
 callback trigger configurations and opens connection consent. Re-run using
 `azd hooks run postdeploy`.
+Consent uses the actual service-provided login link with redirect
+`https://connectors.azure.com`; already-connected connections skip reauthorization.
 
 ### Enable all events
 
