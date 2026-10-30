@@ -119,6 +119,30 @@ The worker exporter then uses `DefaultAzureCredential`; assign its identity the
 Monitoring Metrics Publisher role on Application Insights. For a user-assigned
 identity, set `AZURE_CLIENT_ID` to its client ID for worker credential selection.
 
+### Flex Consumption always-ready configuration
+
+For the retained E2E configuration, provision **one always-ready instance** for
+the enabled Poll function. This is a paid baseline even when no events arrive; it
+is intentionally persistent, not temporarily enabled and reverted after testing.
+Check [Flex Consumption pricing](https://azure.microsoft.com/pricing/details/functions/)
+before applying it. This is a hosting configuration, not a connector polling
+interval or a requirement for webhook delivery.
+
+Run the included helper with your own existing Flex Function App:
+
+```powershell
+.\infra\scripts\set-always-ready.ps1 `
+  -SubscriptionId <subscription-id> `
+  -ResourceGroupName <resource-group-name> `
+  -FunctionAppName <function-app-name>
+```
+
+It uses Azure CLI to set and verify `function:ongenericconnectorevent=1`, without
+changing unrelated always-ready groups. This function-scoped setting starts the
+actual Poll listener; merely observing an HTTP/admin host running does not prove
+the Poll function is active. If you add more enabled Poll functions, account for
+their separate always-ready instance costs and configure each explicitly.
+
 ## Verify delivery
 
 Cause an event for the configured connector operation and allow time for upstream
