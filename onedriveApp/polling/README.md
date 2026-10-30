@@ -77,6 +77,15 @@ configurations. It grants connection access separately to the namespace identity
 identity (local receive/acknowledge). Storage is retained only for Functions
 runtime state and deployment artifacts.
 
+**Hosting cost:** The polling template keeps one Flex Consumption always-ready
+instance for each enabled function (`function:onnewfilecontent`,
+`function:onupdatedfilecontent`, `function:onnewfile`, and
+`function:onupdatedfile`): four instances at 2048 MB each. This incurs ongoing
+baseline charges even while idle. It keeps listeners available for queued events;
+our deployed test did not drain these queues with the default scale-to-zero
+configuration. Remove the environment with `azd down --purge` when finished.
+The webhook sample does not enable always-ready instances.
+
 The post-deploy hook opens OAuth consent and creates ignored
 `local.settings.json` if absent. Existing local settings are preserved.
 To repeat consent/setup:

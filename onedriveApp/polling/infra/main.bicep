@@ -221,6 +221,12 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
+        alwaysReady: [
+          { name: 'function:onnewfilecontent', instanceCount: 1 }
+          { name: 'function:onupdatedfilecontent', instanceCount: 1 }
+          { name: 'function:onnewfile', instanceCount: 1 }
+          { name: 'function:onupdatedfile', instanceCount: 1 }
+        ]
       }
       runtime: {
         name: 'dotnet-isolated'
