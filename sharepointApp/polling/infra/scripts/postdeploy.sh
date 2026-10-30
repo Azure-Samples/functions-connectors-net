@@ -1,7 +1,14 @@
 #!/bin/bash
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+localSettingsTemp=''
+cleanup_local_settings() {
+  if [[ -n "$localSettingsTemp" ]]; then rm -f "$localSettingsTemp"; fi
+}
+trap cleanup_local_settings EXIT
+
 forceLocalSettings=false
 if [[ $# -gt 0 ]]; then
   if [[ $# -ne 1 || "$1" != "--force-local-settings" ]]; then
@@ -74,7 +81,23 @@ localSettingsPath="${SCRIPT_DIR}/../../local.settings.json"
 if [[ -e "$localSettingsPath" && "$forceLocalSettings" != "true" ]]; then
   echo "Existing local.settings.json preserved. Use --force-local-settings to regenerate it."
 else
-  printf '%s\n' "$localSettings" > "$localSettingsPath"
+  if [[ -d "$localSettingsPath" ]]; then
+    echo "ERROR: local.settings.json must not be a directory." >&2
+    exit 1
+  fi
+  if ! localSettingsTemp=$(mktemp "$(dirname "$localSettingsPath")/.local-settings.XXXXXX"); then
+    echo "ERROR: Could not create temporary local settings file." >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$localSettings" > "$localSettingsTemp"; then
+    echo "ERROR: Could not write temporary local settings file." >&2
+    exit 1
+  fi
+  if ! mv -f "$localSettingsTemp" "$localSettingsPath"; then
+    echo "ERROR: Could not replace local.settings.json." >&2
+    exit 1
+  fi
+  localSettingsTemp=''
   echo "Created ignored local.settings.json using developer credentials and Azurite."
 fi
 

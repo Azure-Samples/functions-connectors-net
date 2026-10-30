@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _notif_files=()
@@ -72,9 +73,15 @@ do
     continue
   fi
   callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-  notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
+  if ! notifFile=$(mktemp); then
+    echo "ERROR: Could not create temporary notification details file." >&2
+    exit 1
+  fi
   _notif_files+=("$notifFile")
-  paramsFile="${SCRIPT_DIR}/.trigger-parameters.${RANDOM}.${RANDOM}.json"
+  if ! paramsFile=$(mktemp); then
+    echo "ERROR: Could not create temporary trigger parameters file." >&2
+    exit 1
+  fi
   _notif_files+=("$paramsFile")
   jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
     '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' > "$notifFile"
