@@ -3,7 +3,7 @@
 Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
 and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
 The Connector Namespace delivers events to the function's public HTTPS callback.
-All handlers use typed payloads and log receipt only, without Blob outputs.
+All handlers use typed payloads and log only the trigger name and item count.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |

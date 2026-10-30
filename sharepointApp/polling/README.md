@@ -4,7 +4,7 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector)
 with `DeliveryMode = Poll`. The host receives events outbound from the Connector
 Namespace; no public callback or tunnel is required. All handlers use typed
-payloads and log receipt only, without Blob outputs.
+payloads and log only the trigger name and item count
 
 | Function | Connector operation | Description |
 | --- | --- | --- |

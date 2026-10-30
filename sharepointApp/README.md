@@ -8,5 +8,6 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 | [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS tunnel required for real events |
 
 Both samples include ten non-deprecated triggers with typed SDK payloads and
-receipt logging only. Build and deploy from the selected folder using different
-azd environment names. See each README for trigger documentation and setup.
+logging of trigger names and item counts only. Build and deploy from the selected
+folder using different azd environment names. See each README for trigger
+documentation and setup.
