@@ -243,8 +243,7 @@ else {
     }
 
     if (-not $consentLink) {
-        Write-Host "Failed to generate a consent URL for the Teams connection." -ForegroundColor Red
-        exit 1
+        throw 'Could not obtain a Teams consent URL.'
     }
 
     Write-Host "Consent URL: $consentLink" -ForegroundColor Cyan
