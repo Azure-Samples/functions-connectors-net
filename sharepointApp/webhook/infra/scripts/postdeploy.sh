@@ -29,22 +29,25 @@ fi
 
 outputs=$(azd env get-values --output json)
 
+for name in resourceGroupName connectorNamespaceName connectorNamespaceConnectionName \
+  functionAppName functionAppDefaultHostname AZURE_SUBSCRIPTION_ID sharepointSiteUrl sharepointLibraryName; do
+  if ! echo "$outputs" | jq -e --arg name "$name" \
+    '.[$name] | if type == "string" then test("\\S") and . != "null" else false end' >/dev/null; then
+    echo "ERROR: Missing or invalid azd output ${name}. Run azd provision first." >&2
+    exit 1
+  fi
+done
+
 resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
 connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
 connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
 functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
 functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
+subscriptionId=$(echo "$outputs" | jq -r '.AZURE_SUBSCRIPTION_ID')
 sharepointSiteUrl=$(echo "$outputs" | jq -r '.sharepointSiteUrl')
 sharepointLibraryName=$(echo "$outputs" | jq -r '.sharepointLibraryName')
 triggerDefinitions=$(echo "$outputs" | jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
 existingNames=$(az connector-namespace trigger list -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" --query '[].name' -o json)
-
-: "${functionAppDefaultHostname:?required azd output missing}"
-
-if [[ -z "${resourceGroupName}" || -z "${connectorNamespaceName}" || -z "${connectorNamespaceConnectionName}" || -z "${functionAppName}" || -z "${sharepointSiteUrl}" || -z "${sharepointLibraryName}" || "${resourceGroupName}" == "null" || "${connectorNamespaceName}" == "null" || "${connectorNamespaceConnectionName}" == "null" || "${functionAppName}" == "null" || "${sharepointSiteUrl}" == "null" || "${sharepointLibraryName}" == "null" ]]; then
-  echo -e "${RED}ERROR: required azd outputs missing. Run 'azd provision' first.${NC}"
-  exit 1
-fi
 
 echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
 connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
@@ -103,7 +106,7 @@ do
     --parameters "@${paramsFile}" \
     --notification-details "@${notifFile}" \
     --description "${description}" \
-    --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${AZURE_SUBSCRIPTION_ID},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
+    --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${subscriptionId},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
     -o none
 
   rm -f "$notifFile" "$paramsFile"

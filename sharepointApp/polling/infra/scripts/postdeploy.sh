@@ -78,13 +78,13 @@ while IFS= read -r functionName; do
 done < <(echo "$triggerDefinitions" | jq -r '.[] | select(.enabled == false) | .functionName')
 
 localSettingsPath="${SCRIPT_DIR}/../../local.settings.json"
+if [[ -d "$localSettingsPath" ]]; then
+  echo "ERROR: local.settings.json must not be a directory." >&2
+  exit 1
+fi
 if [[ -e "$localSettingsPath" && "$forceLocalSettings" != "true" ]]; then
   echo "Existing local.settings.json preserved. Use --force-local-settings to regenerate it."
 else
-  if [[ -d "$localSettingsPath" ]]; then
-    echo "ERROR: local.settings.json must not be a directory." >&2
-    exit 1
-  fi
   if ! localSettingsTemp=$(mktemp "$(dirname "$localSettingsPath")/.local-settings.XXXXXX"); then
     echo "ERROR: Could not create temporary local settings file." >&2
     exit 1

@@ -34,6 +34,13 @@ $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
 $sharepointSiteUrl = $outputs.sharepointSiteUrl
 $sharepointLibraryName = $outputs.sharepointLibraryName
 
+if ([string]::IsNullOrWhiteSpace($subscriptionId)) {
+    throw 'Missing azd output AZURE_SUBSCRIPTION_ID. Run azd provision first.'
+}
+if (-not $CallbackBaseUrl -and [string]::IsNullOrWhiteSpace($functionAppHostname)) {
+    throw 'Missing azd output functionAppDefaultHostname. Run azd provision first.'
+}
+
 if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $connectorNamespaceConnectionName -or -not $functionAppName -or -not $sharepointSiteUrl -or -not $sharepointLibraryName) {
     Write-Host "ERROR: required azd outputs missing. Run 'azd provision' first." -ForegroundColor Red
     exit 1

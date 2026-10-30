@@ -69,6 +69,9 @@ foreach ($trigger in $triggerDefinitions | Where-Object { -not $_.enabled }) {
 }
 
 $localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
+if (Test-Path -LiteralPath $localSettingsPath -PathType Container) {
+    throw 'local.settings.json must not be a directory.'
+}
 if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
     Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
 }
