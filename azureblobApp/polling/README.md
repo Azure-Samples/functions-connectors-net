@@ -46,6 +46,12 @@ storage account, an OAuth Azure Blob connection, and an enabled Poll trigger
 configuration. The source container ID is base64 of `%2f<container-name>`, as
 required by the connector. `dataset` identifies the monitored storage account.
 
+**Ongoing cost:** this template permanently provisions one 2048-MB always-ready
+instance for `OnUpdatedFile` (`function:onupdatedfile`). It keeps the Poll listener
+active, including when there are no events, and incurs Flex Consumption
+always-ready baseline charges while idle. It is not a temporary test setting.
+The webhook sample does not configure an always-ready instance.
+
 The postdeploy hook prints and opens the returned OAuth consent link, redirecting
 to `https://connectors.azure.com`. Already `Connected` connections skip consent.
 Sign in with the developer account represented by `AZURE_PRINCIPAL_ID`;
