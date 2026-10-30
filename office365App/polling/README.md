@@ -21,16 +21,11 @@ All payloads are from `Azure.Connectors.Sdk.Office365.Models`.
 | `OnUpcomingEvent` | `OnUpcomingEventsV3` | `Office365OnUpcomingEventsTriggerPayload` |
 | `OnSharedMailboxNewEmail` (opt-in) | `SharedMailboxOnNewEmailV2` | `Office365OnSharedMailboxNewEmailTriggerPayload` |
 
-The deprecated source event **When a new email arrives (webhook)** is operation
-`CreateOnNewEmailSubscription`, not V3. Its path-level Swagger notification schema
-is `TriggerBatchResponse[ReceiveMessageMetadata]`, a `value` array with legacy
-`Id`, `DateTimeReceived`, `HasAttachment`, and integer `Importance` fields.
-SDK `0.14.0-preview.1` has no matching metadata model or typed trigger wrapper.
-SDK main `1d9ce974172e97862fee81dd29682ebfc5ac50d5` has the same gap. The V3 Graph
-model has different wire names and string importance and is not a safe replacement.
-This operation is not registered, and no raw JSON/custom DTO fallback is used.
-The live gateway-scoped operation list exposes only the eight current triggers;
-the deprecated native webhook is present in the full source catalog only.
+The deprecated source event **When a new email arrives (webhook)**,
+`CreateOnNewEmailSubscription`, is intentionally excluded because the current
+`OnNewEmailV3` operation is supported. It is not a missing feature awaiting
+implementation. Namespace Webhook delivery also uses the current V3 source.
+The live gateway-scoped operation list exposes only the eight current triggers.
 The eight current source operations above support namespace Poll delivery; source
 trigger names do not determine namespace delivery mode.
 
@@ -143,6 +138,15 @@ create/update/delete a test calendar event. Schedule a future event inside the
 upcoming-event look-ahead window. Source detection can be delayed; polling is the
 namespace delivery mode, not a guarantee of immediate source detection.
 
+**Preview service issue (2026-10-29):** `CalendarGetOnChangedItemsV3` registration
+deploys but source subscription fails with `inputs.subscribe` / missing `TABLE`
+path variable, despite both source/notification schemas declaring `table` and the
+confirmed calendar ID being supplied. This was reproduced in Poll and Webhook.
+Its typed handler remains included, but do not claim real changed-event success
+until the service mapping is fixed. Inspect raw ARM
+`<trigger-resource-id>/triggerStatuses/latest?api-version=2026-05-01-preview` for
+`lastExecutionError`; the current CLI status schema may omit these diagnostics.
+
 Delivery is at least once. This sample logs receipt only; it does not expose
 delivery `MessageId`, batch Functions invocations, or implement deduplication.
 An event can contain multiple source items inside the typed payload.
@@ -152,5 +156,5 @@ Run `azd down --purge` from this folder when finished, including always-ready re
 ## References
 
 - [Office 365 source operations](https://learn.microsoft.com/connectors/office365/)
-- [SDK typed trigger registry and model gap](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489)
+- [SDK typed trigger registry](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489)
 - [Connector polling configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)

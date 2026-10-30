@@ -40,7 +40,7 @@ mode restriction.
 | Shared mailbox email (V2), opt-in | `SharedMailboxOnNewEmailV2` | `Office365OnSharedMailboxNewEmailTriggerPayload` |
 | Modified event (V3) | `CalendarGetOnUpdatedItemsV3` | `Office365OnCalendarUpdatedItemsTriggerPayload` |
 
-### Ninth event: SDK gap, not a raw-payload sample
+### Deprecated source trigger intentionally excluded
 
 **When a new email arrives (webhook)** is the deprecated source operation
 `CreateOnNewEmailSubscription`, not `OnNewEmailV3`. Its source Swagger path
@@ -51,15 +51,17 @@ with `Id`, `DateTimeReceived`, `HasAttachment`, integer `Importance`, and string
 `From`/`To`/`Cc`/`Bcc`/`ReplyTo`. The `SubscriptionResponse` returned when creating
 the subscription is not an event payload.
 
-SDK `0.14.0-preview.1` and SDK main commit
-`1d9ce974172e97862fee81dd29682ebfc5ac50d5` do not provide this metadata model,
-batch wrapper, or trigger payload. The V3 Graph wrapper is incompatible (different
-wire names and string importance). Neither app registers this ninth operation or
-substitutes a string, `JsonElement`, or custom DTO. A matching SDK model and
-service-level delivery verification are required before adding it.
-The live gateway-scoped Office 365 operation list also excludes this deprecated
-operation; it appears only in the full source catalog. Namespace support must
-therefore be added/confirmed separately from publishing an SDK model.
+Deprecated triggers are intentionally out of scope when a current supported
+alternative exists. Both apps use `OnNewEmailV3` instead, including for namespace
+Webhook delivery. `CreateOnNewEmailSubscription` is not a missing feature awaiting
+implementation. The live gateway-scoped operation list exposes only the eight
+current triggers above; the deprecated operation appears in the full source
+catalog only.
+
+For reference, SDK `0.14.0-preview.1` and main commit
+`1d9ce974172e97862fee81dd29682ebfc5ac50d5` also lack its legacy metadata model
+and trigger wrapper. The current V3 Graph wrapper has different wire names and
+string importance, so it must not be used for legacy native notifications.
 
 Evidence: [Office 365 connector reference](https://learn.microsoft.com/connectors/office365/),
 [SDK typed trigger registry](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489).
@@ -68,3 +70,14 @@ Inspect the live source definition with:
 ```powershell
 az connector-namespace connector show -n office365 --catalog westcentralus --export-swagger
 ```
+
+## Preview service limitation
+
+Live validation on 2026-10-29 found that `CalendarGetOnChangedItemsV3` is exposed
+by the namespace but its source subscription fails in both delivery modes with
+`inputs.subscribe` / missing path template variable `TABLE`. Both the source
+operation and its `CreateGraphOnChangedEventPokeSubscription` notification operation
+declare lowercase `table`; the samples supply the confirmed opaque calendar ID.
+This service-side notification mapping issue prevents real changed-event delivery
+even though deployment succeeds. The typed handler and correct registration remain
+included; no parameter aliases or incompatible payload substitutions are used.

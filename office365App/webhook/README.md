@@ -24,17 +24,11 @@ Namespace Webhook delivery is distinct from the source connector's implementatio
 the eight operations above are registered with HTTPS callbacks even if their source
 trigger uses polling internally.
 
-The ninth UI event, **When a new email arrives (webhook)**, is the deprecated source
-operation `CreateOnNewEmailSubscription`, not `OnNewEmailV3`. Its Swagger path-level
-`x-ms-notification-content` schema is `TriggerBatchResponse[ReceiveMessageMetadata]`,
-a `value` array with legacy `Id`, `DateTimeReceived`, `HasAttachment`, and integer
-`Importance`. SDK `0.14.0-preview.1` and main
-`1d9ce974172e97862fee81dd29682ebfc5ac50d5` lack this metadata model and typed wrapper.
-The V3 Graph payload differs in wire names and importance type; the subscription's
-201 `SubscriptionResponse` is not its notification payload. This sample does not
-register that operation or silently substitute raw JSON or a custom DTO.
-The live gateway-scoped Office 365 operation list excludes this deprecated
-operation as well; only the full source catalog lists it.
+The UI event **When a new email arrives (webhook)** is the deprecated source
+operation `CreateOnNewEmailSubscription`. It is intentionally excluded because the
+current `OnNewEmailV3` alternative supports namespace Webhook delivery. It is not a
+missing feature awaiting implementation. The live gateway-scoped operation list
+exposes only the eight current triggers above.
 
 ## Prerequisites
 
@@ -134,6 +128,15 @@ mail, create/update/delete a calendar event, and an event inside the upcoming-ev
 window. Allow for source detection delays. Confirm worker logs contain
 `Received <FunctionName> trigger` for each corresponding handler.
 
+**Preview service issue (2026-10-29):** `CalendarGetOnChangedItemsV3` source
+subscription fails in both delivery modes with `inputs.subscribe` / missing `TABLE`
+path variable. Both source and notification Swagger operations declare `table`,
+and the samples supply the confirmed opaque calendar ID. Deployment success does
+not prove changed-event delivery; this source remains blocked until the service
+notification mapping is fixed. Inspect raw ARM
+`<trigger-resource-id>/triggerStatuses/latest?api-version=2026-05-01-preview` for
+`lastExecutionError`, which the current CLI status schema may omit.
+
 Delivery is at least once; duplicate receipt logs are possible. This sample does
 not implement deduplication or log payload contents.
 
@@ -142,5 +145,5 @@ Run `azd down --purge` from this folder when finished.
 ## References
 
 - [Office 365 connector source operations](https://learn.microsoft.com/connectors/office365/)
-- [SDK typed registry and missing native webhook model](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489)
+- [SDK typed registry](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489)
 - [Connector extension operation mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
