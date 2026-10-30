@@ -25,55 +25,48 @@ public class O365Functions
     public void OnNewEmail(
         [ConnectorTrigger] Office365OnNewEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewEmail trigger");
+        _logger.LogInformation("Received OnNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnFlaggedEmail")]
     public void OnFlaggedEmail(
         [ConnectorTrigger] Office365OnFlaggedEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnFlaggedEmail trigger");
+        _logger.LogInformation("Received OnFlaggedEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewMentionMeEmail")]
     public void OnNewMentionMeEmail(
         [ConnectorTrigger] Office365OnNewEmailMentioningMeTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewMentionMeEmail trigger");
+        _logger.LogInformation("Received OnNewMentionMeEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewCalendarEvent")]
     public void OnNewCalendarEvent(
         [ConnectorTrigger] Office365OnCalendarNewItemsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewCalendarEvent trigger");
+        _logger.LogInformation("Received OnNewCalendarEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpcomingEvent")]
     public void OnUpcomingEvent(
         [ConnectorTrigger] Office365OnUpcomingEventsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpcomingEvent trigger");
+        _logger.LogInformation("Received OnUpcomingEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnSharedMailboxNewEmail")]
     public void OnSharedMailboxNewEmail(
         [ConnectorTrigger] Office365OnSharedMailboxNewEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger");
-    }
-
-    [Function("OnCalendarChangedItems")]
-    public void OnCalendarChangedItems(
-        [ConnectorTrigger] Office365OnCalendarChangedItemsTriggerPayload payload)
-    {
-        _logger.LogInformation("Received OnCalendarChangedItems trigger");
+        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnCalendarUpdatedItems")]
     public void OnCalendarUpdatedItems(
         [ConnectorTrigger] Office365OnCalendarUpdatedItemsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnCalendarUpdatedItems trigger");
+        _logger.LogInformation("Received OnCalendarUpdatedItems trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

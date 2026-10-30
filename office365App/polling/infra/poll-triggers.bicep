@@ -36,13 +36,6 @@ var triggers = [
     ]
   }
   {
-    functionName: 'OnCalendarChangedItems'
-    operationName: 'CalendarGetOnChangedItemsV3'
-    parameters: [
-      { name: 'table', value: calendarId }
-    ]
-  }
-  {
     functionName: 'OnCalendarUpdatedItems'
     operationName: 'CalendarGetOnUpdatedItemsV3'
     parameters: [

@@ -239,7 +239,6 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
           { name: 'function:OnNewMentionMeEmail', instanceCount: 1 }
           { name: 'function:OnNewCalendarEvent', instanceCount: 1 }
           { name: 'function:OnUpcomingEvent', instanceCount: 1 }
-          { name: 'function:OnCalendarChangedItems', instanceCount: 1 }
           { name: 'function:OnCalendarUpdatedItems', instanceCount: 1 }
         ], empty(sharedMailboxAddress) ? [] : [
           { name: 'function:OnSharedMailboxNewEmail', instanceCount: 1 }

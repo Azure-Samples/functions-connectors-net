@@ -25,7 +25,7 @@ public class O365Functions
             TriggerConfigName = "%OnNewEmailTriggerConfigName%")]
         Office365OnNewEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewEmail trigger");
+        _logger.LogInformation("Received OnNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnFlaggedEmail")]
@@ -36,7 +36,7 @@ public class O365Functions
             TriggerConfigName = "%OnFlaggedEmailTriggerConfigName%")]
         Office365OnFlaggedEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnFlaggedEmail trigger");
+        _logger.LogInformation("Received OnFlaggedEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewMentionMeEmail")]
@@ -47,7 +47,7 @@ public class O365Functions
             TriggerConfigName = "%OnNewMentionMeEmailTriggerConfigName%")]
         Office365OnNewEmailMentioningMeTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewMentionMeEmail trigger");
+        _logger.LogInformation("Received OnNewMentionMeEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewCalendarEvent")]
@@ -58,7 +58,7 @@ public class O365Functions
             TriggerConfigName = "%OnNewCalendarEventTriggerConfigName%")]
         Office365OnCalendarNewItemsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewCalendarEvent trigger");
+        _logger.LogInformation("Received OnNewCalendarEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpcomingEvent")]
@@ -69,7 +69,7 @@ public class O365Functions
             TriggerConfigName = "%OnUpcomingEventTriggerConfigName%")]
         Office365OnUpcomingEventsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpcomingEvent trigger");
+        _logger.LogInformation("Received OnUpcomingEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnSharedMailboxNewEmail")]
@@ -80,18 +80,7 @@ public class O365Functions
             TriggerConfigName = "%OnSharedMailboxNewEmailTriggerConfigName%")]
         Office365OnSharedMailboxNewEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger");
-    }
-
-    [Function("OnCalendarChangedItems")]
-    public void OnCalendarChangedItems(
-        [ConnectorTrigger(
-            DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
-            Connection = "ConnectorNamespace",
-            TriggerConfigName = "%OnCalendarChangedItemsTriggerConfigName%")]
-        Office365OnCalendarChangedItemsTriggerPayload payload)
-    {
-        _logger.LogInformation("Received OnCalendarChangedItems trigger");
+        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnCalendarUpdatedItems")]
@@ -102,6 +91,6 @@ public class O365Functions
             TriggerConfigName = "%OnCalendarUpdatedItemsTriggerConfigName%")]
         Office365OnCalendarUpdatedItemsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnCalendarUpdatedItems trigger");
+        _logger.LogInformation("Received OnCalendarUpdatedItems trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

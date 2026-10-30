@@ -1,160 +1,101 @@
 # Office 365 Outlook Polling Triggers (.NET)
 
-Standalone Azure Functions sample: copy this entire folder into a new repository.
-The host polls the Connector Namespace using `DeliveryMode = Poll`, receives typed
-SDK payloads, and logs receipt without email/calendar contents. No public callback
-or tunnel is required. There is no Blob output binding; storage remains necessary
-for Functions host state and deployment.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
+and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector)
+with `DeliveryMode = Poll`. The host receives events outbound from the Connector
+Namespace; no public callback or tunnel is required. All handlers use typed
+payloads and log only the trigger name and item count.
 
-## Events and strongly typed payloads
-
-All payloads are from `Azure.Connectors.Sdk.Office365.Models`.
-
-| Function | Source operation | SDK payload |
+| Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewEmail` | `OnNewEmailV3` | `Office365OnNewEmailTriggerPayload` |
-| `OnFlaggedEmail` | `OnFlaggedEmailV4` | `Office365OnFlaggedEmailTriggerPayload` |
-| `OnNewMentionMeEmail` | `OnNewMentionMeEmailV3` | `Office365OnNewEmailMentioningMeTriggerPayload` |
-| `OnNewCalendarEvent` | `CalendarGetOnNewItemsV3` | `Office365OnCalendarNewItemsTriggerPayload` |
-| `OnCalendarChangedItems` | `CalendarGetOnChangedItemsV3` | `Office365OnCalendarChangedItemsTriggerPayload` |
-| `OnCalendarUpdatedItems` | `CalendarGetOnUpdatedItemsV3` | `Office365OnCalendarUpdatedItemsTriggerPayload` |
-| `OnUpcomingEvent` | `OnUpcomingEventsV3` | `Office365OnUpcomingEventsTriggerPayload` |
-| `OnSharedMailboxNewEmail` (opt-in) | `SharedMailboxOnNewEmailV2` | `Office365OnSharedMailboxNewEmailTriggerPayload` |
-
-The deprecated source event **When a new email arrives (webhook)**,
-`CreateOnNewEmailSubscription`, is intentionally excluded because the current
-`OnNewEmailV3` operation is supported. It is not a missing feature awaiting
-implementation. Namespace Webhook delivery also uses the current V3 source.
-The live gateway-scoped operation list exposes only the eight current triggers.
-The eight current source operations above support namespace Poll delivery; source
-trigger names do not determine namespace delivery mode.
+| `OnNewEmail` | [`OnNewEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-(v3)) | New email |
+| `OnFlaggedEmail` | [`OnFlaggedEmailV4`](https://learn.microsoft.com/connectors/office365/#when-an-email-is-flagged-(v4)-(preview)) | Flagged email (preview) |
+| `OnNewMentionMeEmail` | [`OnNewMentionMeEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-mentioning-me-arrives-(v3)) | Email mentioning me |
+| `OnNewCalendarEvent` | [`CalendarGetOnNewItemsV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-event-is-created-(v3)) | New event |
+| `OnCalendarUpdatedItems` | [`CalendarGetOnUpdatedItemsV3`](https://learn.microsoft.com/connectors/office365/#when-an-event-is-modified-(v3)) | Modified event |
+| `OnUpcomingEvent` | [`OnUpcomingEventsV3`](https://learn.microsoft.com/connectors/office365/#when-an-upcoming-event-is-starting-soon-(v3)) | Upcoming event |
+| `OnSharedMailboxNewEmail` | [`SharedMailboxOnNewEmailV2`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-in-a-shared-mailbox-(v2)) | Shared mailbox email (opt-in) |
+| Not included | [`CalendarGetOnChangedItemsV3`](https://learn.microsoft.com/connectors/office365/#when-an-event-is-added,-updated-or-deleted-(v3)) | Event added, updated or deleted; preview subscription fails with missing `TABLE` |
 
 ## Prerequisites
 
-- .NET 10 SDK, Azure Functions Core Tools v4, Azure CLI 2.75.0+, Azure Developer CLI.
-- PowerShell 7 on every platform for the post-deploy hook.
-- Azurite for local Functions host storage.
-- An Office 365 mailbox with permission to authorize the connection; full access
-  to the shared mailbox is required to enable that optional event.
-- The [connector-namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli).
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
+- PowerShell 7 for the default hook, or Bash and `jq` for the alternative script
+- An Office 365 mailbox and permission to authorize the connection
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
-Packages restore from NuGet.org without a parent configuration or extension checkout.
+  ```bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
 
-## Deploy
+  Or in PowerShell:
 
-Run all commands from this folder. Use an isolated environment, different from any
-webhook deployment.
+  ```powershell
+  irm https://aka.ms/connector-namespace-cli-install-ps | iex
+  ```
 
-```powershell
+## Deploy to Azure
+
+```bash
+cd office365App/polling
 az login
 azd auth login
 azd env new office365-polling
 azd env set OFFICE365_MAIL_FOLDER Inbox
 azd env set OFFICE365_CALENDAR_ID '<actual connector calendar ID>'
-# Optional shared mailbox; folderId is not the personal-mail folderPath parameter.
-azd env set OFFICE365_SHARED_MAILBOX_ADDRESS '<shared-mailbox SMTP address>'
-azd env set OFFICE365_SHARED_MAILBOX_FOLDER_ID Inbox
 azd up
 ```
 
-Confirm these identifiers for the OAuth mailbox. `Calendar` is only a sample
-default, not a discovered calendar ID. No importance filter is imposed on new mail.
-If shared mailbox address is empty, its source trigger is not provisioned and its
-Functions listener is disabled. To enable it later, set the address/folder and run
-`azd up` again. To disable a previously enabled shared mailbox, disable/delete its
-existing namespace trigger as well; conditional ARM resources are not removed by
-incremental deployment.
+Use the actual connector calendar ID, not the placeholder `Calendar`. Complete
+the OAuth sign-in opened by `azd up` with the mailbox account to monitor.
+Use a different azd environment from webhook.
 
-The namespace defaults to `westcentralus` (`CONNECTOR_NAMESPACE_LOCATION` override).
-If your Function region lacks Application Insights, set
-`APPLICATION_INSIGHTS_LOCATION` to a supported telemetry region before provisioning
-(for example `eastus2`); host/namespace locations remain unchanged.
+**Cost:** polling provisions one 2048 MB always-ready instance per configured
+function (six, or seven with shared mailbox). These incur idle charges.
 
-Bicep creates the Function App, host/deployment storage, identity, telemetry,
-namespace, connection, and seven Poll trigger configurations (eight with a shared
-mailbox). It grants access to the namespace, Function App, and developer identities.
-The post-deploy hook opens OAuth consent and creates ignored `local.settings.json`,
-preserving an existing file unless `-ForceLocalSettings` is supplied.
+## Optional configuration
 
-For staged deployment before source selection/consent:
+Set environment values before `azd up`. Six personal triggers are configured by default.
 
-```powershell
-azd env set OFFICE365_ENABLE_TRIGGERS false
-azd provision
-azd deploy
-pwsh -File .\infra\scripts\postdeploy.ps1 -ConsentLinkOnly
-```
+| Setting / option | Purpose |
+| --- | --- |
+| `OFFICE365_SHARED_MAILBOX_ADDRESS=<address>` | Shared mailbox email; full mailbox access required |
+| `OFFICE365_SHARED_MAILBOX_FOLDER_ID=Inbox` | Folder to monitor in the shared mailbox |
+| `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
+| `APPLICATION_INSIGHTS_LOCATION=eastus2` | Telemetry region override if the host region lacks Application Insights |
+| `OFFICE365_ENABLE_TRIGGERS=false` | Prepare disabled sources without waiting for consent; set `true` and reprovision to activate |
+| Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
+| `-ForceLocalSettings` / `--force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
+| `-ConsentLinkOnly` / `--consent-link-only` | Print consent link without opening a browser or waiting |
 
-`-ConsentLinkOnly` prints the OAuth URL without opening a browser or waiting.
-Staged (`OFFICE365_ENABLE_TRIGGERS=false`) deployments also print without waiting.
-After selecting the correct mailbox/calendar and completing consent, set
-`OFFICE365_ENABLE_TRIGGERS true` and run `azd up`. OAuth returns to
-[Connector Namespaces](https://connectors.azure.com/).
+Empty address disables its listener and skips registration. When disabling an
+existing shared source, also disable/delete its namespace config; incremental
+deployment does not remove skipped resources. Regenerate local settings to apply
+the selection locally.
 
-### Always-ready capacity and cost
+## Local development
 
-Each configured polling function has one 2048 MB always-ready instance by default
-(seven, or eight with shared mailbox). These instances incur idle charges. This
-avoids relying on scale-from-zero for the preview custom polling listener. Remove
-or adjust `alwaysReady` in `infra/main.bicep` only after verifying activation and
-acceptable latency in your environment. Do not enable runtime-driven scale
-monitoring: Flex Consumption rejects that setting.
+Use a separate provisioned environment to avoid competing local/cloud listeners.
+Run `azd hooks run postdeploy` to generate local settings, start Azurite separately,
+then `dotnet build` and `func start`. Local credentials come from `az login`;
+do not copy cloud managed-identity settings locally. Functions host/deployment
+storage is required. Never commit local settings.
 
-Worker OpenTelemetry explicitly uses `DefaultAzureCredential` because telemetry
-local/key authentication is disabled. Host request records alone do not prove
-worker receipt logs were exported.
+## Verify
 
-## Run locally
+Check the connection is **Connected** and selected triggers are **Enabled** in
+[Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events
+and check worker logs for `Received <FunctionName> trigger (<Count> items)`;
+build/deployment success alone is not real-event verification. Delivery is at least
+once and source detection may be delayed.
 
-Provision a separate environment without deploying code to avoid competing local
-and cloud consumers, then run the post-deploy script:
+Run `azd down --purge` when finished, including always-ready resources. Licensing
+is provided by the repository's [root LICENSE](../../LICENSE).
 
-```powershell
-azd provision
-pwsh -File .\infra\scripts\postdeploy.ps1
-# Start Azurite separately.
-dotnet build
-func start
-```
+## More
 
-Alternatively copy `local.settings.example.json` to `local.settings.json`, supply
-the Poll endpoint and all eight config names, and enable the shared-mailbox listener
-only after its configuration exists. Locally the binding uses signed-in developer
-credentials. Do not copy cloud managed-identity settings to local settings.
-
-`Connection = "ConnectorNamespace"` is a configuration prefix, not the Office 365
-connection resource name. Derive `ConnectorNamespace__pollingEndpoint` from the
-service's `pollingEndpoints.receiveUri`, removing `/triggerconfigs/...` and any
-query; remove a trailing `/api` from that base. Preserve gateway prefixes such as
-`/api/connectorGateways/<id>`. Never commit endpoints, keys, or local settings.
-
-## Verify and clean up
-
-Build success, Azure deployment success, and real source-event success are separate
-checks. After consent and enabling triggers, confirm `Connected`, enabled trigger
-states, and logs containing `Received <FunctionName> trigger` for every operation.
-Send new and mentioning-you mail, flag a message, send to the shared mailbox, and
-create/update/delete a test calendar event. Schedule a future event inside the
-upcoming-event look-ahead window. Source detection can be delayed; polling is the
-namespace delivery mode, not a guarantee of immediate source detection.
-
-**Preview service issue (2026-10-29):** `CalendarGetOnChangedItemsV3` registration
-deploys but source subscription fails with `inputs.subscribe` / missing `TABLE`
-path variable, despite both source/notification schemas declaring `table` and the
-confirmed calendar ID being supplied. This was reproduced in Poll and Webhook.
-Its typed handler remains included, but do not claim real changed-event success
-until the service mapping is fixed. Inspect raw ARM
-`<trigger-resource-id>/triggerStatuses/latest?api-version=2026-05-01-preview` for
-`lastExecutionError`; the current CLI status schema may omit these diagnostics.
-
-Delivery is at least once. This sample logs receipt only; it does not expose
-delivery `MessageId`, batch Functions invocations, or implement deduplication.
-An event can contain multiple source items inside the typed payload.
-
-Run `azd down --purge` from this folder when finished, including always-ready resources.
-
-## References
-
-- [Office 365 source operations](https://learn.microsoft.com/connectors/office365/)
-- [SDK typed trigger registry](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/Office365Extensions.cs#L4332-L4489)
-- [Connector polling configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Office 365 Outlook connector reference](https://learn.microsoft.com/connectors/office365/)

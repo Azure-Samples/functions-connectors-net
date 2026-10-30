@@ -35,7 +35,7 @@ $localValues = @{
 }
 foreach ($functionName in @(
     'OnNewEmail', 'OnFlaggedEmail', 'OnNewMentionMeEmail', 'OnNewCalendarEvent', 'OnUpcomingEvent',
-    'OnCalendarChangedItems', 'OnCalendarUpdatedItems', 'OnSharedMailboxNewEmail')) {
+    'OnCalendarUpdatedItems', 'OnSharedMailboxNewEmail')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing trigger configuration setting $setting."

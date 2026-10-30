@@ -68,20 +68,20 @@ function New-TriggerConfig {
     $connectionDetails = "{connectionName:$connectorNamespaceConnectionName,connectorName:office365}"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
-    ConvertTo-Json -InputObject @($Parameters) -Depth 4 |
-        Set-Content -LiteralPath $parametersFile -NoNewline
-    @{
-        callbackUrl = $callbackUrl
-        authentication = @{
-            type = "QueryString"
-            name = "code"
-            value = $ConnectorExtensionKey
-        }
-    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-    Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
-
     try {
+        ConvertTo-Json -InputObject @($Parameters) -Depth 4 |
+            Set-Content -LiteralPath $parametersFile -NoNewline
+        @{
+            callbackUrl = $callbackUrl
+            authentication = @{
+                type = "QueryString"
+                name = "code"
+                value = $ConnectorExtensionKey
+            }
+        } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
+
+        Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
+
         az connector-namespace trigger create `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
@@ -146,12 +146,6 @@ New-TriggerConfig `
     -Parameters @(
         @{ name = "table"; value = $calendarId }
     )
-
-New-TriggerConfig `
-    -FunctionName "OnCalendarChangedItems" `
-    -OperationName "CalendarGetOnChangedItemsV3" `
-    -Description "When an event is added, updated or deleted (V3)" `
-    -Parameters @(@{ name = "table"; value = $calendarId })
 
 New-TriggerConfig `
     -FunctionName "OnCalendarUpdatedItems" `
