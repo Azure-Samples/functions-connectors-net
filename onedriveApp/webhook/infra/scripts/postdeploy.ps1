@@ -83,7 +83,7 @@ function Select-OneDriveFolderInteractive {
         $invokeRaw = az connector-namespace connection invoke `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $onedriveConnectionName `
-            --request "method=get path=$listingPath" `
+            --request "{method:GET,path:'$listingPath'}" `
             -o json 2>$null | Out-String
 
         $subfolders = @()
@@ -240,8 +240,6 @@ if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
 
 # --- Select OneDrive folder -------------------------------------------------
 if (-not $onedriveFolderId) {
-    # Try interactive folder browser; fall back to 'root' when not possible
-    # (e.g. `connection invoke` array-response bug or non-interactive shell).
     try {
         Write-Host ""
         Write-Host "Listing OneDrive folders via the authorized connection..." -ForegroundColor Yellow
@@ -253,8 +251,7 @@ if (-not $onedriveFolderId) {
         }
         $onedriveFolderId = $selected
     } catch {
-        Write-Host "   Interactive folder selection unavailable; defaulting to root folder." -ForegroundColor Yellow
-        $onedriveFolderId = 'root'
+        throw "Folder selection failed. Set ONEDRIVE_FOLDER_ID explicitly with 'azd env set' and retry. Details: $_"
     }
 }
 

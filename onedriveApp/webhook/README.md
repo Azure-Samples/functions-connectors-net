@@ -61,7 +61,10 @@ azd env set ONEDRIVE_FOLDER_ID root
 azd hooks run postdeploy
 ```
 
-Use the connector folder ID, not a display path. The namespace defaults to
+Use the connector folder ID, not a display path.
+The hook does not silently select root if folder selection is unavailable;
+set `ONEDRIVE_FOLDER_ID` explicitly for non-interactive runs.
+The namespace defaults to
 `westcentralus`; override via `CONNECTOR_NAMESPACE_LOCATION`.
 Application Insights/Log Analytics default to `eastus2` because Application
 Insights is unavailable in `westcentralus`. Override with

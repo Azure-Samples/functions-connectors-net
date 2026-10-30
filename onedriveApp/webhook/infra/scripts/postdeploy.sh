@@ -115,8 +115,8 @@ if [ -z "$onedriveFolderId" ]; then
         read -rp "Enter OneDrive folder ID to monitor (or press Enter for 'root'): " onedriveFolderId
         onedriveFolderId="${onedriveFolderId:-root}"
     else
-        echo "   Non-interactive shell; defaulting to root folder."
-        onedriveFolderId="root"
+        echo "ERROR: Set ONEDRIVE_FOLDER_ID explicitly with 'azd env set' before running non-interactively."
+        exit 1
     fi
 fi
 echo "Using ONEDRIVE_FOLDER_ID=$onedriveFolderId"
