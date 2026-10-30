@@ -30,8 +30,57 @@ param userPrincipalId string = deployer().objectId
 @description('SharePoint site URL to monitor (e.g., https://contoso.sharepoint.com/sites/mysite).')
 param sharepointSiteUrl string
 
-@description('SharePoint document library name to monitor (e.g., "Documents").')
+@description('SharePoint document library name or GUID accepted by the connector.')
 param sharepointLibraryName string = 'Documents'
+
+@description('Optional folder path accepted by the connector. Leave empty to monitor the whole library.')
+param sharepointFolderPath string = ''
+
+@description('List name or GUID for item/form triggers. Empty uses the document library as a list.')
+param sharepointListName string = ''
+@description('Enable deletion triggers only when the connection user is a site collection administrator.')
+param sharepointEnableDeletionTriggers bool = false
+@description('Enable classification only after applying a licensed Microsoft Syntex model to the library.')
+param sharepointEnableSyntexTrigger bool = false
+@description('Existing form identifier. Empty disables the form-submitted preview trigger.')
+param sharepointFormId string = ''
+@description('Connector runSchedule value. Empty disables the recurring-digest preview trigger.')
+@allowed(['', '*', '0', '1', '2', '3', '4', '5', '6'])
+param sharepointDigestSchedule string = ''
+
+var enabledGroups = {
+  standard: true
+  deletion: sharepointEnableDeletionTriggers
+  syntex: sharepointEnableSyntexTrigger
+  form: !empty(sharepointFormId)
+  digest: !empty(sharepointDigestSchedule)
+}
+var triggerDefinitions = [for trigger in loadJsonContent('./triggers.json'): {
+  functionName: trigger.functionName
+  operationName: trigger.operationName
+  description: trigger.description
+  enabled: enabledGroups[trigger.group]
+  parameters: concat([
+    { name: 'dataset', value: sharepointSiteUrl }
+    {
+      name: 'table'
+      value: trigger.target == 'list' && !empty(sharepointListName) ? sharepointListName : sharepointLibraryName
+    }
+  ], trigger.folder && !empty(sharepointFolderPath) ? [
+    { name: 'folderPath', value: sharepointFolderPath }
+  ] : [], trigger.group == 'form' ? [
+    { name: 'form', value: sharepointFormId }
+  ] : [], trigger.group == 'digest' ? [
+    { name: 'update', value: true }
+    { name: 'add', value: true }
+    { name: 'runSchedule', value: sharepointDigestSchedule }
+  ] : [])
+}]
+var functionSettings = toObject(
+  triggerDefinitions,
+  trigger => 'AzureWebJobs.${trigger.functionName}.Disabled',
+  trigger => string(!trigger.enabled)
+)
 
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
@@ -184,7 +233,7 @@ module connectorNamespace './connectorNamespace.bicep' = {
   }
 }
 
-var allAppSettings = {
+var allAppSettings = union({
   AzureWebJobsStorage__credential: 'managedidentity'
   AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
@@ -192,7 +241,7 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   SHAREPOINTONLINE_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.sharepointConnectionRuntimeUrl
-}
+}, functionSettings)
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   scope: rg
@@ -262,5 +311,9 @@ output connectorNamespaceConnectionName string = connectorNamespace.outputs.conn
 @description('SharePoint site URL to monitor.')
 output sharepointSiteUrl string = sharepointSiteUrl
 
-@description('SharePoint document library name to monitor.')
+@description('SharePoint document library name or GUID to monitor.')
 output sharepointLibraryName string = sharepointLibraryName
+
+output sharepointFolderPath string = sharepointFolderPath
+output triggerDefinitions array = triggerDefinitions
+output functionSettings object = functionSettings
