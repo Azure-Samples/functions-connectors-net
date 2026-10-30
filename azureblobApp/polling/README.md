@@ -66,6 +66,10 @@ It is a base URL, not a receive-operation URL or a URL containing query paramete
 The Azure Blob source still uses **OAuth**, not the host's managed identity.
 Storage accounts and runtime storage roles remain necessary even though there
 is no output binding. No `connector-messages` output container is used.
+The worker's OpenTelemetry exporter explicitly uses `DefaultAzureCredential`:
+Application Insights disables local authentication, so the connection string
+alone is insufficient. In Azure, `AZURE_CLIENT_ID` selects the app's managed
+identity, which has Monitoring Metrics Publisher access.
 
 ## Run locally
 

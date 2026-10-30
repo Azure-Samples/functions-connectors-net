@@ -56,6 +56,10 @@ Rerun setup with `azd hooks run postdeploy`. Do not share or commit callback key
 
 Storage for the Functions runtime and deployment package remains required.
 It is not a Blob output destination: no `connector-messages` container is used.
+The worker's OpenTelemetry exporter explicitly uses `DefaultAzureCredential`:
+Application Insights disables local authentication, so the connection string
+alone is insufficient. In Azure, `AZURE_CLIENT_ID` selects the app's managed
+identity, which has Monitoring Metrics Publisher access.
 
 ## Verify
 
