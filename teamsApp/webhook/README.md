@@ -1,10 +1,21 @@
 # Microsoft Teams Webhook Triggers (.NET)
 
-This standalone sample preserves the four Teams trigger operations:
+This standalone sample supports all 11 Teams events, preserving the typed operations:
 `OnNewChannelMessage`, `OnNewChannelMessageMentioningMe`,
 `OnGroupMembershipAdd`, and `OnGroupMembershipRemoval`. Each receives a typed
 Teams payload and logs only the trigger name and message/member count.
 Payloads are not written to Blob Storage or application logs.
+
+**SDK coverage limitation:** The seven other catalog events
+(`WebhookChatMessageTrigger`, `WebhookNewMessageTrigger`, `WebhookAtMentionTrigger`,
+`WebhookKeywordTrigger`, `WebhookMessageReactionTrigger`, `RecordingTrigger`,
+`TranscriptTrigger`) lack strongly typed trigger payload wrappers in
+`Azure.Connectors.Sdk` 0.14.0-preview.1. As an approved exception, those seven
+handlers receive raw JSON `string` payloads and log only the event name. Supporting
+all 11 with SDK types requires wrappers to be published; input/action-response
+models are not replacements.
+See the extension's
+[Teams operation mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#microsoft-teams-connector).
 
 Webhook is the default when `DeliveryMode` is omitted from `[ConnectorTrigger]`.
 The Connector Namespace delivers callbacks to
@@ -48,12 +59,50 @@ team/channel selection via Microsoft Graph with the permissions of your CLI
 identity. Set them explicitly for noninteractive runs.
 The Connector Namespace defaults to `westcentralus`; change it via
 `CONNECTOR_NAMESPACE_LOCATION` if needed.
+Application Insights and Log Analytics default to `eastus2`, independently of the
+Function App/namespace region; Application Insights is unavailable in
+`westcentralus`. Override via `TELEMETRY_LOCATION` if needed. The worker telemetry
+exporter uses `DefaultAzureCredential` for Entra-authenticated ingestion.
 
 Deployment includes a Flex Consumption .NET 10 Function App, managed identity,
 Functions host/deployment storage, Application Insights/Log Analytics, Connector
-Namespace, and Teams OAuth connection. The post-deploy hook registers four
+Namespace, and Teams OAuth connection. The post-deploy hook registers the selected
 callback trigger configurations and opens connection consent. Re-run using
 `azd hooks run postdeploy`.
+
+### Enable all events
+
+Only the four original typed events are registered by default. For all 11, copy
+`infra\additional-triggers.example.json` over `infra\additional-triggers.json`
+and fill all seven entries:
+
+| Operation | Parameters |
+| --- | --- |
+| `WebhookChatMessageTrigger` | None; all chats of the authorized account |
+| `WebhookNewMessageTrigger` | `threadType`, dynamic `requestBody` chat/channel scope |
+| `WebhookAtMentionTrigger` | `threadType`, dynamic `requestBody` chat/channel scope |
+| `WebhookKeywordTrigger` | `threadType`, `$search` (comma-separated keywords), dynamic `requestBody` |
+| `WebhookMessageReactionTrigger` | `reactionKey`, `frequency`, `runningPolicy`, `threadType`, dynamic `requestBody` |
+| `RecordingTrigger` | `scopeType`, dynamic `body` recording scope |
+| `TranscriptTrigger` | `scopeType`, dynamic `body` transcript scope |
+
+Obtain actual enum values and dynamic bodies from the Teams connector UI or an
+exported trigger configuration. Preserve parameter names, JSON value types and
+nested scope structure. Do not copy callback keys or OAuth tokens. Keep all seven
+entries for all-events coverage, or remove unneeded entries. The sample requires a
+scoped `requestBody` for targeted message events even though the static reference
+marks it optional.
+
+The parameterless chat event observes **all chats the account belongs to**,
+not just the test channel; explicitly approve that scope and use an appropriate
+test account. Recording/transcript scopes must also be selected explicitly.
+
+Run `pwsh -File .\infra\scripts\validate-triggers.ps1` before `azd up`. Hooks reject
+unknown/duplicate operations, missing scope parameters, empty values and unresolved
+placeholders. Dynamic schema and tenant permission validation remains the service's
+responsibility. The shell hook delegates to PowerShell to keep registration
+consistent. Removing an entry does not delete its existing namespace config;
+disable/delete that config explicitly to stop its callbacks.
 
 There is no application output container or Blob binding. The storage account
 and its identity roles are retained for Functions host state and deployment.
@@ -82,6 +131,11 @@ Post a new root channel message (not a reply), mention the authorized account,
 and add/remove a test member with the appropriate permissions. Check local
 function logs or Application Insights for the corresponding trigger name/count.
 Allow for upstream detection delays; retries can produce duplicate logs.
+For additional events, send a chat message, scoped message/@mention, configured
+keywords, and the selected reaction under its running policy. Record/transcribe
+a test meeting or call matching the configured scope and wait for the artifacts
+to become available. These require the appropriate licenses and tenant policies.
+Verify each selected function independently.
 
 Run `azd down --purge` from this folder when finished. Do not reuse the polling
 environment. To continue an existing pre-split Teams deployment, preserve its azd

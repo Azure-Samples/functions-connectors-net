@@ -7,6 +7,10 @@ services:
     project: .
     language: csharp
 hooks:
+  preprovision:
+    shell: pwsh
+    run: ./infra/scripts/validate-triggers.ps1
+    continueOnError: false
   postdeploy:
     shell: pwsh
     run: ./infra/scripts/postdeploy.ps1

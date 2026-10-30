@@ -10,7 +10,18 @@ var channelParameters = [
 var membershipParameters = [
   { name: 'groupId', value: teamsGroupId }
 ]
-var triggers = [
+var optionalOperations = [
+  'WebhookChatMessageTrigger'
+  'WebhookNewMessageTrigger'
+  'WebhookAtMentionTrigger'
+  'WebhookKeywordTrigger'
+  'WebhookMessageReactionTrigger'
+  'RecordingTrigger'
+  'TranscriptTrigger'
+]
+
+var additionalTriggers = loadJsonContent('./additional-triggers.json')
+var triggers = concat([
   {
     functionName: 'OnNewChannelMessage'
     parameters: channelParameters
@@ -27,7 +38,7 @@ var triggers = [
     functionName: 'OnGroupMembershipRemoval'
     parameters: membershipParameters
   }
-]
+], additionalTriggers)
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
   name: namespaceName
@@ -60,8 +71,20 @@ output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
   ? substring(endpointBase, 0, max(0, length(endpointBase) - 4))
   : endpointBase
 
-output triggerConfigSettings object = toObject(
-  triggers,
-  trigger => '${trigger.functionName}TriggerConfigName',
-  trigger => 'teams-${toLower(trigger.functionName)}'
+output triggerConfigSettings object = union(
+  toObject(
+    concat([
+      'OnNewChannelMessage'
+      'OnNewChannelMessageMentioningMe'
+      'OnGroupMembershipAdd'
+      'OnGroupMembershipRemoval'
+    ], optionalOperations),
+    operation => '${operation}TriggerConfigName',
+    operation => 'teams-${toLower(operation)}'
+  ),
+  toObject(
+    optionalOperations,
+    operation => 'AzureWebJobs.${operation}.Disabled',
+    operation => contains(map(additionalTriggers, trigger => trigger.functionName), operation) ? 'false' : 'true'
+  )
 )

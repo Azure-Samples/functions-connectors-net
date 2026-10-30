@@ -18,5 +18,7 @@ __queuestorage__/
 AzuriteConfig
 host-keys.json
 .notification-details*.json
+.trigger-parameters-*.json
 .consent-params-*.json
 infra/main.json
+infra/validation-*.bicepparam

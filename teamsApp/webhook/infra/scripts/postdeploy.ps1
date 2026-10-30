@@ -1,4 +1,9 @@
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'validate-triggers.ps1')
+$additionalTriggers = @(
+    Get-Content (Join-Path $PSScriptRoot '../additional-triggers.json') -Raw | ConvertFrom-Json
+)
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     Write-Host "ERROR: The 'connector-namespace' Azure CLI extension is required." -ForegroundColor Red
@@ -110,7 +115,9 @@ function New-TriggerConfig {
 
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
     $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName"
-    $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
+    $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
+    ConvertTo-Json -InputObject @($Parameters) -Depth 30 -Compress |
+        Set-Content -LiteralPath $parametersFile -NoNewline
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     @{
         callbackUrl = $callbackUrl
@@ -133,7 +140,7 @@ function New-TriggerConfig {
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:teams}" `
             --operation-name $OperationName `
-            --parameters $parametersShorthand `
+            --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
             --description $Description `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
@@ -146,6 +153,7 @@ function New-TriggerConfig {
     }
     finally {
         Remove-Item $notifFile -ErrorAction SilentlyContinue
+        Remove-Item $parametersFile -ErrorAction SilentlyContinue
     }
 }
 
@@ -186,7 +194,15 @@ New-TriggerConfig `
         @{ name = "groupId"; value = $teamsGroupId }
     )
 
-Write-Host "All trigger configs created." -ForegroundColor Green
+foreach ($trigger in $additionalTriggers) {
+    New-TriggerConfig `
+        -FunctionName $trigger.functionName `
+        -OperationName $trigger.functionName `
+        -Description "Teams $($trigger.functionName) event" `
+        -Parameters @($trigger.parameters)
+}
+
+Write-Host "All selected trigger configs created." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Authorizing teams connection..." -ForegroundColor Yellow
@@ -258,6 +274,6 @@ else {
 }
 
 Write-Host ""
-Write-Host "Done. All 4 Teams triggers are configured." -ForegroundColor Green
+Write-Host "Done. All selected Teams triggers are configured." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""

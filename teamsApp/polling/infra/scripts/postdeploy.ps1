@@ -1,6 +1,7 @@
 param([switch] $ForceLocalSettings)
 
 $ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'validate-triggers.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw "Install the connector-namespace Azure CLI extension before running this script."
@@ -31,10 +32,21 @@ $localValues = @{
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
 }
 foreach ($functionName in @(
-    'OnNewChannelMessage', 'OnNewChannelMessageMentioningMe', 'OnGroupMembershipAdd', 'OnGroupMembershipRemoval')) {
+    'OnNewChannelMessage', 'OnNewChannelMessageMentioningMe', 'OnGroupMembershipAdd', 'OnGroupMembershipRemoval',
+    'WebhookChatMessageTrigger', 'WebhookNewMessageTrigger', 'WebhookAtMentionTrigger', 'WebhookKeywordTrigger',
+    'WebhookMessageReactionTrigger', 'RecordingTrigger', 'TranscriptTrigger')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing trigger configuration setting $setting."
+    }
+    $localValues[$setting] = $triggerSettings.$setting
+}
+foreach ($functionName in @(
+    'WebhookChatMessageTrigger', 'WebhookNewMessageTrigger', 'WebhookAtMentionTrigger', 'WebhookKeywordTrigger',
+    'WebhookMessageReactionTrigger', 'RecordingTrigger', 'TranscriptTrigger')) {
+    $setting = "AzureWebJobs.$functionName.Disabled"
+    if ($triggerSettings.$setting -notin @('true', 'false')) {
+        throw "Missing or invalid function enablement setting $setting."
     }
     $localValues[$setting] = $triggerSettings.$setting
 }
@@ -101,7 +113,7 @@ $deadline = (Get-Date).AddMinutes(5)
 do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'Teams connection authorized. All four Poll trigger configurations are provisioned.'
+        Write-Host 'Teams connection authorized. Poll trigger configurations are provisioned for the selected events.'
         return
     }
 } while ((Get-Date) -lt $deadline)
