@@ -25,6 +25,6 @@ public class BlobFunctions
             TriggerConfigName = "%OnUpdatedFileTriggerConfigName%")]
         AzureBlobOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

@@ -21,6 +21,6 @@ public class BlobFunctions
     public void OnUpdatedFile(
         [ConnectorTrigger] AzureBlobOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

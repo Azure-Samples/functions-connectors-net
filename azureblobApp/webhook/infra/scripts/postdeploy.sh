@@ -6,6 +6,7 @@
 # then creates the trigger config pointing at the function's connector webhook URL.
 
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _notif_files=()
@@ -22,23 +23,95 @@ if ! az extension show --name connector-namespace --query name -o tsv 2>/dev/nul
 fi
 
 # --- Read azd outputs --------------------------------------------------------
-eval "$(azd env get-values)"
+if ! environmentValues=$(azd env get-values); then
+    echo "ERROR: Could not read the selected azd environment." >&2
+    exit 1
+fi
 
-: "${resourceGroupName:?required azd output missing}"
-: "${connectorNamespaceName:?required azd output missing}"
-: "${connectorNamespaceConnectionName:?required azd output missing}"
-: "${functionAppName:?required azd output missing}"
-: "${functionAppDefaultHostname:?required azd output missing}"
-: "${monitoredStorageAccountName:?required azd output missing}"
+read_output() {
+    local value
+    if ! value=$(azd env get-value "$1"); then
+        echo "ERROR: Could not read azd output $1." >&2
+        return 1
+    fi
+    value="${value//$'\r'/}"
+    if [[ -z "${value//[[:space:]]/}" || "$value" == "null" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            echo "ERROR: Missing azd output $1. Run azd provision first." >&2
+            return 1
+        fi
+        value="$2"
+    fi
+    printf '%s' "$value"
+}
+
+resourceGroupName=$(read_output resourceGroupName)
+connectorNamespaceName=$(read_output connectorNamespaceName)
+connectorNamespaceConnectionName=$(read_output connectorNamespaceConnectionName)
+functionAppName=$(read_output functionAppName)
+functionAppDefaultHostname=$(read_output functionAppDefaultHostname)
+monitoredStorageAccountName=$(read_output monitoredStorageAccountName)
+if printf '%s\n' "$environmentValues" | grep '^monitoredContainerName=' >/dev/null; then
+    monitoredContainerName=$(read_output monitoredContainerName connector-input)
+else
+    monitoredContainerName=connector-input
+fi
+AZURE_SUBSCRIPTION_ID=$(read_output AZURE_SUBSCRIPTION_ID)
+
+localSettingsPath="$SCRIPT_DIR/../../local.settings.json"
+if [[ -L "$localSettingsPath" || ( -e "$localSettingsPath" && ! -f "$localSettingsPath" ) ]]; then
+    echo "ERROR: local.settings.json must be a regular file." >&2
+    exit 1
+elif [[ -f "$localSettingsPath" ]]; then
+    echo "Existing local.settings.json preserved."
+else
+    if ! settingsTemp=$(mktemp "$SCRIPT_DIR/../../.local-settings.XXXXXX"); then
+        echo "ERROR: Could not create the local settings staging file." >&2
+        exit 1
+    fi
+    _notif_files+=("$settingsTemp")
+    localSettings='{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated"
+  }
+}'
+    printf '%s\n' "$localSettings" > "$settingsTemp"
+    if [[ "$(cat "$settingsTemp")" != "$localSettings" ]]; then
+        echo "ERROR: Could not validate the generated local settings." >&2
+        exit 1
+    fi
+    mv -n "$settingsTemp" "$localSettingsPath"
+    if [[ -d "$localSettingsPath" ]]; then
+        _notif_files+=("$localSettingsPath/${settingsTemp##*/}")
+        echo "ERROR: local.settings.json became a directory during setup." >&2
+        exit 1
+    fi
+    if [[ -e "$settingsTemp" ]]; then
+        echo "ERROR: local.settings.json appeared during setup; existing settings preserved." >&2
+        exit 1
+    fi
+    echo "Created ignored local.settings.json using Azurite."
+fi
 
 # --- Authorize the Azure Blob connection (OAuth consent) --------------------
 echo ""
 echo "Authorizing Azure Blob Storage connection..."
 
-currentStatus=$(az connector-namespace connection show \
-    -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-    -n "$connectorNamespaceConnectionName" \
-    --query "properties.overallStatus" -o tsv 2>/dev/null || true)
+get_connection_status() {
+    local status
+    if ! status=$(az connector-namespace connection show \
+        -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
+        -n "$connectorNamespaceConnectionName" \
+        --query "properties.overallStatus" -o tsv); then
+        echo "ERROR: Could not read the Azure Blob connection status." >&2
+        return 1
+    fi
+    printf '%s' "${status//$'\r'/}"
+}
+
+currentStatus=$(get_connection_status)
 
 if [ "$(echo "$currentStatus" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
     echo "   already Connected; skipping consent flow"
@@ -81,10 +154,7 @@ else
     authorized=false
     while [ $SECONDS -lt $deadline ]; do
         sleep 5
-        status=$(az connector-namespace connection show \
-            -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-            -n "$connectorNamespaceConnectionName" \
-            --query "properties.overallStatus" -o tsv 2>/dev/null || true)
+        status=$(get_connection_status)
         echo "   status: ${status:-unknown}"
         if [ "$(echo "$status" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
             authorized=true
@@ -102,7 +172,7 @@ fi
 # --- Container path for the trigger ----------------------------------------
 containerName="${monitoredContainerName:-connector-input}"
 urlEncodedPath="%2f${containerName}"
-folderId=$(printf '%s' "$urlEncodedPath" | base64)
+folderId=$(printf '%s' "$urlEncodedPath" | base64 | tr -d '\r\n')
 echo "Container '${containerName}' -> folderId '${folderId}'"
 
 # --- Create Connector Namespace trigger config -------------------------------
@@ -118,7 +188,10 @@ functionName="OnUpdatedFile"
 operationName="OnUpdatedFiles_V2"
 triggerName="${connectorNamespaceConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
 callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
+if ! notifFile=$(mktemp); then
+    echo "ERROR: Could not create the notification request file." >&2
+    exit 1
+fi
 _notif_files+=("$notifFile")
 printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
 

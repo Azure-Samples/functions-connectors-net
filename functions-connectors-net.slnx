@@ -5,8 +5,11 @@
   <Folder Name="/office365App/polling/">
     <Project Path="office365App/polling/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/azureblobApp/">
-    <Project Path="azureblobApp/functions-connectors-net.csproj" />
+  <Folder Name="/azureblobApp/webhook/">
+    <Project Path="azureblobApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/azureblobApp/polling/">
+    <Project Path="azureblobApp/polling/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/dataverseApp/">
     <Project Path="dataverseApp/functions-connectors-net.csproj" />

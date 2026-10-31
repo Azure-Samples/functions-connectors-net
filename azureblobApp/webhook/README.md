@@ -1,92 +1,121 @@
-# Azure Blob connector - Webhook delivery
+# Azure Blob Storage Webhook Triggers (.NET)
 
-Standalone .NET 10 isolated Azure Functions sample retaining the existing
-`OnUpdatedFile` connector trigger. The Azure Blob operation `OnUpdatedFiles_V2`
-detects added or modified blob properties and delivers
-`AzureBlobOnUpdatedFilesTriggerPayload` to the Functions connector callback.
-The handler only logs `Received OnUpdatedFile trigger`; it has no Blob output
-binding and does not persist payloads.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
+and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
+The Connector Namespace delivers events to the function's public HTTPS callback.
+The handler uses `AzureBlobOnUpdatedFilesTriggerPayload` and logs only the trigger
+name and item count.
+
+| Function | Connector operation | Description |
+| --- | --- | --- |
+| `OnUpdatedFile` | [`OnUpdatedFiles_V2`](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)) | Blob added or modified (properties only) |
 
 ## Prerequisites
 
-- .NET 10 SDK, Azure CLI 2.75.0+, Azure Developer CLI (`azd`), PowerShell 7.
-- The [connector-namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
-  `irm https://aka.ms/connector-namespace-cli-install-ps | iex` in PowerShell, or
-  `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh` in Bash.
-- Azure permissions to deploy resources and role assignments.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
+- PowerShell 7.3 or later for the default hook, or Bash for the alternative script
+- Azure permissions to deploy resources and role assignments and authorize the source connection
+- For local execution: Functions Core Tools v4 supporting .NET 10 and Azurite.
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
-The included `NuGet.config` supplies the public Azure Functions package feed,
-including Connector extension 1.0.0. No machine-level or parent NuGet
-configuration is required.
+  ```bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
 
-## Deploy
+  Or in PowerShell:
 
-```powershell
-cd azureblobApp\webhook
-azd auth login
+  ```powershell
+  irm https://aka.ms/connector-namespace-cli-install-ps | iex
+  ```
+
+## Deploy to Azure
+
+```bash
+cd azureblobApp/webhook
 az login
+azd auth login
 azd env new azureblob-webhook
 azd up
 ```
 
-Use an environment name different from the polling app. The Connector Namespace
-defaults to `westcentralus`; override with `CONNECTOR_NAMESPACE_LOCATION` in the
-azd environment. `BLOB_CONTAINER_NAME` overrides the `connector-input` container.
+Use a different environment from polling.
 
-If the Function region does not offer Application Insights (for example,
-`westcentralus`), set `APPLICATIONINSIGHTS_LOCATION` to a supported region before
-provisioning. Only the Application Insights component uses that override;
-Functions, source/host storage, and the namespace retain their configured regions.
+Complete OAuth consent with an account granted **Storage Blob Data Contributor**
+on the source account. Deployment grants this to the `AZURE_PRINCIPAL_ID` developer;
+grant access separately if consenting as another user. Allow role propagation.
 
-The deployment provisions the Flex Consumption Function App, its user-assigned
-managed identity, host/deployment storage, Application Insights/Log Analytics,
-a separate monitored storage account/container, and the Azure Blob connection.
-The developer receives Storage Blob Data Contributor on the monitored account.
-The connection uses **Entra ID OAuth**, not managed-identity source authentication.
-Consent with that developer account, or separately grant the consenting user
-appropriate source data access. Allow time for role assignments to propagate.
+Already **Connected** connections skip consent.
 
-The interactive postdeploy hook authorizes the connection, fetches the
-`connector_extension` system key, and registers the callback with query-string
-authentication. It prints and opens the returned OAuth consent link, redirecting
-to `https://connectors.azure.com`; already `Connected` connections skip consent.
-The callback is
-`https://<function-app-host>/runtime/webhooks/connector?functionName=OnUpdatedFile`.
-Rerun setup with `azd hooks run postdeploy`. Do not share or commit callback keys.
+No always-ready instance is configured by this webhook sample.
 
-Storage for the Functions runtime and deployment package remains required.
-It is not a Blob output destination: no `connector-messages` container is used.
-The worker's OpenTelemetry exporter explicitly uses `DefaultAzureCredential`:
-Application Insights disables local authentication, so the connection string
-alone is insufficient. In Azure, `AZURE_CLIENT_ID` selects the app's managed
-identity, which has Monitoring Metrics Publisher access.
+## Optional configuration
 
-## Verify
+Set environment options with `azd env set <name> <value>` before provisioning.
 
-Confirm that the Azure Blob connection is `Connected` and its `OnUpdatedFiles_V2`
-trigger is enabled in the Connector Namespaces portal. Upload or modify a blob
-in the monitored account's `connector-input` container:
+| Option | Use |
+| --- | --- |
+| `BLOB_CONTAINER_NAME` | Source container; defaults to `connector-input` |
+| `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
+| `APPLICATIONINSIGHTS_LOCATION` | Telemetry region override, for example `eastus2`, when the Functions region lacks Application Insights |
+| `azd hooks run postdeploy` | Rerun callback registration or consent |
+| `bash ./infra/scripts/postdeploy.sh` | Run the Bash alternative |
 
-```powershell
-az storage blob upload --auth-mode login --account-name <monitoredStorageAccountName> --container-name connector-input --name sample.txt --file <local-file> --overwrite
-```
+To use Bash automatically, set `shell: sh` and
+`run: bash ./infra/scripts/postdeploy.sh` in `azure.yaml`.
 
-Use the `monitoredStorageAccountName` deployment output, not the host storage
-account. Allow for the connector's source polling interval, then look for
-`Received OnUpdatedFile trigger` in Application Insights traces.
+The included `NuGet.config` supplies the public package feed.
 
 ## Local development
 
-Copy `local.settings.example.json` to the ignored `local.settings.json`, start
-Azurite, and use Core Tools v4 supporting .NET 10 to run `func start`.
-Webhook delivery requires a public HTTPS tunnel to the local Functions host and
-a trigger callback registered against that tunnel with its local connector
-system key. The deployed hook targets the deployed app, not localhost.
-Do not run the deployed hook to register a local callback.
+1. Prepare `local.settings.json`.
 
-For a local sample without tunnels, callback registration, or system keys, use
-the [standalone polling app](../polling/README.md). Polling of Azure Blob by the
-connector service is independent of webhook versus Poll delivery to Functions.
+   Use the file generated during successful `azd up`; existing files are preserved.
+   If missing, run `azd hooks run postdeploy` in the selected environment.
 
-See the [Azure Blob connector reference](https://learn.microsoft.com/connectors/azureblob/)
-and [operations mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md).
+2. Start Azurite in a separate terminal:
+
+   ```bash
+   azurite
+   ```
+
+3. Build and start the local function host:
+
+   ```bash
+   dotnet build
+   func start
+   ```
+
+4. Open a public HTTPS tunnel to the local host. Manually register its
+   `/runtime/webhooks/connector?functionName=OnUpdatedFile` callback using the local
+   host's `connector_extension` system key. See [trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md).
+
+The deployment hooks target Azure, not localhost. Use [polling](../polling/) to avoid tunnels.
+
+**Security:** never share or commit callback keys. Source access uses OAuth.
+
+After testing locally, rerun `azd hooks run postdeploy` to restore Azure delivery,
+then close the tunnel.
+
+## Verify
+
+Check the connection is **Connected** and its `OnUpdatedFiles_V2` trigger is
+**Enabled** in [Connector Namespaces](https://connectors.azure.com/).
+Upload or modify a blob **after consent**, using the `monitoredStorageAccountName`
+and `monitoredContainerName` deployment outputs:
+
+```bash
+az storage blob upload --auth-mode login --account-name <monitoredStorageAccountName> --container-name <monitoredContainerName> --name sample.txt --file <local-file> --overwrite
+```
+
+Look for `Received OnUpdatedFile trigger (N items)` in function logs or Application
+Insights. Allow time for source polling.
+
+Run `azd down --purge` from this folder to clean up.
+
+## More
+
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Azure Blob Storage connector reference](https://learn.microsoft.com/connectors/azureblob/)
+- [Trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)

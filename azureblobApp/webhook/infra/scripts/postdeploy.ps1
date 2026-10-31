@@ -15,7 +15,18 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 }
 
 # --- Read azd outputs --------------------------------------------------------
-$outputs = azd env get-values --output json | ConvertFrom-Json
+$raw = azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
+$outputs = ($raw -join "`n") | ConvertFrom-Json -ErrorAction Stop
+
+foreach ($name in @(
+    'resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
+    'functionAppName', 'functionAppDefaultHostname', 'monitoredStorageAccountName',
+    'AZURE_SUBSCRIPTION_ID')) {
+    if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) {
+        throw "Missing azd output $name. Run azd provision first."
+    }
+}
 
 $resourceGroupName        = $outputs.resourceGroupName
 $connectorNamespaceName   = $outputs.connectorNamespaceName
@@ -25,9 +36,69 @@ $functionAppHostname      = $outputs.functionAppDefaultHostname
 $subscriptionId           = $outputs.AZURE_SUBSCRIPTION_ID
 $monitoredStorageAccountName = $outputs.monitoredStorageAccountName
 
-if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $connectorNamespaceConnectionName -or -not $functionAppName) {
-    Write-Host "ERROR: required azd outputs missing. Run 'azd provision' first." -ForegroundColor Red
-    exit 1
+$localSettingsPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../local.settings.json'))
+if (Test-Path -LiteralPath $localSettingsPath) {
+    $item = Get-Item -LiteralPath $localSettingsPath -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        (-not $IsWindows -and [string]$item.UnixMode -notlike '-*')) {
+        throw 'local.settings.json must be a regular file.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+}
+else {
+    $settingsTemp = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N'))"
+    try {
+        $settings = @{
+            IsEncrypted = $false
+            Values = @{
+                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+            }
+        } | ConvertTo-Json -Depth 3
+        if ($IsWindows) {
+            $security = [Security.AccessControl.FileSecurity]::new()
+            $security.SetAccessRuleProtection($true, $false)
+            $security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+                [Security.Principal.WindowsIdentity]::GetCurrent().User,
+                [Security.AccessControl.FileSystemRights]::FullControl,
+                [Security.AccessControl.AccessControlType]::Allow))
+            $stream = [IO.FileSystemAclExtensions]::Create(
+                [IO.FileInfo]::new($settingsTemp), [IO.FileMode]::CreateNew,
+                [Security.AccessControl.FileSystemRights]::Write,
+                [IO.FileShare]::None, 4096, [IO.FileOptions]::None, $security)
+        }
+        else {
+            $options = [IO.FileStreamOptions]::new()
+            $options.Mode = [IO.FileMode]::CreateNew
+            $options.Access = [IO.FileAccess]::Write
+            $options.Share = [IO.FileShare]::None
+            $options.UnixCreateMode = [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite
+            $stream = [IO.FileStream]::new($settingsTemp, $options)
+        }
+        try {
+            $bytes = [Text.UTF8Encoding]::new($false).GetBytes($settings)
+            $stream.Write($bytes, 0, $bytes.Length)
+        }
+        finally {
+            $stream.Dispose()
+        }
+        $validated = [IO.File]::ReadAllText($settingsTemp) | ConvertFrom-Json -ErrorAction Stop
+        if ($validated.IsEncrypted -ne $false -or
+            $validated.Values.AzureWebJobsStorage -ne 'UseDevelopmentStorage=true' -or
+            $validated.Values.FUNCTIONS_WORKER_RUNTIME -ne 'dotnet-isolated') {
+            throw 'Invalid generated local settings.'
+        }
+        [IO.File]::Move($settingsTemp, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json using Azurite.'
+    }
+    catch {
+        throw "Could not prepare local.settings.json: $_"
+    }
+    finally {
+        if ([IO.File]::Exists($settingsTemp)) {
+            Remove-Item -LiteralPath $settingsTemp -Force -ErrorAction Stop
+        }
+    }
 }
 
 # --- Authorize the Azure Blob connection (OAuth consent) --------------------
@@ -123,18 +194,18 @@ $operationName = 'OnUpdatedFiles_V2'
 $triggerName   = "$connectorNamespaceConnectionName-$($functionName.ToLower())"
 $callbackUrl   = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName"
 $notifFile     = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-@{
-    callbackUrl = $callbackUrl
-    authentication = @{
-        type = "QueryString"
-        name = "code"
-        value = $connectorExtensionKey
-    }
-} | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-Write-Host "Creating trigger '$triggerName' for $functionName ($operationName)..." -ForegroundColor Yellow
-
 try {
+    @{
+        callbackUrl = $callbackUrl
+        authentication = @{
+            type = "QueryString"
+            name = "code"
+            value = $connectorExtensionKey
+        }
+    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline -ErrorAction Stop
+
+    Write-Host "Creating trigger '$triggerName' for $functionName ($operationName)..." -ForegroundColor Yellow
+
     az connector-namespace trigger delete `
         -g $resourceGroupName --namespace $connectorNamespaceName `
         -n $triggerName --yes 2>$null | Out-Null
