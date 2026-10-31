@@ -1,8 +1,4 @@
-// Grants the function app's user-assigned managed identity access to the
-// Dataverse (commondataservice) connection so it can call connector actions at
-// runtime (e.g. the ListDataverseRows HTTP function). The action authenticates
-// with DefaultAzureCredential + AZURE_CLIENT_ID, so it runs as the user-assigned
-// identity — this ACL must target that same principal.
+// Authorizes the user-assigned identity to receive and acknowledge Poll events.
 
 param connectorNamespaceName string
 param connectionName string

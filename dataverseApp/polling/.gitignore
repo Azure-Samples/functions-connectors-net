@@ -1,0 +1,6 @@
+.azure/
+local.settings.json
+bin/
+obj/
+infra/main.json
+.notification-details*.json
