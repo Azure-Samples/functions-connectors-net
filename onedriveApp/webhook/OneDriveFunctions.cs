@@ -33,13 +33,13 @@ public class OneDriveFunctions
     public void OnNewFile(
         [ConnectorTrigger] OneDriveForBusinessOnNewFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewFile trigger");
+        _logger.LogInformation("Received OnNewFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpdatedFile")]
     public void OnUpdatedFile(
         [ConnectorTrigger] OneDriveForBusinessOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _notif_files=()
-cleanup_notif_files() { for f in "${_notif_files[@]}"; do rm -f "$f"; done; }
+settings_temp=""
+cleanup_notif_files() {
+    for f in "${_notif_files[@]}"; do rm -f "$f"; done
+    if [ -n "$settings_temp" ]; then rm -f "$settings_temp"; fi
+}
 trap cleanup_notif_files EXIT
+
+if [ "$#" -ne 0 ]; then
+    echo "ERROR: Usage: bash postdeploy.sh" >&2
+    exit 1
+fi
 
 echo "Post-deployment configuration..."
 
@@ -16,7 +26,9 @@ if ! az extension show --name connector-namespace --query name -o tsv 2>/dev/nul
 fi
 
 # --- Read azd outputs --------------------------------------------------------
-eval "$(azd env get-values)"
+outputs="$(azd env get-values)" ||
+    { echo "ERROR: Could not read the selected azd environment." >&2; exit 1; }
+eval "$outputs"
 
 : "${resourceGroupName:?required azd output missing}"
 : "${connectorNamespaceName:?required azd output missing}"
@@ -25,6 +37,38 @@ eval "$(azd env get-values)"
 : "${functionAppDefaultHostname:?required azd output missing}"
 
 onedriveConnectionName="$connectorNamespaceConnectionName"
+
+settings_path="$SCRIPT_DIR/../../local.settings.json"
+if [ -e "$settings_path" ] || [ -L "$settings_path" ]; then
+    if [ ! -f "$settings_path" ]; then
+        echo "ERROR: local.settings.json must be a regular file, not a directory." >&2
+        exit 1
+    fi
+    echo "Existing local.settings.json preserved."
+else
+    command -v jq >/dev/null ||
+        { echo "ERROR: Install jq before generating local.settings.json." >&2; exit 1; }
+    settings_temp="$(mktemp "$(dirname "$settings_path")/.local-settings.XXXXXX")" ||
+        { echo "ERROR: Could not create temporary local settings file." >&2; exit 1; }
+    cp "$SCRIPT_DIR/../../local.settings.example.json" "$settings_temp" ||
+        { echo "ERROR: Could not copy the local settings template." >&2; exit 1; }
+    jq -es 'length == 1 and .[0] == {
+        IsEncrypted: false,
+        Values: {
+            AzureWebJobsStorage: "UseDevelopmentStorage=true",
+            FUNCTIONS_WORKER_RUNTIME: "dotnet-isolated"
+        }
+    }' "$settings_temp" >/dev/null ||
+        { echo "ERROR: Expected only local Azurite storage and the isolated worker runtime in the settings template." >&2; exit 1; }
+    mv -n "$settings_temp" "$settings_path" ||
+        { echo "ERROR: Could not move local settings into place." >&2; exit 1; }
+    if [ -e "$settings_temp" ]; then
+        echo "ERROR: local.settings.json appeared during generation; existing settings were not overwritten." >&2
+        exit 1
+    fi
+    settings_temp=""
+    echo "Created ignored local.settings.json for Azurite and the isolated worker."
+fi
 
 get_connection_status() {
     az connector-namespace connection show \
@@ -38,7 +82,7 @@ echo ""
 echo "Authorizing OneDrive for Business connection..."
 
 currentStatus="$(get_connection_status)"
-if [ "${currentStatus,,}" = "connected" ]; then
+if [ "$(printf '%s' "$currentStatus" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
     echo "   already Connected; skipping consent flow"
 else
     consentParameters="[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
@@ -93,7 +137,7 @@ else
             echo "   status: ${status:-?}"
             lastStatus="$status"
         fi
-        if [ "${status,,}" = "connected" ]; then
+        if [ "$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
             echo "   Connection authenticated"
             authorized=true
             break
@@ -137,7 +181,9 @@ create_trigger() {
     local parameters="$3"
     local triggerName="${onedriveConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
     local callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-    local notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
+    local notifFile
+    notifFile="$(mktemp)" ||
+        { echo "ERROR: Could not create temporary notification file." >&2; exit 1; }
     _notif_files+=("$notifFile")
     printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
 

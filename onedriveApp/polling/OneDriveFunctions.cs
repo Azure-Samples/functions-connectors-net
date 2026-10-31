@@ -47,7 +47,7 @@ public class OneDriveFunctions
             TriggerConfigName = "%OnNewFileTriggerConfigName%")]
         OneDriveForBusinessOnNewFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewFile trigger");
+        _logger.LogInformation("Received OnNewFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpdatedFile")]
@@ -58,6 +58,6 @@ public class OneDriveFunctions
             TriggerConfigName = "%OnUpdatedFileTriggerConfigName%")]
         OneDriveForBusinessOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

@@ -1,162 +1,153 @@
-# OneDrive for Business polling triggers (.NET)
+# OneDrive for Business Polling Triggers (.NET)
 
-Standalone Azure Functions sample using `DeliveryMode = Poll`. The host connects
-outbound to a Connector Namespace to receive and acknowledge events; it needs no
-public callback, function system key, or development tunnel.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
+and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector)
+with `DeliveryMode = Poll`. The host receives events outbound from the Connector
+Namespace; no public callback or tunnel is required. Each function logs the trigger
+name and, for typed batches, the item count (for example,
+`Received OnNewFile trigger (2 items)`).
 
-| Function | Connector operation | Payload |
+| Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewFileContent` | `OnNewFileV2` | `string` (raw JSON with file content) |
-| `OnUpdatedFileContent` | `OnUpdatedFileV2` | `string` (raw JSON with file content) |
-| `OnNewFile` | `OnNewFilesV2` | `OneDriveForBusinessOnNewFilesTriggerPayload` |
-| `OnUpdatedFile` | `OnUpdatedFilesV2` | `OneDriveForBusinessOnUpdatedFilesTriggerPayload` |
+| `OnNewFileContent` | [`OnNewFileV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created) | File created, including content |
+| `OnUpdatedFileContent` | [`OnUpdatedFileV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified) | File modified, including content |
+| `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created-(properties-only)) | File created (properties only) |
+| `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | File modified (properties only) |
 
-All four events shown by the OneDrive for Business connector are covered:
-file creation and modification, each with content or properties only.
-Content operations use raw JSON `string` bindings, as specified by the extension's
-operation mappings; properties-only operations use typed SDK payloads.
-The SDK 0.14.0-preview.1 trigger registry explicitly excludes binary-content
-triggers. `OnNewFileV2` and `OnUpdatedFileV2` have upstream response schemas
-`type: string, format: binary`, with file metadata in response headers; no SDK
-content-trigger payload class is available. Strong typing for those two events
-requires SDK support for the Connector Namespace binary callback envelope.
-All functions simply log that
-the trigger was received. No file content or metadata is logged or written to
-Blob Storage. Poll delivery is at least once, so duplicate log entries are
-possible. Production processing should be idempotent.
-
-The connector skips files larger than 50 MB for the content operations, and moving
-a file within OneDrive does not count as creating a new file.
+Properties-only events use typed SDK models. The SDK has no payload models for
+the binary-content events (`type: string, format: binary` upstream); those bind
+raw JSON as `string` and log only the trigger name, without parsing for a count.
+No item metadata, file content, or payload length is logged.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) for the hook on all platforms
-- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) for local Functions host storage
-- A OneDrive for Business account and permission to authorize the connection
-- The [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+,
+  and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
+- PowerShell 7 (default hook), or Bash with `jq` for the alternative hook.
+- For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
+  and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
+- A OneDrive for Business account and permission to complete OAuth consent.
+- [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
   ```powershell
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
   ```
 
-The sample uses connector extension `1.0.0`, which supports Poll delivery, and
-the typed payloads in `Azure.Connectors.Sdk`.
-`NuGet.config` supplies the public Azure Functions package feed so a copied sample
-does not depend on parent or machine-specific package sources.
+  Bash: `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh`.
 
 ## Deploy to Azure
 
-Run from this folder:
+Run from this folder, using a different environment name from the webhook sample.
+Use the **connector folder ID**, not a name/path; set `root` explicitly to monitor
+the root folder. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
 
 ```powershell
 az login
 azd auth login
 azd env new onedrive-polling
-azd env set ONEDRIVE_FOLDER_ID root
+azd env set ONEDRIVE_FOLDER_ID <connector-folder-id>
 azd up
 ```
 
-`ONEDRIVE_FOLDER_ID` defaults to `root`. To monitor another folder, set its
-connector folder identifier (not its display path) before provisioning. The
-namespace defaults to `westcentralus`; change it with
-`azd env set CONNECTOR_NAMESPACE_LOCATION <supported-region>`.
-Telemetry defaults to `eastus2`, because Application Insights is unavailable in
-`westcentralus`. Override only Application Insights/Log Analytics with
-`azd env set TELEMETRY_LOCATION <supported-region>`; this does not move the
-Function App or Connector Namespace.
+Complete OAuth in the browser opened by the hook and wait for **Connected**.
 
-Bicep provisions a resource group, .NET 10 Flex Consumption Function App,
-managed identity, storage account, Application Insights/Log Analytics, Connector
-Namespace, OneDrive connection, and four enabled `deliveryMode: 'Poll'` trigger
-configurations. It grants connection access separately to the namespace identity
-(source detection), Function App identity (receive/acknowledge), and developer
-identity (local receive/acknowledge). Storage is retained only for Functions
-runtime state and deployment artifacts.
+**Cost:** Four 2048 MB always-ready instances (one per function) incur ongoing
+baseline charges while idle to keep the Poll listeners running.
 
-**Hosting cost:** The polling template keeps one Flex Consumption always-ready
-instance for each enabled function (`function:onnewfilecontent`,
-`function:onupdatedfilecontent`, `function:onnewfile`, and
-`function:onupdatedfile`): four instances at 2048 MB each. This incurs ongoing
-baseline charges even while idle. It keeps listeners available for queued events;
-our deployed test did not drain these queues with the default scale-to-zero
-configuration. Remove the environment with `azd down --purge` when finished.
-The webhook sample does not enable always-ready instances.
+## Optional configuration
 
-The post-deploy hook opens OAuth consent and creates ignored
-`local.settings.json` if absent. Existing local settings are preserved.
-To repeat consent/setup:
+Set environment values with `azd env set <setting> <value>` before `azd up`.
 
-```powershell
-azd hooks run postdeploy
-```
-
-## Run locally
-
-Local development uses real Azure connector resources, not a OneDrive emulator.
-Use resources from `azd up`, or provision an isolated local environment without
-deploying function code:
-
-```powershell
-az login
-azd auth login
-azd env new onedrive-polling-local
-azd env set ONEDRIVE_FOLDER_ID root
-azd provision
-pwsh -File .\infra\scripts\postdeploy.ps1
-```
-
-The hook supplies the deployed polling endpoint and all four trigger-config names.
-Use `-ForceLocalSettings` to explicitly regenerate an existing settings file.
-Start Azurite separately, then run:
-
-```powershell
-dotnet build
-func start
-```
-
-Local listeners use the signed-in developer credentials. Do not copy Azure's
-`ConnectorNamespace__credential=managedidentity` or `__clientId` into local
-settings. A different developer needs a connection-level access policy.
-Do not run local and deployed listeners against the same trigger configuration
-when expecting every event locally: they are competing consumers.
-
-### Existing namespace
-
-Copy `local.settings.example.json` to ignored `local.settings.json`. Set the
-endpoint from the service-generated `pollingEndpoints.receiveUri`, not from a
-guessed hostname:
-
-| Receive URI | `ConnectorNamespace__pollingEndpoint` |
+| Setting / action | Use |
 | --- | --- |
-| `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
-| `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
+| `ONEDRIVE_FOLDER_ID` | Connector folder ID; defaults to `root` if omitted |
+| `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; default `westcentralus` |
+| `TELEMETRY_LOCATION` | Application Insights/Log Analytics region; default `eastus2` because Application Insights is unavailable in `westcentralus` |
+| Bash hook | In `azure.yaml`, set `shell: sh` and `run: bash ./infra/scripts/postdeploy.sh`; requires `jq` |
+| Rerun setup | `azd hooks run postdeploy`, or `bash ./infra/scripts/postdeploy.sh` |
+| Regenerate local settings | Run the PowerShell script with `-ForceLocalSettings`, or Bash with `--force-local-settings`; otherwise existing settings are preserved |
 
-Omit the operation path and query string. Set all four `*TriggerConfigName` values
-to existing enabled Poll trigger configs for the authorized OneDrive connection.
-`Connection = "ConnectorNamespace"` in the binding is a configuration prefix,
-not the connection resource name. Both the namespace and receiving identity need
-connection access policies. Poll trigger configs must not contain webhook
-`notificationDetails`.
+### Folder ID setup
 
-## Verify and clean up
+Resolve the ID through an authorized connection before provisioning. If you have none:
 
-Create a new file smaller than 50 MB, then modify it in the configured folder.
-Allow time for OneDrive source detection and inspect the function logs for
-`Received OnNewFileContent trigger`, `Received OnUpdatedFileContent trigger`,
-`Received OnNewFile trigger`, and `Received OnUpdatedFile trigger`.
-The sample does not create a `connector-messages` output container.
+1. Deploy the [webhook sample](../webhook/README.md) in a separate environment and complete OAuth/folder selection.
+2. From the webhook folder, read the selected folder ID:
+
+   ```powershell
+   azd env get-value ONEDRIVE_FOLDER_ID
+   ```
+
+3. Use that ID in the polling deployment commands above.
+
+When no longer needed, remove the selected bootstrap environment from the webhook folder:
 
 ```powershell
-az functionapp log tail -g <resource-group> -n <function-app>
 azd down --purge
 ```
 
-## References
+## Local development
 
-- [Connector trigger configuration and Poll delivery](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
-- [Operation-to-payload mappings](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#onedrive-for-business-connector)
-- [OneDrive for Business connector](https://learn.microsoft.com/connectors/onedriveforbusiness/)
+Requires real Azure connector resources.
+
+If the Function App is already deployed, stop it before running locally to avoid competing listeners.
+
+1. Prepare `local.settings.json`.
+
+   Use the ignored file generated during `azd up`, containing the endpoint and four config names.
+   Sign in as the authorized developer:
+
+   ```powershell
+   az login
+   ```
+
+   Only if the file is missing, run `azd hooks run postdeploy` from this folder's selected environment.
+   Existing files are preserved; see Optional configuration to regenerate changed settings.
+
+2. Start Azurite in a separate terminal:
+
+   ```powershell
+   azurite
+   ```
+
+3. Build and start the local host:
+
+   ```powershell
+   dotnet build
+   func start
+   ```
+
+Use developer credentials locally, not deployed managed-identity settings.
+
+## Verify
+
+Check the connection is **Connected** and all four triggers are **Enabled** in
+[Connector Namespaces](https://connectors.azure.com/).
+Create a file smaller than 50 MB and then modify it in the monitored folder.
+Allow time for connector detection and telemetry ingestion. In the deployed
+Application Insights resource, open **Logs** and run this query to check all four
+function names across instances:
+
+```kusto
+traces
+| where timestamp > ago(1h)
+| where message startswith "Received On"
+| project timestamp, message, cloud_RoleInstance
+| order by timestamp asc
+```
+
+See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data).
+After verification, clean up from this sample's selected environment:
+
+```powershell
+azd down --purge
+```
+
+Delivery is at least once; moving a file within OneDrive does not create a new-file
+event.
+
+## More
+
+- [Poll configuration and identity/endpoint setup](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#poll-delivery)
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#onedrive-for-business-connector)
+- [OneDrive for Business connector reference](https://learn.microsoft.com/connectors/onedriveforbusiness/)

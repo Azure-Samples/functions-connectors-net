@@ -4,6 +4,9 @@
 # for Business connection, browse folders interactively, and create Connector
 # Namespace trigger configs that POST to the Functions connector webhook URL.
 
+[CmdletBinding()]
+param()
+
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 
 # --- Pre-flight: verify the connector-namespace CLI extension is installed ----
@@ -14,7 +17,11 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 }
 
 # --- Read azd outputs --------------------------------------------------------
-$outputs = azd env get-values --output json | ConvertFrom-Json
+$rawOutputs = azd env get-values --output json
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not read the selected azd environment.'
+}
+$outputs = ($rawOutputs -join "`n") | ConvertFrom-Json -ErrorAction Stop
 
 $resourceGroupName      = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
@@ -27,6 +34,36 @@ $onedriveFolderId       = $outputs.ONEDRIVE_FOLDER_ID
 if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $onedriveConnectionName -or -not $functionAppName) {
     Write-Host "ERROR: required azd outputs missing. Run 'azd provision' first." -ForegroundColor Red
     exit 1
+}
+
+$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
+if (Test-Path -LiteralPath $localSettingsPath) {
+    if (-not (Test-Path -LiteralPath $localSettingsPath -PathType Leaf)) {
+        throw 'local.settings.json must be a regular file, not a directory.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+} else {
+    $settingsDirectory = Split-Path -Parent $localSettingsPath
+    $settingsTemp = Join-Path $settingsDirectory ".local-settings.$([Guid]::NewGuid().ToString('N'))"
+    try {
+        $template = Join-Path $settingsDirectory 'local.settings.example.json'
+        Copy-Item -LiteralPath $template -Destination $settingsTemp -ErrorAction Stop
+        $settings = Get-Content -LiteralPath $settingsTemp -Raw -ErrorAction Stop |
+            ConvertFrom-Json -ErrorAction Stop
+        if (@($settings.PSObject.Properties).Count -ne 2 -or
+            $settings.IsEncrypted -isnot [bool] -or $settings.IsEncrypted -or
+            @($settings.Values.PSObject.Properties).Count -ne 2 -or
+            $settings.Values.AzureWebJobsStorage -cne 'UseDevelopmentStorage=true' -or
+            $settings.Values.FUNCTIONS_WORKER_RUNTIME -cne 'dotnet-isolated') {
+            throw 'The webhook settings template must contain only local Azurite storage and the isolated worker runtime.'
+        }
+        [IO.File]::Move($settingsTemp, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json for Azurite and the isolated worker.'
+    } finally {
+        if (Test-Path -LiteralPath $settingsTemp) {
+            Remove-Item -LiteralPath $settingsTemp -ErrorAction Stop
+        }
+    }
 }
 
 function Select-FromList {
@@ -256,6 +293,9 @@ if (-not $onedriveFolderId) {
 }
 
 azd env set ONEDRIVE_FOLDER_ID $onedriveFolderId | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not save ONEDRIVE_FOLDER_ID in the selected azd environment. Trigger registration has not started.'
+}
 Write-Host "Saved ONEDRIVE_FOLDER_ID=$onedriveFolderId" -ForegroundColor Green
 
 # --- Create Connector Namespace trigger configs -----------------------------
@@ -324,7 +364,7 @@ Write-Host ""
 if ($triggerFailures.Count -eq 0) {
     Write-Host "Connector Namespace trigger configs created successfully." -ForegroundColor Green
 } else {
-    Write-Host "Some trigger configs failed: $($triggerFailures -join ', ')" -ForegroundColor Yellow
+    throw "Some trigger configs failed: $($triggerFailures -join ', ')"
 }
 
 Write-Host ""
