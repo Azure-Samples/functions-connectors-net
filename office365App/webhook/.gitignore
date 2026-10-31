@@ -2,6 +2,8 @@
 .env
 *.env
 local.settings.json
+.local-settings.*
+.local-settings-*.json
 **/[Bb]in/
 **/[Oo]bj/
 publish/

@@ -43,6 +43,43 @@ foreach ($name in @('resourceGroupName', 'connectorNamespaceName', 'connectorNam
     }
 }
 
+$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
+if (Test-Path -LiteralPath $localSettingsPath) {
+    if (-not (Test-Path -LiteralPath $localSettingsPath -PathType Leaf)) {
+        throw 'local.settings.json must be a regular file, not a directory.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+}
+else {
+    $settingsTemp = Join-Path $PSScriptRoot "../../.local-settings-$([Guid]::NewGuid().ToString('N')).json"
+    try {
+        $localSettings = @{
+            IsEncrypted = $false
+            Values = @{
+                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+                'AzureWebJobs.OnSharedMailboxNewEmail.Disabled' =
+                    ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)).ToString().ToLowerInvariant()
+            }
+        }
+        $settingsJson = $localSettings | ConvertTo-Json -Depth 4
+        [IO.File]::WriteAllText($settingsTemp, $settingsJson, [Text.UTF8Encoding]::new($false))
+        $validatedSettings = Get-Content -LiteralPath $settingsTemp -Raw | ConvertFrom-Json
+        if ($validatedSettings.IsEncrypted -ne $false -or
+            $null -eq $validatedSettings.Values -or
+            @($validatedSettings.Values.PSObject.Properties | Where-Object { $_.Value -isnot [string] }).Count -gt 0) {
+            throw 'Generated local settings are invalid.'
+        }
+        [IO.File]::Move($settingsTemp, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json for Azurite.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $settingsTemp) {
+            Remove-Item -LiteralPath $settingsTemp
+        }
+    }
+}
+
 # Fetch the connector extension system key
 if (-not $CallbackBaseUrl) {
     Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan

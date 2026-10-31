@@ -64,7 +64,7 @@ Set environment values before `azd up`. Six personal triggers are configured by 
 | `APPLICATION_INSIGHTS_LOCATION=eastus2` | Telemetry region override if the host region lacks Application Insights |
 | `OFFICE365_ENABLE_TRIGGERS=false` | Register disabled sources without waiting for consent; set `true` and run `azd up` to activate |
 | Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
-| `-ConsentLinkOnly` / `--consent-link-only` | Print consent link without opening a browser or waiting |
+| `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs, including callback updates |
 
 Empty address disables its listener and skips registration. When disabling an
 existing shared source, also disable/delete its namespace config; skipped resources
@@ -73,20 +73,50 @@ to your selection.
 
 ## Local development
 
-Copy `local.settings.example.json` to `local.settings.json`, start Azurite separately,
-then `dotnet build` and `func start --enableAuth`. Functions host/deployment storage
-is required. Expose port 7071 over public HTTPS and get the local
-`connector_extension` system key from Azurite's `azure-webjobs-secrets`:
+1. Prepare `local.settings.json`.
 
-```bash
-bash ./infra/scripts/postdeploy.sh \
-  --callback-base-url 'https://<tunnel-host>' \
-  --connector-extension-key '<local-key>'
-```
+   Use the file generated during successful `azd up`; existing files are preserved.
+   Only if it is missing, rerun:
 
-PowerShell supports equivalent `-CallbackBaseUrl` / `-ConnectorExtensionKey` options.
-These replace deployed callbacks; run `azd hooks run postdeploy` without overrides
-to restore Azure delivery. Enable the local shared listener only when configured.
+   ```bash
+   azd hooks run postdeploy
+   ```
+
+2. Start Azurite in a separate terminal.
+
+   ```bash
+   azurite
+   ```
+
+3. Build and start the local Functions host with authentication enabled.
+
+   ```bash
+   dotnet build
+   func start --enableAuth
+   ```
+
+4. Expose port 7071 over public HTTPS. Get the local `connector_extension`
+   system key from Azurite's `azure-webjobs-secrets`.
+
+5. From the webhook folder, sign in and register the tunnel callback using its
+   provisioned azd environment. This replaces deployed callbacks.
+
+   ```bash
+   az login
+   bash ./infra/scripts/postdeploy.sh \
+     --callback-base-url 'https://<tunnel-host>' \
+     --connector-extension-key '<local-key>'
+   ```
+
+   PowerShell supports equivalent `-CallbackBaseUrl` / `-ConnectorExtensionKey` options.
+
+6. When finished, restore Azure delivery without callback overrides.
+
+   ```bash
+   azd hooks run postdeploy
+   ```
+
+Functions host/deployment storage is required. Enable the local shared listener only when configured.
 Never commit keys, callback URLs, or local settings.
 
 ## Verify

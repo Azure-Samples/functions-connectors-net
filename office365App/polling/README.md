@@ -68,8 +68,8 @@ Set environment values before `azd up`. Six personal triggers are configured by 
 | `APPLICATION_INSIGHTS_LOCATION=eastus2` | Telemetry region override if the host region lacks Application Insights |
 | `OFFICE365_ENABLE_TRIGGERS=false` | Prepare disabled sources without waiting for consent; set `true` and reprovision to activate |
 | Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
-| `-ForceLocalSettings` / `--force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
-| `-ConsentLinkOnly` / `--consent-link-only` | Print consent link without opening a browser or waiting |
+| `pwsh ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` / `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
+| `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs |
 
 Empty address disables its listener and skips registration. When disabling an
 existing shared source, also disable/delete its namespace config; incremental
@@ -78,10 +78,36 @@ the selection locally.
 
 ## Local development
 
-Use a separate provisioned environment to avoid competing local/cloud listeners.
-Run `azd hooks run postdeploy` to generate local settings, start Azurite separately,
-then `dotnet build` and `func start`. Local credentials come from `az login`;
-do not copy cloud managed-identity settings locally. Functions host/deployment
+If the Function App is already deployed, stop it before running locally to avoid competing listeners.
+
+1. Prepare `local.settings.json`.
+
+   Use the file generated during successful `azd up`. Only if it is missing, rerun:
+
+   ```bash
+   azd hooks run postdeploy
+   ```
+
+2. Sign in with your developer account for local credentials.
+
+   ```bash
+   az login
+   ```
+
+3. Start Azurite in a separate terminal.
+
+   ```bash
+   azurite
+   ```
+
+4. Build and start the local Functions host.
+
+   ```bash
+   dotnet build
+   func start
+   ```
+
+Do not copy cloud managed-identity settings locally. Functions host/deployment
 storage is required. Never commit local settings.
 
 ## Verify

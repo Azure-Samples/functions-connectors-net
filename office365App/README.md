@@ -7,9 +7,6 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 | [Polling](polling/) | Functions polls the Connector Namespace | Outbound only; no tunnel |
 | [Webhook](webhook/) | Namespace calls the HTTPS callback | Public HTTPS tunnel |
 
-Both samples include seven non-deprecated triggers with typed SDK payloads and
-logging of trigger names and item counts only. Build and deploy from the selected
-folder using different azd environment names. See each README for trigger
-documentation, limitations, setup, and costs.
+Samples for Office 365 email and calendar triggers. See each sample's README for setup and supported triggers.
 
-Deprecated triggers are excluded. [License](../LICENSE).
+[License](../LICENSE).

@@ -41,6 +41,43 @@ trigger_state=$(jq -r '.office365TriggerState' <<<"$outputs")
 mail_folder=$(jq -r '.office365MailFolder' <<<"$outputs")
 calendar_id=$(jq -r '.office365CalendarId' <<<"$outputs")
 shared_mailbox=$(jq -r '.office365SharedMailboxAddress // ""' <<<"$outputs")
+umask 077
+settings_temp=""
+notification_file=""
+parameters_file=""
+cleanup() {
+  if [[ -n "$settings_temp" ]]; then rm -f -- "$settings_temp"; fi
+  if [[ -n "$notification_file" ]]; then rm -f -- "$notification_file"; fi
+  if [[ -n "$parameters_file" ]]; then rm -f -- "$parameters_file"; fi
+}
+trap cleanup EXIT
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+local_settings="$script_dir/../../local.settings.json"
+if [[ -e "$local_settings" || -L "$local_settings" ]]; then
+  [[ -f "$local_settings" ]] ||
+    { echo 'local.settings.json must be a regular file, not a directory.' >&2; exit 1; }
+  echo 'Existing local.settings.json preserved.'
+else
+  settings_temp=$(mktemp "$script_dir/../../.local-settings.XXXXXX") ||
+    { echo 'Could not create a temporary local settings file.' >&2; exit 1; }
+  jq -n --arg address "$shared_mailbox" '{
+    IsEncrypted: false,
+    Values: {
+      AzureWebJobsStorage: "UseDevelopmentStorage=true",
+      FUNCTIONS_WORKER_RUNTIME: "dotnet-isolated",
+      "AzureWebJobs.OnSharedMailboxNewEmail.Disabled": ($address == "" | tostring)
+    }
+  }' >"$settings_temp" ||
+    { echo 'Could not generate local.settings.json.' >&2; exit 1; }
+  jq -e '.IsEncrypted == false and (.Values | type == "object") and
+    all(.Values[]; type == "string")' "$settings_temp" >/dev/null ||
+    { echo 'Generated local settings are invalid.' >&2; exit 1; }
+  [[ ! -e "$local_settings" && ! -L "$local_settings" ]] &&
+    mv -n -- "$settings_temp" "$local_settings" && [[ ! -e "$settings_temp" ]] ||
+    { echo 'Could not create local.settings.json.' >&2; exit 1; }
+  settings_temp=""
+  echo 'Created ignored local.settings.json for Azurite.'
+fi
 if [[ -z "$callback_base_url" ]]; then
   connector_extension_key=$(az functionapp keys list -g "$resource_group" -n "$function_app" \
     --query systemKeys.connector_extension -o tsv)
@@ -49,14 +86,6 @@ if [[ -z "$callback_base_url" ]]; then
   callback_base_url="https://$(jq -r '.functionAppDefaultHostname' <<<"$outputs")"
 fi
 callback_base_url="${callback_base_url%/}"
-umask 077
-notification_file=""
-parameters_file=""
-cleanup() {
-  if [[ -n "$notification_file" ]]; then rm -f -- "$notification_file"; fi
-  if [[ -n "$parameters_file" ]]; then rm -f -- "$parameters_file"; fi
-}
-trap cleanup EXIT
 
 create_trigger() {
   local function_name=$1 operation=$2 description=$3 parameters=$4
