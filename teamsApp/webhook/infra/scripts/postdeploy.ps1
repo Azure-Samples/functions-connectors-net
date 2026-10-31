@@ -1,4 +1,9 @@
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Stop'
+& (Join-Path $PSScriptRoot 'validate-triggers.ps1')
+$additionalTriggers = @(
+    Get-Content (Join-Path $PSScriptRoot '../additional-triggers.json') -Raw | ConvertFrom-Json
+)
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     Write-Host "ERROR: The 'connector-namespace' Azure CLI extension is required." -ForegroundColor Red
@@ -7,7 +12,46 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 }
 
 # Outputs from azd
-$outputs = azd env get-values --output json | ConvertFrom-Json
+$rawOutputs = azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
+$outputs = ($rawOutputs -join "`n") | ConvertFrom-Json
+
+$localSettingsPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../local.settings.json'))
+if (Test-Path -LiteralPath $localSettingsPath) {
+    $item = Get-Item -LiteralPath $localSettingsPath -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'local.settings.json must be a regular file.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+}
+else {
+    $stagingPath = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N')).json"
+    try {
+        $localSettings = @{
+            IsEncrypted = $false
+            Values = @{
+                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+            }
+        }
+        [IO.File]::WriteAllText(
+            $stagingPath, ($localSettings | ConvertTo-Json -Depth 3),
+            [Text.UTF8Encoding]::new($false))
+        $stagedSettings = Get-Content -LiteralPath $stagingPath -Raw | ConvertFrom-Json
+        if ($stagedSettings.IsEncrypted -ne $false -or
+            $stagedSettings.Values.AzureWebJobsStorage -cne 'UseDevelopmentStorage=true' -or
+            $stagedSettings.Values.FUNCTIONS_WORKER_RUNTIME -cne 'dotnet-isolated') {
+            throw 'Generated local settings failed validation.'
+        }
+        [IO.File]::Move($stagingPath, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json for Azurite and the local Functions host.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -ErrorAction Stop
+        }
+    }
+}
 
 $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
@@ -59,7 +103,9 @@ function Get-ConnectionOverallStatus {
         -n $connectorNamespaceConnectionName `
         --query "properties.overallStatus" -o tsv 2>$null
 
-    if ($LASTEXITCODE -ne 0 -or -not $status) { return $null }
+    if ($LASTEXITCODE -ne 0 -or -not $status) {
+        throw 'Could not read the Teams connection status.'
+    }
     return $status
 }
 
@@ -99,6 +145,9 @@ if (-not $teamsGroupId -or -not $teamsChannelId) {
 # Fetch the connector extension system key
 Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
 $connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connectorExtensionKey)) {
+    throw 'Could not obtain the connector extension system key. Deploy the Function App before registering callbacks.'
+}
 
 function New-TriggerConfig {
     param(
@@ -110,7 +159,9 @@ function New-TriggerConfig {
 
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
     $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName"
-    $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
+    $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
+    ConvertTo-Json -InputObject @($Parameters) -Depth 30 -Compress |
+        Set-Content -LiteralPath $parametersFile -NoNewline
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     @{
         callbackUrl = $callbackUrl
@@ -133,7 +184,7 @@ function New-TriggerConfig {
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:teams}" `
             --operation-name $OperationName `
-            --parameters $parametersShorthand `
+            --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
             --description $Description `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
@@ -146,6 +197,7 @@ function New-TriggerConfig {
     }
     finally {
         Remove-Item $notifFile -ErrorAction SilentlyContinue
+        Remove-Item $parametersFile -ErrorAction SilentlyContinue
     }
 }
 
@@ -186,7 +238,15 @@ New-TriggerConfig `
         @{ name = "groupId"; value = $teamsGroupId }
     )
 
-Write-Host "All trigger configs created." -ForegroundColor Green
+foreach ($trigger in $additionalTriggers) {
+    New-TriggerConfig `
+        -FunctionName $trigger.functionName `
+        -OperationName $trigger.functionName `
+        -Description "Teams $($trigger.functionName) event" `
+        -Parameters @($trigger.parameters)
+}
+
+Write-Host "All selected trigger configs created." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Authorizing teams connection..." -ForegroundColor Yellow
@@ -203,18 +263,26 @@ else {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query "value[0].link" -o tsv 2>$null
 
-        if (($LASTEXITCODE -ne 0 -or -not $consentLink) -and $attempt -lt 5) {
+        if (-not $consentLink -or $consentLink -eq 'null') {
+            $consentLink = az connector-namespace connection list-consent-links `
+                -g $resourceGroupName --namespace $connectorNamespaceName `
+                --connection-name $connectorNamespaceConnectionName `
+                --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
+                --query "link" -o tsv 2>$null
+        }
+        if ($consentLink -and $consentLink -ne 'null') { break }
+        $consentLink = $null
+        if ($attempt -lt 5) {
             Write-Host "Consent link not ready yet. Retrying in 5 seconds..." -ForegroundColor Yellow
             Start-Sleep -Seconds 5
         }
     }
 
     if (-not $consentLink) {
-        Write-Host "Failed to generate a consent URL for the Teams connection." -ForegroundColor Red
-        exit 1
+        throw 'Could not obtain a Teams consent URL.'
     }
 
     Write-Host "Consent URL: $consentLink" -ForegroundColor Cyan
@@ -258,6 +326,6 @@ else {
 }
 
 Write-Host ""
-Write-Host "Done. All 4 Teams triggers are configured." -ForegroundColor Green
+Write-Host "Done. All selected Teams triggers are configured." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""

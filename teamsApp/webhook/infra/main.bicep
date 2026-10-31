@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Region for Application Insights and Log Analytics; may differ from the Function App region.')
+param telemetryLocation string = 'eastus2'
+
 metadata name = 'Azure Functions Teams Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
@@ -36,7 +39,7 @@ var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
 var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
 var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
 var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
-var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
+var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}-${telemetryLocation}'
 var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
 var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
 var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
@@ -58,7 +61,7 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   scope: rg
   params: {
     name: logAnalyticsName
-    location: location
+    location: telemetryLocation
     tags: tags
     dataRetention: 30
   }
@@ -79,7 +82,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: telemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
@@ -117,7 +120,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
     blobServices: {
       containers: [
         { name: deploymentStorageContainerName }
-        { name: 'connector-messages' }
       ]
     }
     roleAssignments: [
@@ -186,7 +188,6 @@ var allAppSettings = {
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  TEAMS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.teamsConnectionRuntimeUrl
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -225,7 +226,8 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
+      functionsRuntimeScaleMonitoringEnabled: false
     }
     configs: [
       {
