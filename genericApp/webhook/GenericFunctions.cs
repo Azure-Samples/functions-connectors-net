@@ -29,7 +29,6 @@ public class GenericFunctions
         [ConnectorTrigger] string payload)
     {
         _logger.LogInformation("OnGenericOffice365NewEmail (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 
     [Function("OnGenericAzureBlobUpdated")]
@@ -37,7 +36,6 @@ public class GenericFunctions
         [ConnectorTrigger] string payload)
     {
         _logger.LogInformation("OnGenericAzureBlobUpdated (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 
     [Function("OnGenericSharepointNewFile")]
@@ -45,7 +43,6 @@ public class GenericFunctions
         [ConnectorTrigger] string payload)
     {
         _logger.LogInformation("OnGenericSharepointNewFile (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 
     [Function("OnGenericTeamsChannelMessage")]
@@ -53,7 +50,6 @@ public class GenericFunctions
         [ConnectorTrigger] string payload)
     {
         _logger.LogInformation("OnGenericTeamsChannelMessage (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 
     [Function("OnGenericCustomConnectorEvent")]
@@ -61,6 +57,5 @@ public class GenericFunctions
         [ConnectorTrigger] string payload)
     {
         _logger.LogInformation("OnGenericCustomConnectorEvent (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 }

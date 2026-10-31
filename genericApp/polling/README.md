@@ -1,167 +1,101 @@
 # Generic Connector Polling Trigger (.NET)
 
-This standalone sample uses the untyped `ConnectorTrigger` binding with
-`DeliveryMode = Poll`. `OnGenericConnectorEvent` receives each event as a raw JSON
-`string` and logs only its function name and payload length. It neither
-deserializes the payload into an SDK model nor writes event data to Blob Storage.
-There is no `Azure.Connectors.Sdk` or Storage Blobs output package.
-
-The host connects outbound to a Connector Namespace to receive and acknowledge
-events. No callback URL, system key, or development tunnel is needed.
+`OnGenericConnectorEvent` receives raw JSON through `[ConnectorTrigger] string
+payload` with `DeliveryMode = Poll`, logging only the trigger name per invocation.
+Generic intentionally uses no SDK model. No public callback or
+tunnel is needed.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) and the
-  [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli)
-  to manage your connection and trigger configuration
-- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
-  for local Functions host storage
-- An Azure Connector Namespace, an authorized connection, and an enabled trigger
-  configuration with service `deliveryMode: "Poll"` for an operation that supports
-  Poll delivery
+Requires .NET 10 SDK, Functions Core Tools v4, Azure CLI, and Azurite for local storage.
+Use an existing authorized Connector Namespace connection and
+enabled Poll trigger configuration; this sample has no `azd` provisioning or
+postdeploy hooks. Follow the [Poll setup and access-policy guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#poll-delivery).
+Both the namespace identity and receiving developer/app identity need connection access.
 
-The sample deliberately does not choose a connector, operation, or authorization
-scheme. The generic binding does not make an arbitrary operation support polling.
-Configure the connection and operation-specific parameters according to your
-connector's reference. See the extension's
-[Poll registration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/poll-trigger-registration/SKILL.md)
-for trigger configuration requests and access policies.
+## Deploy to Azure
 
-Grant connection-level access policies to both the Connector Namespace identity
-that runs the upstream trigger and the identity that runs this sample (the
-signed-in developer locally or Function App managed identity in Azure).
-
-## Configure and run locally
-
-Run all commands from this folder (`genericApp\polling` in the sample collection):
-
-```powershell
-az login
-Copy-Item local.settings.example.json local.settings.json
-```
-
-In the ignored `local.settings.json`, replace these placeholders:
+Use an existing .NET 10 isolated Function App with host/deployment storage.
+Configure its settings:
 
 | Setting | Value |
 | --- | --- |
-| `ConnectorNamespace__pollingEndpoint` | Endpoint derived from the service-generated `pollingEndpoints.receiveUri` below |
-| `GenericTriggerConfigName` | The name of your existing enabled Poll trigger configuration |
+| `GenericTriggerConfigName` | Existing enabled Poll trigger configuration name |
+| `ConnectorNamespace__pollingEndpoint` | Base derived from its service `pollingEndpoints.receiveUri` |
+| `ConnectorNamespace__credential` | `managedidentity`; enable the app's identity and grant connection access |
+| `ConnectorNamespace__clientId` | User-assigned identity client ID; omit for system-assigned identity |
 
-| Service Receive URI | Polling endpoint setting |
-| --- | --- |
-| `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
-| `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
+Publish from this folder:
 
-Preserve the service-provided host and gateway ID. Do not include an operation
-path, query string, or standalone `/api` suffix in the setting.
-
-The binding is:
-
-```csharp
-[ConnectorTrigger(
-    DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
-    Connection = "ConnectorNamespace",
-    TriggerConfigName = "%GenericTriggerConfigName%")]
-string payload
-```
-
-`Connection` is an app-setting prefix, not the connector connection resource name.
-The trigger configuration selects the connector, operation, and parameters;
-the C# function name does not select them. The same handler can receive events
-from different connectors by pointing it at the corresponding trigger
-configuration. Use separate listeners/configurations to monitor multiple sources.
-This sample uses single-event invocation, not batching.
-
-Start Azurite in a separate terminal, then:
-
-```powershell
-dotnet build
-func start
-```
-
-The local developer credential is used when `ConnectorNamespace__credential` and
-identity selectors are omitted. Do not copy Azure managed-identity settings into
-local settings. There is no local emulator for the Connector Namespace: source
-events still require real Azure resources and a working connector connection.
-
-## Deploy to an existing Function App
-
-Create or use a .NET 10 isolated Function App with Functions host storage and the
-deployment storage required by its hosting plan. This sample includes no `azd`
-infrastructure because connector provisioning and authorization are scenario-specific.
-From this folder, publish with:
-
-```powershell
+```shell
+az login
 func azure functionapp publish <function-app-name>
 ```
 
-Configure these Function App settings separately; publishing does not upload
-`local.settings.json`:
+Local settings are not published. Use separate trigger configurations for separate
+delivery environments.
 
-| Setting | Value |
-| --- | --- |
-| `FUNCTIONS_WORKER_RUNTIME` | `dotnet-isolated` (where required by the hosting plan) |
-| `ConnectorNamespace__pollingEndpoint` | The endpoint used above |
-| `GenericTriggerConfigName` | Your Azure Poll trigger configuration name |
-| `ConnectorNamespace__credential` | `managedidentity` |
-| `ConnectorNamespace__clientId` | User-assigned managed identity client ID; omit for system-assigned identity |
+The retained Flex E2E setup uses **one billed always-ready
+instance**, including while idle ([pricing](https://azure.microsoft.com/pricing/details/functions/)):
 
-Enable the selected identity on the app and grant it a connection-level access
-policy. Retain the app's `AzureWebJobsStorage` configuration (or its
-identity-based `AzureWebJobsStorage__*` settings) and deployment storage. Azurite's
-`UseDevelopmentStorage=true` is only for local use. Optionally configure
-`APPLICATIONINSIGHTS_CONNECTION_STRING` for telemetry.
-For Microsoft Entra-authenticated telemetry, also set
-`APPLICATIONINSIGHTS_AUTHENTICATION_STRING` (for example `Authorization=AAD`).
-The worker exporter then uses `DefaultAzureCredential`; assign its identity the
-Monitoring Metrics Publisher role on Application Insights. For a user-assigned
-identity, set `AZURE_CLIENT_ID` to its client ID for worker credential selection.
-
-### Flex Consumption always-ready configuration
-
-For the retained E2E configuration, provision **one always-ready instance** for
-the enabled Poll function. This is a paid baseline even when no events arrive; it
-is intentionally persistent, not temporarily enabled and reverted after testing.
-Check [Flex Consumption pricing](https://azure.microsoft.com/pricing/details/functions/)
-before applying it. This is a hosting configuration, not a connector polling
-interval or a requirement for webhook delivery.
-
-Run the included helper with your own existing Flex Function App:
-
-```powershell
-.\infra\scripts\set-always-ready.ps1 `
-  -SubscriptionId <subscription-id> `
-  -ResourceGroupName <resource-group-name> `
-  -FunctionAppName <function-app-name>
+```shell
+az functionapp scale config always-ready set --subscription <subscription-id> --resource-group <resource-group> --name <function-app> --settings function:ongenericconnectorevent=1
+az functionapp scale config show --subscription <subscription-id> --resource-group <resource-group> --name <function-app> --query alwaysReady
 ```
 
-It uses Azure CLI to set and verify `function:ongenericconnectorevent=1`, without
-changing unrelated always-ready groups. This function-scoped setting starts the
-actual Poll listener; merely observing an HTTP/admin host running does not prove
-the Poll function is active. If you add more enabled Poll functions, account for
-their separate always-ready instance costs and configure each explicitly.
+## Optional configuration
 
-## Verify delivery
+| Option | Configuration |
+| --- | --- |
+| Verified always-ready setup | PowerShell 7: `infra/scripts/set-always-ready.ps1 -SubscriptionId <id> -ResourceGroupName <group> -FunctionAppName <app>`; retains the same paid instance |
+| Telemetry | Set `APPLICATIONINSIGHTS_CONNECTION_STRING` |
+| Entra telemetry | Also set `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`, grant Monitoring Metrics Publisher, and set `AZURE_CLIENT_ID` for a user-assigned identity; the worker uses `DefaultAzureCredential` |
 
-Cause an event for the configured connector operation and allow time for upstream
-polling. The logs should show `OnGenericConnectorEvent (generic API) trigger received.`
-and `Payload length: ... chars`. No event body or output blob is produced.
+## Local development
 
-Delivery is at least once. A successful invocation is acknowledged by the extension;
-failed invocations can be redelivered. This sample only logs and does not
-deduplicate. Raw `string` binding does not expose the Poll `MessageId`; use
-`ConnectorEvent<T>` if your application needs delivery metadata for idempotency.
+1. Prepare `local.settings.json`.
+   If absent, copy `local.settings.example.json`; otherwise preserve existing values.
+2. Set `GenericTriggerConfigName` and `ConnectorNamespace__pollingEndpoint`.
+   Derive the endpoint from the service's `pollingEndpoints.receiveUri`:
 
-Do not run local and deployed listeners against the same trigger configuration
-when expecting every event locally: they compete for messages. Use a separate
-configuration/environment for isolated testing.
+   | Receive URI | Endpoint setting |
+   | --- | --- |
+   | `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
+   | `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
 
-Remove resources created for testing using your provisioning method. Do not delete
-a shared namespace or connection used by other applications.
+   Preserve the host/gateway; omit operation paths and queries. The same rule
+   applies in Azure. `ConnectorNamespace` is a setting prefix, not a connection name.
+3. Omit managed-identity settings locally and sign in with your developer identity:
 
-## References
+   ```shell
+   az login
+   ```
 
-- [Connector trigger configuration and payload types](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
-- [Typed Office 365 polling sample](../../office365App/polling/README.md)
+4. Start Azurite for Functions storage. `UseDevelopmentStorage=true` is local only.
+
+If the Function App is already deployed, stop it before running locally to avoid competing listeners.
+Separate trigger configurations also provide isolated testing.
+
+5. Build and start from this folder:
+
+   ```shell
+   dotnet build
+   func start
+   ```
+
+## Verify
+
+Cause an event for your configured operation. The approved E2E example uses
+[Azure Blob add/modify (properties only) V2](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2));
+the handler itself remains connector-neutral. Expect `OnGenericConnectorEvent
+(generic API) trigger received.` for each invocation.
+
+Confirm a successful function invocation, not merely a running HTTP/admin host.
+Delivery is at least once; failures may be redelivered. This sample neither
+deduplicates nor exposes Poll `MessageId` metadata. Do not delete shared resources
+during cleanup.
+
+## More
+
+- [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
+- [Azure Blob source example reference](https://learn.microsoft.com/connectors/azureblob/)

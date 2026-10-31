@@ -1,120 +1,92 @@
 # Generic Connector Webhook Triggers (.NET)
 
-This standalone sample retains five untyped webhook handlers. Each uses
-`[ConnectorTrigger] string payload`, receives the raw JSON, and logs only its
-function name and payload length. No SDK model, payload serialization, Blob output
-binding, or Storage Blobs output package is used.
+Each handler receives raw JSON via `[ConnectorTrigger] string payload` and logs
+only the trigger name per invocation. Generic intentionally uses no SDK models.
+Function names route callbacks; they do not subscribe automatically.
 
-| Function | Example source |
+| Function | Example supported operation |
 | --- | --- |
-| `OnGenericOffice365NewEmail` | Office 365 email |
-| `OnGenericAzureBlobUpdated` | Azure Blob changes |
-| `OnGenericSharepointNewFile` | SharePoint files |
-| `OnGenericTeamsChannelMessage` | Teams channel messages |
+| `OnGenericOffice365NewEmail` | [New email (V3)](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-(v3)) |
+| `OnGenericAzureBlobUpdated` | [Blob added/modified, properties only (V2)](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)) |
+| `OnGenericSharepointNewFile` | [File created, properties only](https://learn.microsoft.com/connectors/sharepointonline/#when-a-file-is-created-(properties-only)) |
+| `OnGenericTeamsChannelMessage` | [New channel message](https://learn.microsoft.com/connectors/teams/#when-a-new-channel-message-is-added) |
 | `OnGenericCustomConnectorEvent` | Another supported connector operation |
 
-These names are routing destinations, **not automatically provisioned
-subscriptions**. Choose the supported operation and its parameters in your
-Connector Namespace trigger configuration. A function name alone does not select
-an operation. The custom handler is a generic destination, not a fictional custom
-connector resource.
+These are illustrative mappings, not provisioned resources or deprecated native
+webhook operations. Choose the supported operation and parameters in the Connector
+Namespace trigger configuration; generic binding only changes the C# payload type.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
-  for local Functions host storage
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) and the
-  [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli)
-- An Azure Connector Namespace with system-assigned identity enabled, an
-  authorized connection, and enabled webhook trigger configurations for the
-  operations you want to monitor
+Requires .NET 10 SDK, Functions Core Tools v4, Azure CLI, and Azurite for local storage.
+Use an existing Connector Namespace with system-assigned
+identity, authorized connection, and enabled webhook trigger configurations.
+There are no `azd` provisioning or postdeploy hooks. Follow the
+[webhook configuration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#webhook-delivery).
 
-The sample includes no `azd` infrastructure or authorization script because those
-depend on your chosen connector. Follow the extension's
-[Webhook registration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/webhook-trigger-registration/SKILL.md)
-for trigger configuration requests, callback authentication, and local tunnels.
+## Deploy to Azure
 
-## Run locally
+1. Publish from this folder to an existing .NET 10 isolated Function App:
 
-Run from this folder (`genericApp\webhook` in the sample collection):
+   ```shell
+   func azure functionapp publish <function-app-name>
+   ```
 
-```powershell
-Copy-Item local.settings.example.json local.settings.json
-dotnet build
-```
+   Retain Azure Functions host/deployment storage. Local settings are not published.
+2. Set each trigger's `notificationDetails.callbackUrl`:
 
-Start Azurite separately, then start the host:
+   ```text
+   https://<function-app-host>/runtime/webhooks/connector?functionName=<FunctionName>
+   ```
 
-```powershell
-func start
-```
+3. Set `notificationDetails.authentication` to `type: "QueryString"`, `name: "code"`,
+   and `value` equal to the host's `connector_extension` system key.
 
-For a local smoke test without an Azure source, post a synthetic JSON body directly
-to a handler:
+Keep the key separate from the stored callback URL and never commit keys.
+Use separate trigger configurations for separate delivery environments.
+No Poll endpoint or trigger-name app settings are required.
 
-```powershell
-Invoke-RestMethod -Method Post `
-  -Uri 'http://localhost:7071/runtime/webhooks/connector?functionName=OnGenericCustomConnectorEvent' `
-  -ContentType 'application/json' -Body '{"example":"event"}'
-```
+## Optional configuration
 
-Verify the corresponding function-name and payload-length log entries. This only
-checks local callback reception, not a real connector subscription.
+| Option | Configuration |
+| --- | --- |
+| Telemetry | Set `APPLICATIONINSIGHTS_CONNECTION_STRING` |
+| Entra telemetry | Also set `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`, grant Monitoring Metrics Publisher, and set `AZURE_CLIENT_ID` for a user-assigned identity; the worker uses `DefaultAzureCredential` |
 
-Actual connector delivery requires a public HTTPS callback. If exposing the host
-through a development tunnel, use `func start --enableAuth` and system-key
-authentication. Never expose an unauthenticated local webhook. Register the tunnel
-callback following the same authentication structure described below.
+## Local development
 
-## Deploy to an existing Function App
+1. Prepare `local.settings.json`.
+   If absent, copy `local.settings.example.json`; otherwise preserve existing values.
+2. Start Azurite for Functions storage. `UseDevelopmentStorage=true` is local only.
+3. Build and start from this folder for a local smoke check:
 
-Create or use a .NET 10 isolated Function App with Functions host storage and the
-deployment storage required by its hosting plan. From this folder:
+   ```shell
+   dotnet build
+   func start
+   ```
 
-```powershell
-func azure functionapp publish <function-app-name>
-```
+4. For real events, use a public HTTPS tunnel and restart the host with authentication:
 
-Retain the app's `AzureWebJobsStorage` (or identity-based
-`AzureWebJobsStorage__*`) configuration and deployment storage. Removing the Blob
-output binding does not remove these platform requirements. Do not use the local
-Azurite connection string in Azure. Optionally configure
-`APPLICATIONINSIGHTS_CONNECTION_STRING` for telemetry.
-For Microsoft Entra-authenticated telemetry, also set
-`APPLICATIONINSIGHTS_AUTHENTICATION_STRING` (for example `Authorization=AAD`).
-The worker exporter then uses `DefaultAzureCredential`; assign its identity the
-Monitoring Metrics Publisher role on Application Insights. For a user-assigned
-identity, set `AZURE_CLIENT_ID` to its client ID for worker credential selection.
+   ```shell
+   func start --enableAuth
+   ```
 
-For each source you enable, configure the Connector Namespace trigger's
-`notificationDetails.callbackUrl` as:
+5. Point a separate trigger configuration at the tunnel callback. Use the callback
+   path and authentication fields above, with the local host's `connector_extension`
+   system key.
 
-```text
-https://<function-app-host>/runtime/webhooks/connector?functionName=<FunctionName>
-```
+Never expose an unauthenticated webhook or replace a shared deployed callback for
+local testing.
 
-Set `notificationDetails.authentication` to `type: "QueryString"`, `name: "code"`,
-and `value` equal to the Function App's `connector_extension` **system key**.
-The Functions host creates that key when the extension loads. Keep it separate
-from the stored callback URL and never commit keys or real local settings.
+## Verify
 
-Webhook is the default binding mode when `DeliveryMode` is omitted. Do not add Poll
-endpoint or trigger-name settings: they are unnecessary for these webhook handlers.
-Webhook-only reception does not require the Function/developer identity to have
-connection access; code invoking connector actions would require it.
+Cause a real source event for each configured operation. Expect the corresponding
+handler's trigger-name log and successful callback. Retries may duplicate events; production
+processing should be idempotent. Do not delete shared resources during cleanup.
 
-## Verify delivery
+Use the [polling sample](../polling/README.md) for outbound delivery without a callback.
 
-Cause a source event for each operation you configured. Look for its handler name
-and `Payload length: ... chars` in local logs or Azure telemetry. The sample never
-logs payload content or produces output blobs. Only configured sources send
-events; the five handlers do not subscribe automatically.
+## More
 
-Retries may produce duplicate log entries. Production processing should be
-idempotent. Remove resources created for testing using your provisioning method,
-without deleting shared namespaces or connections.
-
-For outbound delivery without a public callback, use the separate
-[polling sample](../polling/README.md).
+- [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)

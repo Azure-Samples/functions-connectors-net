@@ -25,6 +25,5 @@ public class GenericFunctions
         string payload)
     {
         _logger.LogInformation("OnGenericConnectorEvent (generic API) trigger received.");
-        _logger.LogInformation("Payload length: {Length} chars", payload.Length);
     }
 }
