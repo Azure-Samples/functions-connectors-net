@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: functions-connectors-net-onedrive
+name: functions-connectors-net-onedrive-polling
 services:
   function-app:
     host: function

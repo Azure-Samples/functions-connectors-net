@@ -17,21 +17,29 @@ public class OneDriveFunctions
         _logger = logger;
     }
 
+    [Function("OnNewFileContent")]
+    public void OnNewFileContent([ConnectorTrigger] string payload)
+    {
+        _logger.LogInformation("Received OnNewFileContent trigger");
+    }
+
+    [Function("OnUpdatedFileContent")]
+    public void OnUpdatedFileContent([ConnectorTrigger] string payload)
+    {
+        _logger.LogInformation("Received OnUpdatedFileContent trigger");
+    }
+
     [Function("OnNewFile")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewFile(
+    public void OnNewFile(
         [ConnectorTrigger] OneDriveForBusinessOnNewFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewFile trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnNewFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpdatedFile")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnUpdatedFile(
+    public void OnUpdatedFile(
         [ConnectorTrigger] OneDriveForBusinessOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

@@ -11,8 +11,11 @@
   <Folder Name="/dataverseApp/">
     <Project Path="dataverseApp/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/onedriveApp/">
-    <Project Path="onedriveApp/functions-connectors-net.csproj" />
+  <Folder Name="/onedriveApp/polling/">
+    <Project Path="onedriveApp/polling/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/onedriveApp/webhook/">
+    <Project Path="onedriveApp/webhook/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/sharepointApp/polling/">
     <Project Path="sharepointApp/polling/functions-connectors-net.csproj" />
