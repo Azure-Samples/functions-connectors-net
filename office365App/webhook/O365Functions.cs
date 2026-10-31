@@ -22,47 +22,51 @@ public class O365Functions
     }
 
     [Function("OnNewEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewEmail(
+    public void OnNewEmail(
         [ConnectorTrigger] Office365OnNewEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnFlaggedEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnFlaggedEmail(
+    public void OnFlaggedEmail(
         [ConnectorTrigger] Office365OnFlaggedEmailTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnFlaggedEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnFlaggedEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewMentionMeEmail")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewMentionMeEmail(
+    public void OnNewMentionMeEmail(
         [ConnectorTrigger] Office365OnNewEmailMentioningMeTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewMentionMeEmail trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnNewMentionMeEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewCalendarEvent")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnNewCalendarEvent(
+    public void OnNewCalendarEvent(
         [ConnectorTrigger] Office365OnCalendarNewItemsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewCalendarEvent trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnNewCalendarEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnUpcomingEvent")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnUpcomingEvent(
+    public void OnUpcomingEvent(
         [ConnectorTrigger] Office365OnUpcomingEventsTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpcomingEvent trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnUpcomingEvent trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
+    }
+
+    [Function("OnSharedMailboxNewEmail")]
+    public void OnSharedMailboxNewEmail(
+        [ConnectorTrigger] Office365OnSharedMailboxNewEmailTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnSharedMailboxNewEmail trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
+    }
+
+    [Function("OnCalendarUpdatedItems")]
+    public void OnCalendarUpdatedItems(
+        [ConnectorTrigger] Office365OnCalendarUpdatedItemsTriggerPayload payload)
+    {
+        _logger.LogInformation("Received OnCalendarUpdatedItems trigger ({Count} items)", payload?.Body?.Value?.Count ?? 0);
     }
 }

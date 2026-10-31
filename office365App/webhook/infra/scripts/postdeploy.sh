@@ -1,187 +1,172 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_notif_files=()
-cleanup_notif_files() { for f in "${_notif_files[@]}"; do rm -f "$f"; done; }
-trap cleanup_notif_files EXIT
-
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-echo -e "${YELLOW}Post-deployment configuration...${NC}"
-
-if ! az extension show --name connector-namespace --query name -o tsv 2>/dev/null; then
-  echo -e "${RED}ERROR: The 'connector-namespace' Azure CLI extension is required.${NC}"
-  echo -e "${RED}Install: curl -fsSL https://aka.ms/connector-namespace-cli-install | sh${NC}"
+callback_base_url=""
+connector_extension_key=""
+consent_link_only=false
+while (( $# )); do
+  case "$1" in
+    --callback-base-url|--connector-extension-key)
+      (( $# >= 2 )) || { echo "Missing value for $1" >&2; exit 1; }
+      if [[ "$1" == --callback-base-url ]]; then callback_base_url=$2; else connector_extension_key=$2; fi
+      shift 2 ;;
+    --consent-link-only) consent_link_only=true; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+if [[ -n "$callback_base_url" && ( "$(printf '%s' "$callback_base_url" | tr '[:upper:]' '[:lower:]')" != https://* || -z "$connector_extension_key" ) ]]; then
+  echo 'Local callbacks require public HTTPS --callback-base-url and --connector-extension-key.' >&2
   exit 1
 fi
-
+if [[ -n "$connector_extension_key" && -z "$callback_base_url" ]]; then
+  echo '--callback-base-url is required with --connector-extension-key.' >&2
+  exit 1
+fi
+command -v jq >/dev/null || { echo 'jq is required for Bash setup.' >&2; exit 1; }
+az extension show --name connector-namespace --query name -o tsv >/dev/null ||
+  { echo 'Install the connector-namespace Azure CLI extension.' >&2; exit 1; }
 outputs=$(azd env get-values --output json)
-
-if ! command -v jq &> /dev/null; then
-  echo -e "${RED}Error: jq is required for this script. Please install jq.${NC}"
-  exit 1
-fi
-
-resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
-connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
-connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
-functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
-functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
-
-: "${functionAppDefaultHostname:?required azd output missing}"
-
-# Fetch the connector extension system key
-echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
-connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
-
-# --- Helper: create a trigger config on the Connector Namespace ---
-create_trigger_config() {
-  local functionName="$1"
-  local operationName="$2"
-  local description="$3"
-  local parametersShorthand="$4"
-
-  local triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
-  local callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-  local notifFile="${SCRIPT_DIR}/.notification-details.${RANDOM}.${RANDOM}.json"
-  _notif_files+=("$notifFile")
-  printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
-
-  echo -e "${CYAN}  Creating trigger: ${functionName} -> ${operationName}${NC}"
-
-  az connector-namespace trigger delete \
-    -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-    -n "${triggerName}" --yes 2>/dev/null || true
-
-  az connector-namespace trigger create \
-    -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-    -n "${triggerName}" \
-    --connection-details "{connectionName:${connectorNamespaceConnectionName},connectorName:office365}" \
-    --operation-name "${operationName}" \
-    --parameters "${parametersShorthand}" \
-    --notification-details "@${notifFile}" \
-    --description "${description}" \
-    --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${AZURE_SUBSCRIPTION_ID},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
-    -o none
-
-  rm -f "$notifFile"
+required=(resourceGroupName connectorNamespaceName connectorNamespaceConnectionName functionAppName
+  functionAppDefaultHostname AZURE_SUBSCRIPTION_ID office365MailFolder office365CalendarId office365TriggerState)
+for name in "${required[@]}"; do
+  jq -e --arg name "$name" '.[$name] | . != null and . != ""' <<<"$outputs" >/dev/null ||
+    { echo "Missing azd output $name. Run azd provision first." >&2; exit 1; }
+done
+resource_group=$(jq -r '.resourceGroupName' <<<"$outputs")
+namespace=$(jq -r '.connectorNamespaceName' <<<"$outputs")
+connection=$(jq -r '.connectorNamespaceConnectionName' <<<"$outputs")
+function_app=$(jq -r '.functionAppName' <<<"$outputs")
+subscription=$(jq -r '.AZURE_SUBSCRIPTION_ID' <<<"$outputs")
+trigger_state=$(jq -r '.office365TriggerState' <<<"$outputs")
+mail_folder=$(jq -r '.office365MailFolder' <<<"$outputs")
+calendar_id=$(jq -r '.office365CalendarId' <<<"$outputs")
+shared_mailbox=$(jq -r '.office365SharedMailboxAddress // ""' <<<"$outputs")
+umask 077
+settings_temp=""
+notification_file=""
+parameters_file=""
+cleanup() {
+  if [[ -n "$settings_temp" ]]; then rm -f -- "$settings_temp"; fi
+  if [[ -n "$notification_file" ]]; then rm -f -- "$notification_file"; fi
+  if [[ -n "$parameters_file" ]]; then rm -f -- "$parameters_file"; fi
 }
-
-# --- Create trigger configs for all 5 functions ---
-echo -e "${YELLOW}Creating Connector Namespace trigger configs...${NC}"
-
-create_trigger_config "OnNewEmail" "OnNewEmailV3" \
-  "When a new email arrives" \
-  "[{name:folderPath,value:'Inbox'},{name:importance,value:'High'}]"
-
-create_trigger_config "OnFlaggedEmail" "OnFlaggedEmailV4" \
-  "When an email is flagged" \
-  "[{name:folderPath,value:'Inbox'}]"
-
-create_trigger_config "OnNewMentionMeEmail" "OnNewMentionMeEmailV3" \
-  "When a new email mentioning me arrives" \
-  "[{name:folderPath,value:'Inbox'}]"
-
-create_trigger_config "OnNewCalendarEvent" "CalendarGetOnNewItemsV3" \
-  "When a new calendar event is created" \
-  "[{name:table,value:'Calendar'}]"
-
-create_trigger_config "OnUpcomingEvent" "OnUpcomingEventsV3" \
-  "When an upcoming event is starting soon" \
-  "[{name:table,value:'Calendar'}]"
-
-echo -e "${GREEN}✅ All trigger configs created.${NC}"
-
-echo ""
-echo -e "${YELLOW}Authorizing office365 connection...${NC}"
-
-currentStatus=$(az connector-namespace connection show \
-  -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-  -n "${connectorNamespaceConnectionName}" \
-  --query "properties.overallStatus" -o tsv 2>/dev/null || true)
-currentStatus=${currentStatus:-Unknown}
-
-if [[ "${currentStatus}" == "Connected" ]]; then
-  echo -e "${GREEN}Connection is already authorized.${NC}"
+trap cleanup EXIT
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+local_settings="$script_dir/../../local.settings.json"
+if [[ -e "$local_settings" || -L "$local_settings" ]]; then
+  [[ -f "$local_settings" ]] ||
+    { echo 'local.settings.json must be a regular file, not a directory.' >&2; exit 1; }
+  echo 'Existing local.settings.json preserved.'
 else
-  echo -e "${CYAN}-> A browser tab will open. Sign in with the mailbox account whose Inbox you want to monitor.${NC}"
-
-  consentLink=""
-  for attempt in 1 2 3 4 5; do
-    consentLink=$(az connector-namespace connection list-consent-links \
-      -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-      --connection-name "${connectorNamespaceConnectionName}" \
-      --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" \
-      --query "value[0].link" -o tsv 2>/dev/null || true)
-
-    if [[ -z "${consentLink}" || "${consentLink}" == "null" ]]; then
-      consentLink=$(az connector-namespace connection list-consent-links \
-        -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-        --connection-name "${connectorNamespaceConnectionName}" \
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" \
-        --query "link" -o tsv 2>/dev/null || true)
-    fi
-
-    if [[ -n "${consentLink}" && "${consentLink}" != "null" ]]; then
-      break
-    fi
-
-    if [[ "${attempt}" != "5" ]]; then
-      echo -e "${YELLOW}listConsentLinks attempt ${attempt} failed. Retrying in 5 seconds...${NC}"
-      sleep 5
-    fi
-  done
-
-  if [[ -z "${consentLink}" || "${consentLink}" == "null" ]]; then
-    echo -e "${RED}Failed to create consent link.${NC}"
-    exit 1
-  fi
-
-  echo -e "${CYAN}Consent URL: ${consentLink}${NC}"
-
-  if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "${consentLink}" >/dev/null 2>&1 || true
-  elif command -v open >/dev/null 2>&1; then
-    open "${consentLink}" >/dev/null 2>&1 || true
-  else
-    echo -e "${YELLOW}Unable to open a browser automatically. Paste the consent URL into your browser.${NC}"
-  fi
-
-  deadline=$((SECONDS + 300))
-  lastPrintedStatus="${currentStatus}"
-  echo -e "${CYAN}Connection status: ${currentStatus}${NC}"
-
-  while (( SECONDS < deadline )); do
-    sleep 3
-    currentStatus=$(az connector-namespace connection show \
-      -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-      -n "${connectorNamespaceConnectionName}" \
-      --query "properties.overallStatus" -o tsv 2>/dev/null || true)
-    currentStatus=${currentStatus:-Unknown}
-
-    if [[ "${currentStatus}" != "${lastPrintedStatus}" ]]; then
-      echo -e "${CYAN}Connection status: ${currentStatus}${NC}"
-      lastPrintedStatus="${currentStatus}"
-    fi
-
-    if [[ "${currentStatus}" == "Connected" ]]; then
-      break
-    fi
-  done
-
-  if [[ "${currentStatus}" != "Connected" ]]; then
-    echo -e "${RED}Timed out waiting for the connection to reach Connected status.${NC}"
-    exit 1
-  fi
+  settings_temp=$(mktemp "$script_dir/../../.local-settings.XXXXXX") ||
+    { echo 'Could not create a temporary local settings file.' >&2; exit 1; }
+  jq -n --arg address "$shared_mailbox" '{
+    IsEncrypted: false,
+    Values: {
+      AzureWebJobsStorage: "UseDevelopmentStorage=true",
+      FUNCTIONS_WORKER_RUNTIME: "dotnet-isolated",
+      "AzureWebJobs.OnSharedMailboxNewEmail.Disabled": ($address == "" | tostring)
+    }
+  }' >"$settings_temp" ||
+    { echo 'Could not generate local.settings.json.' >&2; exit 1; }
+  jq -e '.IsEncrypted == false and (.Values | type == "object") and
+    all(.Values[]; type == "string")' "$settings_temp" >/dev/null ||
+    { echo 'Generated local settings are invalid.' >&2; exit 1; }
+  [[ ! -e "$local_settings" && ! -L "$local_settings" ]] &&
+    mv -n -- "$settings_temp" "$local_settings" && [[ ! -e "$settings_temp" ]] ||
+    { echo 'Could not create local.settings.json.' >&2; exit 1; }
+  settings_temp=""
+  echo 'Created ignored local.settings.json for Azurite.'
 fi
+if [[ -z "$callback_base_url" ]]; then
+  connector_extension_key=$(az functionapp keys list -g "$resource_group" -n "$function_app" \
+    --query systemKeys.connector_extension -o tsv)
+  [[ -n "$connector_extension_key" && "$connector_extension_key" != null ]] ||
+    { echo 'Could not retrieve connector_extension system key. Deploy the function first.' >&2; exit 1; }
+  callback_base_url="https://$(jq -r '.functionAppDefaultHostname' <<<"$outputs")"
+fi
+callback_base_url="${callback_base_url%/}"
 
-echo ""
-echo -e "${GREEN}✅ Done. All 5 Office 365 triggers are configured.${NC}"
-echo -e "${GREEN}   Tail logs:  az functionapp log tail -g ${resourceGroupName} -n ${functionAppName}${NC}"
-echo ""
+create_trigger() {
+  local function_name=$1 operation=$2 description=$3 parameters=$4
+  notification_file=$(mktemp)
+  parameters_file=$(mktemp)
+  jq -n --arg url "$callback_base_url/runtime/webhooks/connector?functionName=$function_name" \
+    --arg key "$connector_extension_key" \
+    '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' >"$notification_file"
+  printf '%s' "$parameters" >"$parameters_file"
+  echo "Creating trigger: $function_name -> $operation"
+  az connector-namespace trigger create -g "$resource_group" --namespace "$namespace" \
+    -n "$connection-$(printf '%s' "$function_name" | tr '[:upper:]' '[:lower:]')" \
+    --connection-details "{connectionName:$connection,connectorName:office365}" \
+    --operation-name "$operation" --state "$trigger_state" \
+    --parameters "@$parameters_file" --notification-details "@$notification_file" \
+    --description "$description" \
+    --metadata "{destinationType:functionApp,functionAppName:$function_app,functionAppResourceGroup:$resource_group,functionAppSubscriptionId:$subscription,functionName:$function_name,recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
+    -o none
+  cleanup
+  notification_file=""
+  parameters_file=""
+}
+mail_parameters=$(jq -nc --arg folder "$mail_folder" '[{name:"folderPath",value:$folder}]')
+calendar_parameters=$(jq -nc --arg id "$calendar_id" '[{name:"table",value:$id}]')
+create_trigger OnNewEmail OnNewEmailV3 'When a new email arrives' "$mail_parameters"
+create_trigger OnFlaggedEmail OnFlaggedEmailV4 'When an email is flagged' "$mail_parameters"
+create_trigger OnNewMentionMeEmail OnNewMentionMeEmailV3 'When a new email mentioning me arrives' "$mail_parameters"
+create_trigger OnNewCalendarEvent CalendarGetOnNewItemsV3 'When a new calendar event is created' "$calendar_parameters"
+create_trigger OnUpcomingEvent OnUpcomingEventsV3 'When an upcoming event is starting soon' "$calendar_parameters"
+create_trigger OnCalendarUpdatedItems CalendarGetOnUpdatedItemsV3 'When an event is modified (V3)' "$calendar_parameters"
+if [[ -n "$shared_mailbox" ]]; then
+  shared_parameters=$(jq -nc --arg address "$shared_mailbox" \
+    --arg folder "$(jq -r '.office365SharedMailboxFolderId // ""' <<<"$outputs")" \
+    '[{name:"mailboxAddress",value:$address},{name:"folderId",value:$folder}]')
+  create_trigger OnSharedMailboxNewEmail SharedMailboxOnNewEmailV2 'When a new email arrives in a shared mailbox (V2)' "$shared_parameters"
+else
+  echo 'Shared mailbox trigger is disabled. Set OFFICE365_SHARED_MAILBOX_ADDRESS and re-run azd up to enable it.'
+fi
+connection_status() {
+  az connector-namespace connection show -g "$resource_group" --namespace "$namespace" \
+    -n "$connection" --query properties.overallStatus -o tsv
+}
+status=$(connection_status)
+if [[ "$status" == Connected ]]; then
+  echo 'Office 365 connection is already authorized.'
+  exit 0
+fi
+consent_link=""
+for attempt in 1 2 3 4 5; do
+  consent_link=$(az connector-namespace connection list-consent-links \
+    -g "$resource_group" --namespace "$namespace" --connection-name "$connection" \
+    --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
+    --query 'value[0].link' -o tsv 2>/dev/null) || consent_link=""
+  if [[ -z "$consent_link" || "$consent_link" == null ]]; then
+    consent_link=$(az connector-namespace connection list-consent-links \
+      -g "$resource_group" --namespace "$namespace" --connection-name "$connection" \
+      --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
+      --query link -o tsv 2>/dev/null) || consent_link=""
+  fi
+  [[ -n "$consent_link" && "$consent_link" != null ]] && break
+  if (( attempt < 5 )); then sleep 5; fi
+done
+[[ -n "$consent_link" && "$consent_link" != null ]] ||
+  { echo 'Could not obtain an Office 365 consent link.' >&2; exit 1; }
+echo "Consent URL: $consent_link"
+if [[ "$consent_link_only" == true || "$trigger_state" == Disabled ]]; then exit 0; fi
+if command -v xdg-open >/dev/null; then
+  xdg-open "$consent_link" >/dev/null 2>&1 || echo 'Open the consent URL in your browser.'
+elif command -v open >/dev/null; then
+  open "$consent_link" >/dev/null 2>&1 || echo 'Open the consent URL in your browser.'
+else
+  echo 'Open the consent URL in your browser.'
+fi
+deadline=$((SECONDS + 300))
+while (( SECONDS < deadline )); do
+  sleep 3
+  status=$(connection_status)
+  if [[ "$status" == Connected ]]; then
+    echo 'Office 365 connection authorized. Triggers are configured (shared mailbox is opt-in).'
+    exit 0
+  fi
+done
+echo 'Timed out waiting for the Office 365 connection to become Connected.' >&2
+exit 1

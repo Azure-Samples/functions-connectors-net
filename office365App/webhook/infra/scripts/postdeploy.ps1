@@ -1,6 +1,7 @@
 param(
     [string] $CallbackBaseUrl,
-    [string] $ConnectorExtensionKey
+    [string] $ConnectorExtensionKey,
+    [switch] $ConsentLinkOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +33,52 @@ $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
 $functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
+$mailFolder = $outputs.office365MailFolder
+$calendarId = $outputs.office365CalendarId
+foreach ($name in @('resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
+    'functionAppName', 'functionAppDefaultHostname', 'AZURE_SUBSCRIPTION_ID',
+    'office365MailFolder', 'office365CalendarId', 'office365TriggerState')) {
+    if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) {
+        throw "Missing azd output $name. Run azd provision first."
+    }
+}
+
+$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
+if (Test-Path -LiteralPath $localSettingsPath) {
+    if (-not (Test-Path -LiteralPath $localSettingsPath -PathType Leaf)) {
+        throw 'local.settings.json must be a regular file, not a directory.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+}
+else {
+    $settingsTemp = Join-Path $PSScriptRoot "../../.local-settings-$([Guid]::NewGuid().ToString('N')).json"
+    try {
+        $localSettings = @{
+            IsEncrypted = $false
+            Values = @{
+                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+                'AzureWebJobs.OnSharedMailboxNewEmail.Disabled' =
+                    ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)).ToString().ToLowerInvariant()
+            }
+        }
+        $settingsJson = $localSettings | ConvertTo-Json -Depth 4
+        [IO.File]::WriteAllText($settingsTemp, $settingsJson, [Text.UTF8Encoding]::new($false))
+        $validatedSettings = Get-Content -LiteralPath $settingsTemp -Raw | ConvertFrom-Json
+        if ($validatedSettings.IsEncrypted -ne $false -or
+            $null -eq $validatedSettings.Values -or
+            @($validatedSettings.Values.PSObject.Properties | Where-Object { $_.Value -isnot [string] }).Count -gt 0) {
+            throw 'Generated local settings are invalid.'
+        }
+        [IO.File]::Move($settingsTemp, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json for Azurite.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $settingsTemp) {
+            Remove-Item -LiteralPath $settingsTemp
+        }
+    }
+}
 
 # Fetch the connector extension system key
 if (-not $CallbackBaseUrl) {
@@ -56,46 +103,45 @@ function New-TriggerConfig {
     $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
     $callbackUrl = "$CallbackBaseUrl/runtime/webhooks/connector?functionName=$FunctionName"
     $connectionDetails = "{connectionName:$connectorNamespaceConnectionName,connectorName:office365}"
-    $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-    @{
-        callbackUrl = $callbackUrl
-        authentication = @{
-            type = "QueryString"
-            name = "code"
-            value = $ConnectorExtensionKey
-        }
-    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-    Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
-
+    $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
     try {
-        az connector-namespace trigger delete `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            -n $triggerName --yes 2>$null | Out-Null
+        ConvertTo-Json -InputObject @($Parameters) -Depth 4 |
+            Set-Content -LiteralPath $parametersFile -NoNewline
+        @{
+            callbackUrl = $callbackUrl
+            authentication = @{
+                type = "QueryString"
+                name = "code"
+                value = $ConnectorExtensionKey
+            }
+        } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
+
+        Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
 
         az connector-namespace trigger create `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
             --connection-details $connectionDetails `
             --operation-name $OperationName `
-            --parameters $parametersShorthand `
+            --state $outputs.office365TriggerState `
+            --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
             --description $Description `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
             -o none | Out-Null
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
-            exit 1
+            throw "Failed to create trigger config for $FunctionName."
         }
     }
     finally {
         Remove-Item $notifFile -ErrorAction SilentlyContinue
+        Remove-Item $parametersFile -ErrorAction SilentlyContinue
     }
 }
 
-# --- Create trigger configs for all 5 functions ---
+# Polling source operations can also deliver through a namespace webhook callback.
 Write-Host "Creating Connector Namespace trigger configs..." -ForegroundColor Yellow
 
 New-TriggerConfig `
@@ -103,8 +149,7 @@ New-TriggerConfig `
     -OperationName "OnNewEmailV3" `
     -Description "When a new email arrives" `
     -Parameters @(
-        @{ name = "folderPath"; value = "Inbox" }
-        @{ name = "importance"; value = "High" }
+        @{ name = "folderPath"; value = $mailFolder }
     )
 
 New-TriggerConfig `
@@ -112,7 +157,7 @@ New-TriggerConfig `
     -OperationName "OnFlaggedEmailV4" `
     -Description "When an email is flagged" `
     -Parameters @(
-        @{ name = "folderPath"; value = "Inbox" }
+        @{ name = "folderPath"; value = $mailFolder }
     )
 
 New-TriggerConfig `
@@ -120,7 +165,7 @@ New-TriggerConfig `
     -OperationName "OnNewMentionMeEmailV3" `
     -Description "When a new email mentioning me arrives" `
     -Parameters @(
-        @{ name = "folderPath"; value = "Inbox" }
+        @{ name = "folderPath"; value = $mailFolder }
     )
 
 New-TriggerConfig `
@@ -128,7 +173,7 @@ New-TriggerConfig `
     -OperationName "CalendarGetOnNewItemsV3" `
     -Description "When a new calendar event is created" `
     -Parameters @(
-        @{ name = "table"; value = "Calendar" }
+        @{ name = "table"; value = $calendarId }
     )
 
 New-TriggerConfig `
@@ -136,8 +181,27 @@ New-TriggerConfig `
     -OperationName "OnUpcomingEventsV3" `
     -Description "When an upcoming event is starting soon" `
     -Parameters @(
-        @{ name = "table"; value = "Calendar" }
+        @{ name = "table"; value = $calendarId }
     )
+
+New-TriggerConfig `
+    -FunctionName "OnCalendarUpdatedItems" `
+    -OperationName "CalendarGetOnUpdatedItemsV3" `
+    -Description "When an event is modified (V3)" `
+    -Parameters @(@{ name = "table"; value = $calendarId })
+
+if (-not [string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)) {
+    New-TriggerConfig `
+        -FunctionName "OnSharedMailboxNewEmail" `
+        -OperationName "SharedMailboxOnNewEmailV2" `
+        -Description "When a new email arrives in a shared mailbox (V2)" `
+        -Parameters @(
+            @{ name = "mailboxAddress"; value = $outputs.office365SharedMailboxAddress }
+            @{ name = "folderId"; value = $outputs.office365SharedMailboxFolderId }
+        )
+} else {
+    Write-Host 'Shared mailbox trigger is disabled. Set OFFICE365_SHARED_MAILBOX_ADDRESS and re-run azd up to enable it.'
+}
 
 Write-Host "All trigger configs created." -ForegroundColor Green
 
@@ -148,25 +212,24 @@ $currentStatus = az connector-namespace connection show `
     -g $resourceGroupName --namespace $connectorNamespaceName `
     -n $connectorNamespaceConnectionName `
     --query "properties.overallStatus" -o tsv
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Office 365 connection status.' }
 
 if ($currentStatus -eq "Connected") {
     Write-Host "Connection is already authorized." -ForegroundColor Green
 } else {
-    Write-Host "-> A browser tab will open. Sign in with the mailbox account whose Inbox you want to monitor." -ForegroundColor Cyan
-
     $consentLink = $null
     for ($attempt = 1; $attempt -le 5; $attempt++) {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query "value[0].link" -o tsv 2>$null
 
         if (-not $consentLink -or $consentLink -eq "null") {
             $consentLink = az connector-namespace connection list-consent-links `
                 -g $resourceGroupName --namespace $connectorNamespaceName `
                 --connection-name $connectorNamespaceConnectionName `
-                --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+                --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
                 --query "link" -o tsv 2>$null
         }
 
@@ -186,7 +249,9 @@ if ($currentStatus -eq "Connected") {
     }
 
     Write-Host "Consent URL: $consentLink" -ForegroundColor Cyan
+    if ($ConsentLinkOnly -or $outputs.office365TriggerState -eq 'Disabled') { return }
 
+    Write-Host "Sign in with the mailbox account to monitor." -ForegroundColor Cyan
     try {
         Start-Process $consentLink | Out-Null
     } catch {
@@ -203,6 +268,7 @@ if ($currentStatus -eq "Connected") {
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $connectorNamespaceConnectionName `
             --query "properties.overallStatus" -o tsv
+        if ($LASTEXITCODE -ne 0) { throw 'Could not read the Office 365 connection status.' }
 
         if ($currentStatus -ne $lastPrintedStatus) {
             Write-Host "Connection status: $currentStatus" -ForegroundColor Cyan
@@ -221,6 +287,6 @@ if ($currentStatus -eq "Connected") {
 }
 
 Write-Host ""
-Write-Host "Done. All 5 Office 365 triggers are configured." -ForegroundColor Green
+Write-Host "Done. Office 365 triggers are configured (shared mailbox is opt-in)." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""

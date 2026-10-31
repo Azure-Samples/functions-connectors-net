@@ -4,16 +4,9 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 
 | Sample | Delivery | Local development |
 | --- | --- | --- |
-| [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS tunnel required for real events |
-| [Polling](polling/) | Function host receives events by polling the namespace | Outbound connection only; no tunnel required |
+| [Polling](polling/) | Functions polls the Connector Namespace | Outbound only; no tunnel |
+| [Webhook](webhook/) | Namespace calls the HTTPS callback | Public HTTPS tunnel |
 
-Both samples demonstrate new email, flagged email, email mentioning you, new
-calendar event, and upcoming event triggers, writing their payloads to Blob Storage.
+Samples for Office 365 email and calendar triggers. See each sample's README for setup and supported triggers.
 
-Each folder contains its own project, infrastructure, scripts, configuration
-templates, license, and setup instructions. Build, run, and deploy from the selected
-folder, not this directory. Either folder's contents can be copied into an
-independent repository without any dependencies on this collection.
-
-Use different azd environment names for the two samples to keep deployments
-independent. See each sample's README for prerequisites and local setup.
+[License](../LICENSE).

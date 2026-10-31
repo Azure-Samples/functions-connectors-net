@@ -1,4 +1,7 @@
-param([switch] $ForceLocalSettings)
+param(
+    [switch] $ForceLocalSettings,
+    [switch] $ConsentLinkOnly
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -31,13 +34,16 @@ $localValues = @{
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
 }
 foreach ($functionName in @(
-    'OnNewEmail', 'OnFlaggedEmail', 'OnNewMentionMeEmail', 'OnNewCalendarEvent', 'OnUpcomingEvent')) {
+    'OnNewEmail', 'OnFlaggedEmail', 'OnNewMentionMeEmail', 'OnNewCalendarEvent', 'OnUpcomingEvent',
+    'OnCalendarUpdatedItems', 'OnSharedMailboxNewEmail')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing trigger configuration setting $setting."
     }
     $localValues[$setting] = $triggerSettings.$setting
 }
+$localValues['AzureWebJobs.OnSharedMailboxNewEmail.Disabled'] =
+    ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)).ToString().ToLowerInvariant()
 
 $localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
 if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
@@ -72,14 +78,14 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
     $consentLink = az connector-namespace connection list-consent-links `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
         --connection-name $outputs.connectorNamespaceConnectionName `
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
         --query 'value[0].link' -o tsv 2>$null
 
     if (-not $consentLink -or $consentLink -eq 'null') {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
             --connection-name $outputs.connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query 'link' -o tsv 2>$null
     }
     if ($consentLink -and $consentLink -ne 'null') { break }
@@ -91,6 +97,7 @@ if (-not $consentLink -or $consentLink -eq 'null') {
 }
 
 Write-Host "Consent URL: $consentLink"
+if ($ConsentLinkOnly -or $outputs.office365TriggerState -eq 'Disabled') { return }
 try {
     Start-Process $consentLink | Out-Null
 } catch {
@@ -101,7 +108,7 @@ $deadline = (Get-Date).AddMinutes(5)
 do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'Office 365 connection authorized. All five Poll trigger configurations are provisioned.'
+        Write-Host 'Office 365 connection authorized. Poll trigger configurations are provisioned (shared mailbox is opt-in).'
         return
     }
 } while ((Get-Date) -lt $deadline)
