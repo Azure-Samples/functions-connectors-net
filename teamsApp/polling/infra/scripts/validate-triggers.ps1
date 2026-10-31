@@ -16,7 +16,7 @@ $requiredParameters = @{
 }
 $seenOperations = @{}
 foreach ($trigger in $triggers) {
-    if (-not $requiredParameters.ContainsKey($trigger.functionName) -or $seenOperations.ContainsKey($trigger.functionName)) {
+    if ($requiredParameters.Keys -cnotcontains $trigger.functionName -or $seenOperations.ContainsKey($trigger.functionName)) {
         throw "Unsupported or duplicate additional event: $($trigger.functionName)"
     }
     $seenOperations[$trigger.functionName] = $true
@@ -25,8 +25,9 @@ foreach ($trigger in $triggers) {
     }
     $seenParameters = @{}
     foreach ($parameter in $trigger.parameters) {
-        if ([string]::IsNullOrWhiteSpace($parameter.name) -or $seenParameters.ContainsKey($parameter.name)) {
-            throw "Event $($trigger.functionName) has an unnamed or duplicate parameter."
+        if ($requiredParameters[$trigger.functionName] -cnotcontains $parameter.name -or
+            $seenParameters.ContainsKey($parameter.name)) {
+            throw "Event $($trigger.functionName) has an unsupported, incorrectly cased or duplicate parameter: $($parameter.name)"
         }
         $seenParameters[$parameter.name] = $true
         $value = $parameter.value | ConvertTo-Json -Depth 30 -Compress

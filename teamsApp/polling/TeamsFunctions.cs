@@ -25,7 +25,7 @@ public class TeamsFunctions
             TriggerConfigName = "%OnNewChannelMessageTriggerConfigName%")]
         TeamsOnNewChannelMessageTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewChannelMessage trigger ({Count} messages)", payload.Body?.Value?.Count ?? 0);
+        _logger.LogInformation("Received OnNewChannelMessage trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewChannelMessageMentioningMe")]
@@ -36,7 +36,7 @@ public class TeamsFunctions
             TriggerConfigName = "%OnNewChannelMessageMentioningMeTriggerConfigName%")]
         TeamsOnNewChannelMessageMentioningMeTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnNewChannelMessageMentioningMe trigger ({Count} messages)", payload.Body?.Value?.Count ?? 0);
+        _logger.LogInformation("Received OnNewChannelMessageMentioningMe trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnGroupMembershipAdd")]
@@ -47,7 +47,7 @@ public class TeamsFunctions
             TriggerConfigName = "%OnGroupMembershipAddTriggerConfigName%")]
         TeamsOnTeamMemberAddedTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnGroupMembershipAdd trigger ({Count} members)", payload.Body?.Value?.Count ?? 0);
+        _logger.LogInformation("Received OnGroupMembershipAdd trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnGroupMembershipRemoval")]
@@ -58,6 +58,6 @@ public class TeamsFunctions
             TriggerConfigName = "%OnGroupMembershipRemovalTriggerConfigName%")]
         TeamsOnTeamMemberRemovedTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnGroupMembershipRemoval trigger ({Count} members)", payload.Body?.Value?.Count ?? 0);
+        _logger.LogInformation("Received OnGroupMembershipRemoval trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

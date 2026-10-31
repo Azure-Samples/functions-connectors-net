@@ -26,31 +26,27 @@ public class TeamsFunctions
     public void OnNewChannelMessage(
         [ConnectorTrigger] TeamsOnNewChannelMessageTriggerPayload payload)
     {
-        var count = payload.Body?.Value?.Count ?? 0;
-        _logger.LogInformation("Received OnNewChannelMessage trigger ({Count} messages)", count);
+        _logger.LogInformation("Received OnNewChannelMessage trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnNewChannelMessageMentioningMe")]
     public void OnNewChannelMessageMentioningMe(
         [ConnectorTrigger] TeamsOnNewChannelMessageMentioningMeTriggerPayload payload)
     {
-        var count = payload.Body?.Value?.Count ?? 0;
-        _logger.LogInformation("Received OnNewChannelMessageMentioningMe trigger ({Count} messages)", count);
+        _logger.LogInformation("Received OnNewChannelMessageMentioningMe trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnGroupMembershipAdd")]
     public void OnGroupMembershipAdd(
         [ConnectorTrigger] TeamsOnTeamMemberAddedTriggerPayload payload)
     {
-        var count = payload.Body?.Value?.Count ?? 0;
-        _logger.LogInformation("Received OnGroupMembershipAdd trigger ({Count} members)", count);
+        _logger.LogInformation("Received OnGroupMembershipAdd trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("OnGroupMembershipRemoval")]
     public void OnGroupMembershipRemoval(
         [ConnectorTrigger] TeamsOnTeamMemberRemovedTriggerPayload payload)
     {
-        var count = payload.Body?.Value?.Count ?? 0;
-        _logger.LogInformation("Received OnGroupMembershipRemoval trigger ({Count} members)", count);
+        _logger.LogInformation("Received OnGroupMembershipRemoval trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

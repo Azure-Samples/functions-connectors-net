@@ -12,7 +12,46 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 }
 
 # Outputs from azd
-$outputs = azd env get-values --output json | ConvertFrom-Json
+$rawOutputs = azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
+$outputs = ($rawOutputs -join "`n") | ConvertFrom-Json
+
+$localSettingsPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../local.settings.json'))
+if (Test-Path -LiteralPath $localSettingsPath) {
+    $item = Get-Item -LiteralPath $localSettingsPath -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'local.settings.json must be a regular file.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+}
+else {
+    $stagingPath = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N')).json"
+    try {
+        $localSettings = @{
+            IsEncrypted = $false
+            Values = @{
+                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+            }
+        }
+        [IO.File]::WriteAllText(
+            $stagingPath, ($localSettings | ConvertTo-Json -Depth 3),
+            [Text.UTF8Encoding]::new($false))
+        $stagedSettings = Get-Content -LiteralPath $stagingPath -Raw | ConvertFrom-Json
+        if ($stagedSettings.IsEncrypted -ne $false -or
+            $stagedSettings.Values.AzureWebJobsStorage -cne 'UseDevelopmentStorage=true' -or
+            $stagedSettings.Values.FUNCTIONS_WORKER_RUNTIME -cne 'dotnet-isolated') {
+            throw 'Generated local settings failed validation.'
+        }
+        [IO.File]::Move($stagingPath, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json for Azurite and the local Functions host.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -ErrorAction Stop
+        }
+    }
+}
 
 $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName

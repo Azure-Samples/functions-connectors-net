@@ -1,147 +1,159 @@
 # Microsoft Teams Webhook Triggers (.NET)
 
-This standalone sample supports all 11 Teams events, preserving the typed operations:
-`OnNewChannelMessage`, `OnNewChannelMessageMentioningMe`,
-`OnGroupMembershipAdd`, and `OnGroupMembershipRemoval`. Each receives a typed
-Teams payload and logs only the trigger name and message/member count.
-Payloads are not written to Blob Storage or application logs.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
+and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
+The Connector Namespace delivers events to the function's public HTTPS callback.
+Typed handlers log only `Received <FunctionName> trigger ({Count} items)`;
+raw handlers log the event name only.
 
-**SDK coverage limitation:** The seven other catalog events
-(`WebhookChatMessageTrigger`, `WebhookNewMessageTrigger`, `WebhookAtMentionTrigger`,
-`WebhookKeywordTrigger`, `WebhookMessageReactionTrigger`, `RecordingTrigger`,
-`TranscriptTrigger`) lack strongly typed trigger payload wrappers in
-`Azure.Connectors.Sdk` 0.14.0-preview.1. As an approved exception, those seven
-handlers receive raw JSON `string` payloads and log only the event name. Supporting
-all 11 with SDK types requires wrappers to be published; input/action-response
-models are not replacements.
-See the extension's
-[Teams operation mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#microsoft-teams-connector).
+| Function | Connector operation | Description |
+| --- | --- | --- |
+| `OnNewChannelMessage` | [`OnNewChannelMessage`](https://learn.microsoft.com/connectors/teams/#when-a-new-channel-message-is-added) | New root channel message |
+| `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Channel message mentioning the connection user |
+| `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/connectors/teams/#when-a-new-team-member-is-added) | Team member added |
+| `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/connectors/teams/#when-a-new-team-member-is-removed) | Team member removed |
+| `WebhookChatMessageTrigger` | [`WebhookChatMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-chat-message-is-added) | New chat message (opt-in, raw JSON) |
+| `WebhookNewMessageTrigger` | [`WebhookNewMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-message-is-added-to-a-chat-or-channel) | New chat/channel message (opt-in, raw JSON) |
+| `WebhookAtMentionTrigger` | [`WebhookAtMentionTrigger`](https://learn.microsoft.com/connectors/teams/#when-i'm-@mentioned) | @mention (opt-in, raw JSON) |
+| `WebhookKeywordTrigger` | [`WebhookKeywordTrigger`](https://learn.microsoft.com/connectors/teams/#when-keywords-are-mentioned) | Keyword mention (opt-in, raw JSON) |
+| `WebhookMessageReactionTrigger` | [`WebhookMessageReactionTrigger`](https://learn.microsoft.com/connectors/teams/#when-someone-reacted-to-a-message-in-chat) | Message reaction (opt-in, raw JSON) |
+| `RecordingTrigger` | [`RecordingTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-recording-is-available) | Recording available (opt-in, raw JSON) |
+| `TranscriptTrigger` | [`TranscriptTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-transcript-is-available) | Transcript available (opt-in, raw JSON) |
 
-Webhook is the default when `DeliveryMode` is omitted from `[ConnectorTrigger]`.
-The Connector Namespace delivers callbacks to
-`https://<function-host>/runtime/webhooks/connector?functionName=<function-name>`
-using the connector extension system key in the `code` query parameter.
-The namespace identity has connection access to detect Teams changes;
-webhook-only reception needs no Function/developer connection access policy.
-For outbound-only local development, use the separate Poll sample.
+SDK 0.14.0-preview.1 provides typed callback wrappers only for the first four events.
+The seven approved `string` bindings are explicit exceptions: no parsing, inferred
+counts or input/action-response models substitute for missing callback wrappers.
+See the [pinned SDK source](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/TeamsExtensions.cs#L3333-L3388).
 
 ## Prerequisites
 
-- .NET 10 SDK.
-- Azure Developer CLI (`azd`), Azure CLI (`az`) 2.75.0 or later, and PowerShell 7.
-- A Teams account and permission to authorize the Teams connector.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
+- PowerShell 7 for the default hook and the alternative Bash wrapper
+- Azure Functions Core Tools v4 and Azurite for local development
+- A Teams account with team/channel access and permission to authorize the connection
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+
+  ```bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
+
+  Or in PowerShell:
 
   ```powershell
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
   ```
 
-The included `NuGet.config` provides the public Azure Functions package feed.
-Copy this entire folder to use it independently of the sample collection.
+## Deploy to Azure
 
-## Deploy
-
-Run from this folder (`teamsApp\webhook` in the sample collection):
-
-```powershell
+```bash
+cd teamsApp/webhook
 az login
 azd auth login
 azd env new teams-webhook
 azd env set TEAMS_GROUP_ID "<team / Microsoft 365 group object ID>"
-azd env set TEAMS_CHANNEL_ID "<channel ID>"
+azd env set TEAMS_CHANNEL_ID "<URL-decoded channel ID>"
 azd up
 ```
 
-Use the identifiers from a Teams channel link (`groupId` and URL-decoded channel
-ID), or Microsoft Graph. Message triggers require both IDs; membership triggers
-require only the group ID. If unset, the post-deploy hook offers interactive
-team/channel selection via Microsoft Graph with the permissions of your CLI
-identity. Set them explicitly for noninteractive runs.
-The Connector Namespace defaults to `westcentralus`; change it via
-`CONNECTOR_NAMESPACE_LOCATION` if needed.
-Application Insights and Log Analytics default to `eastus2`, independently of the
-Function App/namespace region; Application Insights is unavailable in
-`westcentralus`. Override via `TELEMETRY_LOCATION` if needed. The worker telemetry
-exporter uses `DefaultAzureCredential` for Entra-authenticated ingestion.
+Use IDs from a Teams channel link, not display names. Complete OAuth when the hook
+opens your browser; connected accounts skip consent. Use a different environment
+name from Poll. Azure resources incur charges; no always-ready instances are configured.
 
-Deployment includes a Flex Consumption .NET 10 Function App, managed identity,
-Functions host/deployment storage, Application Insights/Log Analytics, Connector
-Namespace, and Teams OAuth connection. The post-deploy hook registers the selected
-callback trigger configurations and opens connection consent. Re-run using
-`azd hooks run postdeploy`.
-Consent uses the actual service-provided login link with redirect
-`https://connectors.azure.com`; already-connected connections skip reauthorization.
+## Optional configuration
 
-### Enable all events
-
-Only the four original typed events are registered by default. For all 11, copy
-`infra\additional-triggers.example.json` over `infra\additional-triggers.json`
-and fill all seven entries:
-
-| Operation | Parameters |
+| Setting / action | Purpose |
 | --- | --- |
-| `WebhookChatMessageTrigger` | None; all chats of the authorized account |
-| `WebhookNewMessageTrigger` | `threadType`, dynamic `requestBody` chat/channel scope |
-| `WebhookAtMentionTrigger` | `threadType`, dynamic `requestBody` chat/channel scope |
-| `WebhookKeywordTrigger` | `threadType`, `$search` (comma-separated keywords), dynamic `requestBody` |
-| `WebhookMessageReactionTrigger` | `reactionKey`, `frequency`, `runningPolicy`, `threadType`, dynamic `requestBody` |
-| `RecordingTrigger` | `scopeType`, dynamic `body` recording scope |
-| `TranscriptTrigger` | `scopeType`, dynamic `body` transcript scope |
+| `azd env set CONNECTOR_NAMESPACE_LOCATION <region>` | Namespace region; defaults to `westcentralus` |
+| `azd env set TELEMETRY_LOCATION <region>` | Telemetry region; defaults to `eastus2` because Application Insights is unavailable in `westcentralus` |
+| `infra/additional-triggers.json` | Select optional events below |
+| Omit team/channel IDs | Hook offers interactive Graph selection; set both explicitly for noninteractive runs |
+| `azd hooks run postdeploy` | Rerun registration/consent without redeployment |
+| `bash ./infra/scripts/postdeploy.sh` | Alternative entry point; still requires PowerShell 7. For the postdeploy azd hook, use `shell: sh` and this script's path as `run` |
 
-Obtain actual enum values and dynamic bodies from the Teams connector UI or an
-exported trigger configuration. Preserve parameter names, JSON value types and
-nested scope structure. Do not copy callback keys or OAuth tokens. Keep all seven
-entries for all-events coverage, or remove unneeded entries. The sample requires a
-scoped `requestBody` for targeted message events even though the static reference
-marks it optional.
+## Optional triggers
 
-The parameterless chat event observes **all chats the account belongs to**,
-not just the test channel; explicitly approve that scope and use an appropriate
-test account. Recording/transcript scopes must also be selected explicitly.
+Four events are configured by default. To add others, copy the example
+configuration, keep only the events you need, and fill in their required source
+parameters. Setup registers callbacks for the selected events; no separate manual
+listener flags are needed.
 
-Run `pwsh -File .\infra\scripts\validate-triggers.ps1` before `azd up`. Hooks reject
-unknown/duplicate operations, missing scope parameters, empty values and unresolved
-placeholders. Dynamic schema and tenant permission validation remains the service's
-responsibility. The shell hook delegates to PowerShell to keep registration
-consistent. Removing an entry does not delete its existing namespace config;
-disable/delete that config explicitly to stop its callbacks.
+1. Copy `infra/additional-triggers.example.json` to `infra/additional-triggers.json`.
+2. Keep only explicitly authorized events and replace placeholders using actual
+   scopes/enums from the connector UI or exported configuration.
 
-There is no application output container or Blob binding. The storage account
-and its identity roles are retained for Functions host state and deployment.
-Existing `connector-messages` blobs from an earlier deployment are not deleted;
-remove those separately if appropriate.
+| Operation | Required source parameters |
+| --- | --- |
+| `WebhookChatMessageTrigger` | None; monitors **all chats of the connection user**, not just the channel |
+| `WebhookNewMessageTrigger`, `WebhookAtMentionTrigger` | `threadType`, dynamic `requestBody` scope |
+| `WebhookKeywordTrigger` | `threadType`, `$search`, dynamic `requestBody` scope |
+| `WebhookMessageReactionTrigger` | `reactionKey`, `frequency`, `runningPolicy`, `threadType`, dynamic `requestBody` scope |
+| `RecordingTrigger`, `TranscriptTrigger` | `scopeType`, dynamic `body` scope; appropriate meeting licenses/policies |
+
+3. Preserve exact operation/parameter casing, JSON types and nested values.
+   Never copy keys or tokens. Targeted events require `requestBody` even when
+   marked optional in the catalog.
+4. Apply the selection:
+
+   ```bash
+   azd up
+   ```
+
+Hooks reject unsupported/duplicate names, missing/empty values and placeholders;
+the service validates dynamic schemas and permissions.
+
+**Selection safety:** Removing an entry does not delete an existing config;
+explicitly disable/delete it to stop callbacks. Broad chats and meeting
+subscriptions are never enabled implicitly.
 
 ## Local development
 
-Prefer the Poll sample when a public endpoint is unavailable. Webhook delivery
-requires Azure Functions Core Tools v4, Azurite, and a public HTTPS tunnel to the
-local host. Copy `local.settings.example.json` to ignored `local.settings.json`,
-start Azurite, then run `dotnet build` and `func start`.
+1. Prepare `local.settings.json`.
 
-Register separate webhook trigger configurations on an authorized Teams connection
-using your tunnel callback URL, matching function names, and the local host's
-connector extension system key. The deployment hook targets the **deployed**
-Function App, not a local tunnel. Never expose an unauthenticated callback or
-commit function keys/local settings.
-See [webhook registration](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/webhook-trigger-registration/SKILL.md).
+   Use the file generated by postdeploy after `azd up`; existing files are preserved.
+   Only if it is missing, run `azd hooks run postdeploy` to generate it.
+2. Start Azurite in a separate terminal:
 
-## Verify and clean up
+   ```bash
+   azurite
+   ```
 
-Confirm the Teams connection is `Connected` and all four trigger configs are
-enabled in the [Connector Namespaces portal](https://connectors.azure.com/).
-Post a new root channel message (not a reply), mention the authorized account,
-and add/remove a test member with the appropriate permissions. Check local
-function logs or Application Insights for the corresponding trigger name/count.
-Allow for upstream detection delays; retries can produce duplicate logs.
-For additional events, send a chat message, scoped message/@mention, configured
-keywords, and the selected reaction under its running policy. Record/transcribe
-a test meeting or call matching the configured scope and wait for the artifacts
-to become available. These require the appropriate licenses and tenant policies.
-Verify each selected function independently.
+3. Build and start the host:
 
-Run `azd down --purge` from this folder when finished. Do not reuse the polling
-environment. To continue an existing pre-split Teams deployment, preserve its azd
-environment values under this folder and retain the same environment name.
+   ```bash
+   dotnet build
+   func start
+   ```
 
-See [Teams connector operations and limitations](https://learn.microsoft.com/connectors/teams/)
-and [connector delivery configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md).
+4. Open a public HTTPS tunnel to the local host and register **separate** configs
+   using `/runtime/webhooks/connector?functionName=<FunctionName>`.
+   Authenticate with the local `connector_extension` system key as the `code`
+   query parameter.
+
+**Hook behavior:** The hook targets Azure; it has no local callback override.
+Separate local configs leave deployed callbacks unchanged. If you manually replace
+the deployed configs, rerun `azd hooks run postdeploy` to restore Azure delivery.
+
+**Access and safety:** The namespace identity requires connection access;
+webhook-only reception needs no Function/developer connection access policy.
+Never commit keys/local settings or expose unauthenticated callbacks.
+Prefer [Poll](../polling/) without a public endpoint.
+
+## Verify
+
+Check the connection is **Connected** and selected triggers are **Enabled** in
+[Connector Namespaces](https://connectors.azure.com/). Post a new root channel
+message, not a reply, and look for `Received OnNewChannelMessage trigger` in logs.
+Verify mentions/membership only with authorized test activity; optional events
+require their scoped source action and prerequisites. Allow upstream detection
+delays; delivery is at least once. Verify each selected event separately.
+
+Run `azd down --purge` from this folder to clean up. Use a different environment
+from Poll; preserve the environment name/values when continuing an existing deployment.
+
+## More
+
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#microsoft-teams-connector)
+- [Teams connector reference and callback schemas](https://learn.microsoft.com/connectors/teams/)
+- [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
