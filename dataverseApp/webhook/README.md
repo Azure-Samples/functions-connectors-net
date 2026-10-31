@@ -1,89 +1,118 @@
-# Dataverse current events with webhook delivery
+# Microsoft Dataverse Webhook Triggers (.NET)
 
-Connector Namespace pushes current Dataverse events to the Functions connector webhook.
-`OnDataverseRowChanged` registers `SubscribeWebhookTrigger` for added, modified, and deleted
-rows (`message=7`, organization scope `scope=4`).
-`OnDataverseActionPerformed` registers `BusinessEventsTrigger` only after opting in and
-supplying its real catalog/category/table/action identifiers.
+Azure Functions sample using the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
+The Connector Namespace delivers events to the function's public HTTPS callback.
+Both handlers use approved `JsonElement` exceptions because the SDK lacks current
+event models. Each invocation logs only the trigger name, without payload fields
+or inferred counts.
 
-These two event handlers are explicitly approved `JsonElement` exceptions because the
-SDK lacks models for the current operations. They log receipt and JSON kind only.
-There are no deprecated individual-row handlers, deprecated SDK List rows action,
-Blob bindings, or persisted event payloads.
-See [SDK gaps and service limitations](../README.md).
+| Function | Connector operation | Description |
+| --- | --- | --- |
+| `OnDataverseRowChanged` | [`SubscribeWebhookTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-a-row-is-added,-modified-or-deleted) | Row added, modified, or deleted (`message=7`, organization scope `scope=4`) |
+| `OnDataverseActionPerformed` | [`BusinessEventsTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-an-action-is-performed) | Selected action performed (opt-in) |
 
 ## Prerequisites
 
-- .NET 10 SDK, Azure CLI >= 2.75.0, Azure Developer CLI (`azd`), PowerShell 7 (`pwsh`)
-  on all platforms (the `azd` hook directly runs the same PowerShell script)
-- The `connector-namespace` CLI extension:
-  `irm https://aka.ms/connector-namespace-cli-install-ps | iex` in PowerShell, or
-  `curl -fsSL https://aka.ms/connector-namespace-cli-install | sh` in Bash
-- Dataverse org URL and an OAuth identity authorized for organization-scoped subscriptions
-- For local execution: Functions Core Tools v4 and Azurite
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
+- PowerShell 7 for the default hook and the Bash wrapper alternative
+- Functions Core Tools v4 and Azurite for local development
+- A Dataverse organization and permission to register organization-scoped subscriptions
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
-## Deploy
+  ```bash
+  curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+  ```
+
+  Or in PowerShell:
+
+  ```powershell
+  irm https://aka.ms/connector-namespace-cli-install-ps | iex
+  ```
+
+## Deploy to Azure
 
 ```powershell
 cd dataverseApp\webhook
-azd auth login
 az login
+azd auth login
 azd env new dataverse-webhook
-azd env set DATAVERSE_ENVIRONMENT_URL "https://contoso.crm.dynamics.com"
-azd env set DATAVERSE_TABLE_NAME "account"
-# If needed, choose an approved telemetry region:
-azd env set TELEMETRY_LOCATION "eastus2"
+azd env set DATAVERSE_ENVIRONMENT_URL https://contoso.crm.dynamics.com
 azd up
 ```
 
-Use the org URL, not a friendly environment name. The table defaults to the logical name
-`account`, not the Web API entity set `accounts`.
-The hook preserves connected OAuth consent or prints and opens a direct consent link
-using the `https://connectors.azure.com` redirect. It then gets the connector extension
-system key and actual Function hostname, and creates the current subscriptions with
-authenticated callback URLs. A failed registration makes the hook fail explicitly.
-No legacy `dataset`/`table` parameters or deprecated fallback registrations are used.
+Authorize the Dataverse connection in the browser when prompted; already Connected
+consent is preserved.
 
-Flex Consumption hosting, host/deployment storage, telemetry, managed identities, the
-namespace and OAuth connection remain provisioned. Webhook delivery has no always-ready
-allocation. Storage is required for the host and deployment package, not event output.
+Use different azd environment names for polling and webhook deployments.
 
-After changing source configuration, run `azd provision` and `azd hooks run postdeploy`.
-For action-performed, set the four event identifiers and flag documented in the parent
-README before provisioning; the Function is otherwise disabled.
+Webhook has no always-ready allocation.
 
-## Run locally
+## Optional configuration
 
-Copy `local.settings.example.json` to ignored `local.settings.json`, start Azurite and
-run `func start`. Real webhook delivery requires a publicly reachable HTTPS callback;
-the post-deploy hook configures the deployed app, not an automatic local tunnel.
+| Setting / command | Purpose |
+| --- | --- |
+| `azd env set DATAVERSE_TABLE_NAME <logical-name>` | Monitor another table; default `account` |
+| `azd env set AZURE_LOCATION <region>` | Function region; selected during deployment if unset |
+| `azd env set CONNECTOR_NAMESPACE_LOCATION <region>` | Independent Connector Namespace region; default `westcentralus` |
+| `azd env set TELEMETRY_LOCATION <region>` | Use a supported monitoring region if unavailable in the Function region |
+| `DATAVERSE_ENABLE_ACTION_TRIGGER=true` | Action-performed; requires all four identifiers below |
+| `DATAVERSE_EVENT_CATALOG=<catalog>` | Catalog identifier |
+| `DATAVERSE_EVENT_CATEGORY=<category>` | Category identifier |
+| `DATAVERSE_EVENT_TABLE=<logical-table>` | Table identifier accepted by the event selector |
+| `DATAVERSE_EVENT_ACTION=<SDK-message>` | Action's `sdkmessagename` |
+| `azd hooks run postdeploy` | Rerun authorization and deployed callback registration; create missing local settings |
+| `bash ./infra/scripts/postdeploy.sh` | Bash wrapper; still requires PowerShell 7 |
+| Postdeploy `shell: sh`, `run: ./infra/scripts/postdeploy.sh` in `azure.yaml` | Use the Bash wrapper as the hook; PowerShell remains the default |
+
+Set environment values with `azd env set <name> <value>` before `azd up`.
+
+- Action-performed is disabled by default. To enable it, supply all four actual event-selector identifiers.
+- To disable it, set `DATAVERSE_ENABLE_ACTION_TRIGGER` to `false` and rerun `azd up`.
+  This disables the function and removes its sample-owned subscription.
+
+## Local development
+
+1. Prepare `local.settings.json`.
+
+   From `dataverseApp\webhook`, use the settings generated by successful `azd up`.
+   Only if the file is missing, run `pwsh ./infra/scripts/postdeploy.ps1` to generate it.
+   Existing files are preserved; after changing trigger selection, match
+   `AzureWebJobs.OnDataverseActionPerformed.Disabled` to that selection
+   (`true` for row-only, `false` for action-performed).
+
+2. Start Azurite for host storage in a separate terminal:
+
+   ```powershell
+   azurite
+   ```
+
+3. Start the local Functions host:
+
+   ```powershell
+   func start
+   ```
+
+Real events require a public HTTPS callback and the local connector system key.
+The hook targets Azure only; it does not create a tunnel or accept local overrides.
 
 ## Verify
 
-Check `Connected` OAuth state and enabled current-operation configurations. Webhook trigger
-names are the connection name plus the lower-case Function name, for example
-`<connection>-ondataverserowchanged`.
+Check the connection is **Connected**, selected triggers are **Enabled**, and their latest
+source registration did not fail in [Connector Namespaces](https://connectors.azure.com/).
+An enabled configuration alone is insufficient: `accounts` instead of `account`
+fails with `0x80040203: Entity not present in cache`.
 
-Only after registration succeeds, create a clearly named sample-owned row, observe the
-`Received OnDataverseRowChanged trigger` log, update only that row and observe another
-event, then delete it and observe deletion. Verify the selected safe business action
-separately after its subscription is configured. Never alter existing business data.
+Create, modify, then delete only a clearly named sample-owned row and look for
+`Received OnDataverseRowChanged trigger` in function logs for each event.
 
-Also check `triggerStatuses/latest`: an enabled configuration alone is not proof of
-successful source registration. For example, `accounts` instead of logical `account`
-fails with `0x80040203: Entity not present in cache: accounts`.
+Never alter business rows. Allow time for delivery.
+Optional action verification requires its identifiers and a safe, authorized source action.
 
-```powershell
-$rg = azd env get-value resourceGroupName
-$ns = azd env get-value connectorNamespaceName
-$connection = azd env get-value connectorNamespaceConnectionName
-$subscription = azd env get-value AZURE_SUBSCRIPTION_ID
-$uri = "https://management.azure.com/subscriptions/$subscription/resourceGroups/$rg/providers/Microsoft.Web/connectorGateways/$ns/triggerConfigs/$connection-ondataverserowchanged/triggerStatuses/latest?api-version=2026-05-01-preview"
-az rest --method get --url $uri `
-  --query "{status:lastExecutionStatus,code:lastExecutionStatusCode,error:lastExecutionOutputs.body.error}" -o json
-```
+Run `azd down --purge` from this folder to clean up.
 
-Preserve service errors; an SDK build, OAuth consent, or success of the former deprecated
-sample does not prove current trigger support.
+## More
 
-Run `azd down --purge` when finished.
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Microsoft Dataverse connector reference](https://learn.microsoft.com/connectors/commondataservice/)

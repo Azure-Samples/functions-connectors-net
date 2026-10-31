@@ -14,12 +14,12 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
     [Function("OnDataverseRowChanged")]
     public void OnDataverseRowChanged([ConnectorTrigger] JsonElement payload)
     {
-        logger.LogInformation("Received OnDataverseRowChanged trigger ({PayloadKind}).", payload.ValueKind);
+        logger.LogInformation("Received OnDataverseRowChanged trigger");
     }
 
     [Function("OnDataverseActionPerformed")]
     public void OnDataverseActionPerformed([ConnectorTrigger] JsonElement payload)
     {
-        logger.LogInformation("Received OnDataverseActionPerformed trigger ({PayloadKind}).", payload.ValueKind);
+        logger.LogInformation("Received OnDataverseActionPerformed trigger");
     }
 }

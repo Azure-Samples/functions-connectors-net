@@ -10,10 +10,72 @@ foreach ($name in @(
     'functionAppName', 'AZURE_SUBSCRIPTION_ID', 'dataverseEnvironmentUrl', 'dataverseTableName')) {
     if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) { throw "Missing azd output $name." }
 }
+if ([string]$outputs.enableActionTrigger -notin @('true', 'false')) {
+    throw 'Missing or invalid azd output enableActionTrigger. Run azd provision first.'
+}
 $actionEnabled = [string]$outputs.enableActionTrigger -eq 'true'
 if ($actionEnabled) {
     foreach ($name in @('eventCatalog', 'eventCategory', 'eventTable', 'eventAction')) {
         if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) { throw "Missing business-event value $name." }
+    }
+}
+
+$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
+if (Test-Path -LiteralPath $localSettingsPath) {
+    $item = Get-Item -LiteralPath $localSettingsPath -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'local.settings.json must be a regular file.'
+    }
+    Write-Host 'Existing local.settings.json preserved.'
+} else {
+    $localSettings = @{
+        IsEncrypted = $false
+        Values = @{
+            AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+            FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+            'AzureWebJobs.OnDataverseActionPerformed.Disabled' = (-not $actionEnabled).ToString().ToLowerInvariant()
+        }
+    }
+    $stagingPath = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N')).json"
+    try {
+        [IO.File]::WriteAllText(
+            $stagingPath,
+            ($localSettings | ConvertTo-Json -Depth 4),
+            [Text.UTF8Encoding]::new($false))
+        $validated = Get-Content -LiteralPath $stagingPath -Raw | ConvertFrom-Json -AsHashtable
+        if ($validated.IsEncrypted -ne $false -or $validated.Values.Count -ne 3) {
+            throw 'Generated local settings failed validation.'
+        }
+        foreach ($name in $localSettings.Values.Keys) {
+            if ($validated.Values[$name] -cne $localSettings.Values[$name]) {
+                throw "Generated local setting '$name' failed validation."
+            }
+        }
+        [IO.File]::Move($stagingPath, $localSettingsPath)
+        Write-Host 'Created ignored local.settings.json using Azurite.'
+    } finally {
+        if (Test-Path -LiteralPath $stagingPath) {
+            Remove-Item -LiteralPath $stagingPath -ErrorAction Stop
+        }
+    }
+}
+
+if (-not $actionEnabled) {
+    $name = "$($outputs.connectorNamespaceConnectionName)-ondataverseactionperformed"
+    $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
+    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse action subscriptions.' }
+    $configs = ($raw -join "`n") | ConvertFrom-Json
+    $existing = @($configs.value | Where-Object name -eq $name)
+    if ($existing.Count -gt 0) {
+        if ($existing.Count -ne 1 -or
+            $existing[0].properties.operationName -ne 'BusinessEventsTrigger' -or
+            $existing[0].properties.connectionDetails.connectionName -ne $outputs.connectorNamespaceConnectionName) {
+            throw "Refusing to delete '$name': it does not match this sample's action subscription."
+        }
+        az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
+        if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse action subscription '$name'." }
+        Write-Host "Removed sample-owned action subscription '$name' because the action is disabled."
     }
 }
 

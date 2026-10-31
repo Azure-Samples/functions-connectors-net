@@ -19,7 +19,7 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
             TriggerConfigName = "%OnDataverseRowChangedTriggerConfigName%")]
         JsonElement payload)
     {
-        logger.LogInformation("Received OnDataverseRowChanged trigger ({PayloadKind}).", payload.ValueKind);
+        logger.LogInformation("Received OnDataverseRowChanged trigger");
     }
 
     [Function("OnDataverseActionPerformed")]
@@ -30,6 +30,6 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
             TriggerConfigName = "%OnDataverseActionPerformedTriggerConfigName%")]
         JsonElement payload)
     {
-        logger.LogInformation("Received OnDataverseActionPerformed trigger ({PayloadKind}).", payload.ValueKind);
+        logger.LogInformation("Received OnDataverseActionPerformed trigger");
     }
 }

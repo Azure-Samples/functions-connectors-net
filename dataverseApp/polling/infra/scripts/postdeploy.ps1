@@ -12,7 +12,7 @@ $outputs = ($raw -join "`n") | ConvertFrom-Json
 
 foreach ($name in @(
     'resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
-    'connectorPollingEndpoint', 'triggerConfigSettings')) {
+    'connectorPollingEndpoint', 'triggerConfigSettings', 'AZURE_SUBSCRIPTION_ID')) {
     if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) {
         throw "Missing azd output $name. Run azd provision first."
     }
@@ -42,6 +42,24 @@ if ([string]::IsNullOrWhiteSpace([string]$triggerSettings.$disabledSetting)) {
     throw "Missing $disabledSetting in triggerConfigSettings."
 }
 $localValues[$disabledSetting] = [string]$triggerSettings.$disabledSetting
+if ([string]$triggerSettings.$disabledSetting -eq 'true') {
+    $name = 'dataverse-ondataverseactionperformed'
+    $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
+    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse action subscriptions.' }
+    $configs = ($raw -join "`n") | ConvertFrom-Json
+    $existing = @($configs.value | Where-Object name -eq $name)
+    if ($existing.Count -gt 0) {
+        if ($existing.Count -ne 1 -or
+            $existing[0].properties.operationName -ne 'BusinessEventsTrigger' -or
+            $existing[0].properties.connectionDetails.connectionName -ne $outputs.connectorNamespaceConnectionName) {
+            throw "Refusing to delete '$name': it does not match this sample's action subscription."
+        }
+        az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
+        if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse action subscription '$name'." }
+        Write-Host "Removed sample-owned action subscription '$name' because the action is disabled."
+    }
+}
 $localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
 if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
     Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
