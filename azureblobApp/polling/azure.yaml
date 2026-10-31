@@ -1,13 +1,14 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
-name: functions-connectors-net-azureblob
+name: functions-connectors-net-azureblob-polling
 services:
   function-app:
-    host: function
     project: .
-    language: csharp
+    language: dotnet
+    host: function
 hooks:
   postdeploy:
     shell: pwsh
     run: ./infra/scripts/postdeploy.ps1
+    interactive: true
     continueOnError: false
