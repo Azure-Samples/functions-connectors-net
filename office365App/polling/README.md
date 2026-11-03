@@ -1,10 +1,6 @@
 # Office 365 Outlook Polling Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
-and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector)
-with `DeliveryMode = Poll`. The host receives events outbound from the Connector
-Namespace; no public callback or tunnel is required. All handlers use typed
-payloads and log only the trigger name and item count.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. All handlers use typed payloads and log only the trigger name and item count.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -22,7 +18,7 @@ payloads and log only the trigger name and item count.
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7 for the default hook, or Bash and `jq` for the alternative script
+- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash and `jq` for the alternative script
 - An Office 365 mailbox and permission to authorize the connection
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
@@ -49,12 +45,7 @@ azd env set OFFICE365_CALENDAR_ID '<actual connector calendar ID>'
 azd up
 ```
 
-Use the actual connector calendar ID, not the placeholder `Calendar`. Complete
-the OAuth sign-in opened by `azd up` with the mailbox account to monitor.
-Use a different azd environment from webhook.
-
-**Cost:** polling provisions one 2048 MB always-ready instance per configured
-function (six, or seven with shared mailbox). These incur idle charges.
+Use the actual connector calendar ID, not the placeholder `Calendar`. Complete the OAuth sign-in opened by `azd up` with the mailbox account to monitor. Use a different azd environment from webhook.
 
 ## Optional configuration
 
@@ -71,10 +62,9 @@ Set environment values before `azd up`. Six personal triggers are configured by 
 | `pwsh ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` / `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
 | `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs |
 
-Empty address disables its listener and skips registration. When disabling an
-existing shared source, also disable/delete its namespace config; incremental
-deployment does not remove skipped resources. Regenerate local settings to apply
-the selection locally.
+Empty address disables its listener and skips registration. When disabling an existing shared source, also disable/delete its namespace config; incremental deployment does not remove skipped resources. Regenerate local settings to apply the selection locally.
+
+Hooks preserve existing local settings unless the force option is selected, and reject directories and links at the settings path.
 
 ## Local development
 
@@ -107,19 +97,15 @@ If the Function App is already deployed, stop it before running locally to avoid
    func start
    ```
 
-Do not copy cloud managed-identity settings locally. Functions host/deployment
-storage is required. Never commit local settings.
+Do not copy cloud managed-identity settings locally. Functions host/deployment storage is required. Never commit local settings.
+
+Worker telemetry uses the `ConnectorNamespace` identity settings: the Function App's system-assigned managed identity in Azure, or standard developer credentials when identity settings are absent locally.
 
 ## Verify
 
-Check the connection is **Connected** and selected triggers are **Enabled** in
-[Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events
-and check worker logs for `Received <FunctionName> trigger (<Count> items)`;
-build/deployment success alone is not real-event verification. Delivery is at least
-once and source detection may be delayed.
+Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events and check worker logs for `Received <FunctionName> trigger (<Count> items)`; build/deployment success alone is not real-event verification. Delivery is at least once and source detection may be delayed.
 
-Run `azd down --purge` when finished, including always-ready resources. Licensing
-is provided by the repository's [root LICENSE](../../LICENSE).
+Run `azd down --purge` when finished to remove deployed resources. Licensing is provided by the repository's [root LICENSE](../../LICENSE).
 
 ## More
 

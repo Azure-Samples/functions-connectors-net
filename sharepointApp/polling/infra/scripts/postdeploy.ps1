@@ -1,6 +1,7 @@
 param([switch] $ForceLocalSettings)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw "Install the connector-namespace Azure CLI extension before running this script."
@@ -53,6 +54,7 @@ $triggerDefinitions = if ($outputs.triggerDefinitions -is [string]) {
 if ($triggerDefinitions.Count -ne 10) {
     throw 'Incomplete triggerDefinitions output. Run azd provision first.'
 }
+Write-LocalSettings $localValues -Force:$ForceLocalSettings
 $existingTriggers = az connector-namespace trigger list `
     -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
     --query '[].name' -o json
@@ -66,22 +68,6 @@ foreach ($trigger in $triggerDefinitions | Where-Object { -not $_.enabled }) {
             -n $triggerName --state Disabled -o none
         if ($LASTEXITCODE -ne 0) { throw "Could not disable trigger $triggerName." }
     }
-}
-
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if (Test-Path -LiteralPath $localSettingsPath -PathType Container) {
-    throw 'local.settings.json must not be a directory.'
-}
-if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
-    Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
-}
-else {
-    $localSettings = @{ IsEncrypted = $false; Values = $localValues }
-    [IO.File]::WriteAllText(
-        $localSettingsPath,
-        ($localSettings | ConvertTo-Json -Depth 4),
-        [Text.UTF8Encoding]::new($false))
-    Write-Host 'Created ignored local.settings.json using developer credentials and Azurite.'
 }
 
 function Get-ConnectionStatus {

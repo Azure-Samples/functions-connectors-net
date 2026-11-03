@@ -3,11 +3,8 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-localSettingsTemp=''
-cleanup_local_settings() {
-  if [[ -n "$localSettingsTemp" ]]; then rm -f "$localSettingsTemp"; fi
-}
-trap cleanup_local_settings EXIT
+app_dir="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/local-settings.sh"
 
 forceLocalSettings=false
 if [[ $# -gt 0 ]]; then
@@ -29,20 +26,20 @@ fi
 
 outputs=$(azd env get-values --output json)
 for name in resourceGroupName connectorNamespaceName connectorNamespaceConnectionName connectorPollingEndpoint; do
-  if ! echo "$outputs" | jq -e --arg name "$name" '.[$name] | type == "string" and test("\\S")' >/dev/null; then
+  if ! echo "$outputs" | connector_jq -e --arg name "$name" '.[$name] | type == "string" and test("\\S")' >/dev/null; then
     echo "ERROR: Missing azd output ${name}. Run azd provision first." >&2
     exit 1
   fi
 done
 
-resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
-connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
-connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
-pollingEndpoint=$(echo "$outputs" | jq -r '.connectorPollingEndpoint')
-triggerSettings=$(echo "$outputs" | jq -ce '.triggerConfigSettings | if type == "string" then fromjson else . end | select(type == "object")')
-triggerDefinitions=$(echo "$outputs" | jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
+resourceGroupName=$(echo "$outputs" | connector_jq -r '.resourceGroupName')
+connectorNamespaceName=$(echo "$outputs" | connector_jq -r '.connectorNamespaceName')
+connectorNamespaceConnectionName=$(echo "$outputs" | connector_jq -r '.connectorNamespaceConnectionName')
+pollingEndpoint=$(echo "$outputs" | connector_jq -r '.connectorPollingEndpoint')
+triggerSettings=$(echo "$outputs" | connector_jq -ce '.triggerConfigSettings | if type == "string" then fromjson else . end | select(type == "object")')
+triggerDefinitions=$(echo "$outputs" | connector_jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
 
-localSettings=$(jq -n --arg endpoint "$pollingEndpoint" --argjson settings "$triggerSettings" \
+localSettings=$(connector_jq -n --arg endpoint "$pollingEndpoint" --argjson settings "$triggerSettings" \
   --slurpfile manifest "${SCRIPT_DIR}/../triggers.json" '
   {
     IsEncrypted: false,
@@ -66,45 +63,24 @@ localSettings=$(jq -n --arg endpoint "$pollingEndpoint" --argjson settings "$tri
     ))
   }')
 
+write_local_settings "$localSettings" "$forceLocalSettings"
 existingNames=$(az connector-namespace trigger list \
   -g "$resourceGroupName" --namespace "$connectorNamespaceName" --query '[].name' -o json)
 while IFS= read -r functionName; do
   triggerName="sharepoint-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
-  if echo "$existingNames" | jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
+  if echo "$existingNames" | connector_jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
     az connector-namespace trigger update \
       -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
       -n "$triggerName" --state Disabled -o none
   fi
-done < <(echo "$triggerDefinitions" | jq -r '.[] | select(.enabled == false) | .functionName')
-
-localSettingsPath="${SCRIPT_DIR}/../../local.settings.json"
-if [[ -d "$localSettingsPath" ]]; then
-  echo "ERROR: local.settings.json must not be a directory." >&2
-  exit 1
-fi
-if [[ -e "$localSettingsPath" && "$forceLocalSettings" != "true" ]]; then
-  echo "Existing local.settings.json preserved. Use --force-local-settings to regenerate it."
-else
-  if ! localSettingsTemp=$(mktemp "$(dirname "$localSettingsPath")/.local-settings.XXXXXX"); then
-    echo "ERROR: Could not create temporary local settings file." >&2
-    exit 1
-  fi
-  if ! printf '%s\n' "$localSettings" > "$localSettingsTemp"; then
-    echo "ERROR: Could not write temporary local settings file." >&2
-    exit 1
-  fi
-  if ! mv -f "$localSettingsTemp" "$localSettingsPath"; then
-    echo "ERROR: Could not replace local.settings.json." >&2
-    exit 1
-  fi
-  localSettingsTemp=''
-  echo "Created ignored local.settings.json using developer credentials and Azurite."
-fi
+done < <(echo "$triggerDefinitions" | connector_jq -r '.[] | select(.enabled == false) | .functionName')
 
 get_connection_status() {
-  az connector-namespace connection show \
+  local cli_status
+  cli_status=$(az connector-namespace connection show \
     -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-    -n "$connectorNamespaceConnectionName" --query properties.overallStatus -o tsv
+    -n "$connectorNamespaceConnectionName" --query properties.overallStatus -o tsv) || return
+  printf '%s\n' "${cli_status%$'\r'}"
 }
 
 currentStatus=$(get_connection_status)
@@ -121,12 +97,14 @@ for attempt in 1 2 3 4 5; do
     --connection-name "$connectorNamespaceConnectionName" \
     --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
     --query 'value[0].link' -o tsv 2>/dev/null || true)
+  consentLink="${consentLink%$'\r'}"
   if [[ -z "$consentLink" || "$consentLink" == "null" ]]; then
     consentLink=$(az connector-namespace connection list-consent-links \
       -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
       --connection-name "$connectorNamespaceConnectionName" \
       --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
       --query link -o tsv 2>/dev/null || true)
+    consentLink="${consentLink%$'\r'}"
   fi
   if [[ -n "$consentLink" && "$consentLink" != "null" ]]; then
     break

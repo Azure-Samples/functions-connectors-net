@@ -4,6 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
+$localCallback = -not [string]::IsNullOrWhiteSpace($CallbackBaseUrl)
 
 if ($CallbackBaseUrl -and (
     -not $CallbackBaseUrl.StartsWith('https://', [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -89,28 +91,25 @@ foreach ($trigger in $triggerConfigs) {
     $callbackUrl = "$CallbackBaseUrl/runtime/webhooks/connector?functionName=$functionName"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
     $paramsFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
+    $ownedFiles = [Collections.Generic.List[string]]::new()
+    $failure = $null
     Write-Host "  Creating trigger: $($trigger.FunctionName) -> $($trigger.OperationName)" -ForegroundColor Cyan
 
     try {
-        @{
+        Write-PrivateJsonFile $notifFile @{
             callbackUrl = $callbackUrl
             authentication = @{
                 type = "QueryString"
                 name = "code"
                 value = $connectorExtensionKey
             }
-        } | ConvertTo-Json -Depth 3 -Compress | Set-Content -LiteralPath $notifFile -NoNewline
-        ConvertTo-Json -InputObject @($trigger.parameters) -Depth 4 -Compress |
-            Set-Content -LiteralPath $paramsFile -NoNewline
+        } $ownedFiles
+        Write-PrivateJsonFile $paramsFile @($trigger.parameters) $ownedFiles
 
-        if ($triggerName -in $existingNames) {
-            az connector-namespace trigger delete `
-                -g $resourceGroupName --namespace $connectorNamespaceName `
-                -n $triggerName --yes -o none
-            if ($LASTEXITCODE -ne 0) { throw "Could not replace trigger $triggerName." }
-        }
-
-        az connector-namespace trigger create `
+        $metadata = "recurrenceFrequency:Minute,recurrenceInterval:'5'"
+        if (-not $localCallback) { $metadata += ",destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$functionName" }
+        $verb = if ($triggerName -in $existingNames) { 'update' } else { 'create' }
+        az connector-namespace trigger $verb `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:sharepointonline}" `
@@ -118,15 +117,17 @@ foreach ($trigger in $triggerConfigs) {
             --parameters "@$paramsFile" `
             --notification-details "@$notifFile" `
             --description $trigger.Description `
-            --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$functionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
-            -o none
+            --metadata "{$metadata}" `
+            -o none 2>$null
 
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create trigger config for $functionName."
         }
-    }
-    finally {
-        Remove-Item -LiteralPath $notifFile, $paramsFile -ErrorAction SilentlyContinue
+    } catch {
+        $failure = $_
+        throw
+    } finally {
+        Remove-OwnedStaging $ownedFiles $failure
     }
 }
 

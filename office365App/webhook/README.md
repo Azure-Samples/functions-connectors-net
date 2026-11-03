@@ -1,9 +1,6 @@
 # Office 365 Outlook Webhook Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
-and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
-The Connector Namespace delivers events to the function's public HTTPS callback.
-All handlers use typed payloads and log only the trigger name and item count.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector). The Connector Namespace delivers events to the function's public HTTPS callback. All handlers use typed payloads and log only the trigger name and item count.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -21,7 +18,7 @@ All handlers use typed payloads and log only the trigger name and item count.
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7 for the default hook, or Bash and `jq` for the alternative script
+- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash and `jq` for the alternative script
 - An Office 365 mailbox and permission to authorize the connection
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
@@ -48,9 +45,7 @@ azd env set OFFICE365_CALENDAR_ID '<actual connector calendar ID>'
 azd up
 ```
 
-Use the actual connector calendar ID, not the placeholder `Calendar`. Complete
-the OAuth sign-in opened by `azd up` with the mailbox account to monitor.
-Use a different azd environment from polling.
+Use the actual connector calendar ID, not the placeholder `Calendar`. Complete the OAuth sign-in opened by `azd up` with the mailbox account to monitor. Use a different azd environment from polling.
 
 ## Optional configuration
 
@@ -66,17 +61,13 @@ Set environment values before `azd up`. Six personal triggers are configured by 
 | Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
 | `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs, including callback updates |
 
-Empty address disables its listener and skips registration. When disabling an
-existing shared source, also disable/delete its namespace config; skipped resources
-are not removed automatically. Match the local shared listener's disabled setting
-to your selection.
+Empty address disables its listener and skips registration. When disabling an existing shared source, also disable/delete its namespace config; skipped resources are not removed automatically. Match the local shared listener's disabled setting to your selection.
 
 ## Local development
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated during successful `azd up`; existing files are preserved.
-   Only if it is missing, rerun:
+   Use the file generated during successful `azd up`; existing files are preserved. Only if it is missing, rerun:
 
    ```bash
    azd hooks run postdeploy
@@ -95,11 +86,9 @@ to your selection.
    func start --enableAuth
    ```
 
-4. Expose port 7071 over public HTTPS. Get the local `connector_extension`
-   system key from Azurite's `azure-webjobs-secrets`.
+4. Expose port 7071 over public HTTPS. Get the local `connector_extension` system key from Azurite's `azure-webjobs-secrets`.
 
-5. From the webhook folder, sign in and register the tunnel callback using its
-   provisioned azd environment. This replaces deployed callbacks.
+5. From the webhook folder, sign in and register the tunnel callback using its provisioned azd environment. This replaces deployed callbacks.
 
    ```bash
    az login
@@ -116,19 +105,15 @@ to your selection.
    azd hooks run postdeploy
    ```
 
-Functions host/deployment storage is required. Enable the local shared listener only when configured.
-Never commit keys, callback URLs, or local settings.
+Functions host/deployment storage is required. Enable the local shared listener only when configured. Never commit keys, callback URLs, or local settings.
+
+Worker telemetry uses the `ConnectorNamespace` identity settings: the Function App's system-assigned managed identity in Azure, or standard developer credentials when identity settings are absent locally.
 
 ## Verify
 
-Check the connection is **Connected** and selected triggers are **Enabled** in
-[Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events
-and check worker logs for `Received <FunctionName> trigger (<Count> items)`;
-build/deployment success alone is not real-event verification. Delivery is at least
-once and source detection may be delayed.
+Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events and check worker logs for `Received <FunctionName> trigger (<Count> items)`; build/deployment success alone is not real-event verification. Delivery is at least once and source detection may be delayed.
 
-Run `azd down --purge` when finished. Licensing is provided by the repository's
-[root LICENSE](../../LICENSE).
+Run `azd down --purge` when finished. Licensing is provided by the repository's [root LICENSE](../../LICENSE).
 
 ## More
 

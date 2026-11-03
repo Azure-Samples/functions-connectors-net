@@ -2,8 +2,6 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
-@description('Object (principal) ID of the function app user-assigned MI. Granted access to the sharepointonline connection so it can call the connector at runtime.')
-param functionAppPrincipalId string
 @description('Optional. AAD object ID of a user (typically the deployer) to also grant access to the connection, so the same code can be debugged locally with `az login` credentials.')
 param userPrincipalId string = ''
 param tenantId string = tenant().tenantId
@@ -22,36 +20,6 @@ resource sharepointConnection 'Microsoft.Web/connectorGateways/connections@2026-
   name: connectionName
   properties: {
     connectorName: 'sharepointonline'
-  }
-}
-
-// Function App MI -> SharePoint connection (used by the trigger callback path).
-resource sharepointConnectionFunctionAppAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: sharepointConnection
-  name: 'functionapp-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: functionAppPrincipalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
-// Connector Namespace system MI -> SharePoint connection (needed to poll triggers).
-resource sharepointConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: sharepointConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
   }
 }
 

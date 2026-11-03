@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+app_dir="$(cd "$script_dir/../.." && pwd)"
+source "$script_dir/local-settings.sh"
 
 force_local_settings=false
 consent_link_only=false
@@ -17,34 +20,21 @@ az extension show --name connector-namespace --query name -o tsv >/dev/null ||
 outputs=$(azd env get-values --output json)
 required=(resourceGroupName connectorNamespaceName connectorNamespaceConnectionName connectorPollingEndpoint triggerConfigSettings)
 for name in "${required[@]}"; do
-  jq -e --arg name "$name" '.[$name] | . != null and . != ""' <<<"$outputs" >/dev/null ||
+  connector_jq -e --arg name "$name" '.[$name] | . != null and . != ""' <<<"$outputs" >/dev/null ||
     { echo "Missing azd output $name. Run azd provision first." >&2; exit 1; }
 done
-resource_group=$(jq -r '.resourceGroupName' <<<"$outputs")
-namespace=$(jq -r '.connectorNamespaceName' <<<"$outputs")
-connection=$(jq -r '.connectorNamespaceConnectionName' <<<"$outputs")
-trigger_settings=$(jq -ce '.triggerConfigSettings | if type == "string" then fromjson else . end' <<<"$outputs")
+resource_group=$(connector_jq -r '.resourceGroupName' <<<"$outputs")
+namespace=$(connector_jq -r '.connectorNamespaceName' <<<"$outputs")
+connection=$(connector_jq -r '.connectorNamespaceConnectionName' <<<"$outputs")
+trigger_settings=$(connector_jq -ce '.triggerConfigSettings | if type == "string" then fromjson else . end' <<<"$outputs")
 functions=(OnNewEmail OnFlaggedEmail OnNewMentionMeEmail OnNewCalendarEvent OnUpcomingEvent OnCalendarUpdatedItems OnSharedMailboxNewEmail)
 for function_name in "${functions[@]}"; do
   setting="${function_name}TriggerConfigName"
-  jq -e --arg name "$setting" '.[$name] | type == "string" and length > 0' <<<"$trigger_settings" >/dev/null ||
+  connector_jq -e --arg name "$setting" '.[$name] | type == "string" and length > 0' <<<"$trigger_settings" >/dev/null ||
     { echo "Missing trigger configuration setting $setting." >&2; exit 1; }
 done
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-local_settings="$script_dir/../../local.settings.json"
-if [[ -f "$local_settings" && "$force_local_settings" == false ]]; then
-  echo 'Existing local.settings.json preserved. Use --force-local-settings to regenerate it.'
-else
-  umask 077
-  settings_temp=""
-  cleanup() {
-    if [[ -n "$settings_temp" ]]; then rm -f -- "$settings_temp"; fi
-  }
-  trap cleanup EXIT
-  settings_temp=$(mktemp "$script_dir/../../.local-settings.XXXXXX") ||
-    { echo 'Could not create a temporary local settings file.' >&2; exit 1; }
-  jq -n --argjson outputs "$outputs" --argjson settings "$trigger_settings" '{
+local_settings_json=$(connector_jq -n --argjson outputs "$outputs" --argjson settings "$trigger_settings" '{
     IsEncrypted: false,
     Values: ({
       AzureWebJobsStorage: "UseDevelopmentStorage=true",
@@ -53,20 +43,14 @@ else
       "AzureWebJobs.OnSharedMailboxNewEmail.Disabled":
         ((($outputs.office365SharedMailboxAddress // "") | length) == 0 | tostring)
     } + $settings)
-  }' >"$settings_temp" ||
-    { echo 'Could not generate local.settings.json; existing settings were preserved.' >&2; exit 1; }
-  jq -e '.IsEncrypted == false and (.Values | type == "object") and
-    all(.Values[]; type == "string")' "$settings_temp" >/dev/null ||
-    { echo 'Generated local settings are invalid; existing settings were preserved.' >&2; exit 1; }
-  [[ ! -d "$local_settings" ]] && mv -f -- "$settings_temp" "$local_settings" ||
-    { echo 'Could not replace local.settings.json; existing settings were preserved.' >&2; exit 1; }
-  settings_temp=""
-  echo 'Created ignored local.settings.json using developer credentials and Azurite.'
-fi
+  }')
+write_local_settings "$local_settings_json" "$force_local_settings"
 
 connection_status() {
-  az connector-namespace connection show -g "$resource_group" --namespace "$namespace" \
-    -n "$connection" --query properties.overallStatus -o tsv
+  local cli_status
+  cli_status=$(az connector-namespace connection show -g "$resource_group" --namespace "$namespace" \
+    -n "$connection" --query properties.overallStatus -o tsv) || return
+  printf '%s\n' "${cli_status%$'\r'}"
 }
 status=$(connection_status)
 if [[ "$status" == Connected ]]; then
@@ -79,11 +63,13 @@ for attempt in 1 2 3 4 5; do
     -g "$resource_group" --namespace "$namespace" --connection-name "$connection" \
     --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
     --query 'value[0].link' -o tsv 2>/dev/null) || consent_link=""
+  consent_link="${consent_link%$'\r'}"
   if [[ -z "$consent_link" || "$consent_link" == null ]]; then
     consent_link=$(az connector-namespace connection list-consent-links \
       -g "$resource_group" --namespace "$namespace" --connection-name "$connection" \
       --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
       --query link -o tsv 2>/dev/null) || consent_link=""
+    consent_link="${consent_link%$'\r'}"
   fi
   [[ -n "$consent_link" && "$consent_link" != null ]] && break
   if (( attempt < 5 )); then sleep 5; fi
@@ -91,7 +77,7 @@ done
 [[ -n "$consent_link" && "$consent_link" != null ]] ||
   { echo 'Could not obtain an Office 365 consent link.' >&2; exit 1; }
 echo "Consent URL: $consent_link"
-if [[ "$consent_link_only" == true || "$(jq -r '.office365TriggerState // ""' <<<"$outputs")" == Disabled ]]; then
+if [[ "$consent_link_only" == true || "$(connector_jq -r '.office365TriggerState // ""' <<<"$outputs")" == Disabled ]]; then
   exit 0
 fi
 if command -v xdg-open >/dev/null; then
