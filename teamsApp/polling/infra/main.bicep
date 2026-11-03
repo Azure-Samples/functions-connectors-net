@@ -133,7 +133,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   name: 'connector-namespace'
   scope: rg
   params: {
@@ -215,7 +215,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
 }
 
 // Assign app permissions after creation so storage and namespace provisioning do not depend on the app.
-module functionAppAccess './functionAppAccess.bicep' = {
+module functionAppAccess './function-access.bicep' = {
   name: 'function-app-access'
   scope: rg
   params: {

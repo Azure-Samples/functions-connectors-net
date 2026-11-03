@@ -106,8 +106,10 @@ Hooks reject unsupported/duplicate names, missing/empty values and placeholders;
 
    ```bash
    dotnet build
-   func start
+   func start --enableAuth
    ```
+
+   Core Tools v4 bypasses key authentication locally by default. Use `--enableAuth` before exposing the host through a public tunnel so callbacks require the local `connector_extension` system key.
 
 4. Open a public HTTPS tunnel to the local host and register **separate** configs using `/runtime/webhooks/connector?functionName=<FunctionName>`. Authenticate with the local `connector_extension` system key as the `code` query parameter.
 
