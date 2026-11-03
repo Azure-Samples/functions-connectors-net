@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": { "value": "${AZURE_ENV_NAME}" },
+    "location": { "value": "${AZURE_LOCATION}" },
+    "telemetryLocation": { "value": "${AZURE_TELEMETRY_LOCATION}" },
+    "connectorNamespaceLocation": { "value": "${CONNECTOR_NAMESPACE_LOCATION=westcentralus}" },
+    "userPrincipalId": { "value": "${AZURE_PRINCIPAL_ID}" },
+    "userPrincipalType": { "value": "${AZURE_PRINCIPAL_TYPE}" },
+    "organization": { "value": "${AZURE_DEVOPS_ORGANIZATION}" },
+    "project": { "value": "${AZURE_DEVOPS_PROJECT}" },
+    "repository": { "value": "${AZURE_DEVOPS_REPOSITORY=}" },
+    "enableBuildTrigger": { "value": "${AZURE_DEVOPS_ENABLE_BUILD_TRIGGER=false}" },
+    "enableTfvcTrigger": { "value": "${AZURE_DEVOPS_ENABLE_TFVC_TRIGGER=false}" },
+    "team": { "value": "${AZURE_DEVOPS_TEAM=}" },
+    "assignedTo": { "value": "${AZURE_DEVOPS_ASSIGNED_TO=}" },
+    "workItemType": { "value": "${AZURE_DEVOPS_WORK_ITEM_TYPE=}" },
+    "workItemTriggerSelection": { "value": "${AZURE_DEVOPS_WORK_ITEM_TRIGGER_SELECTION=All}" }
+  }
+}

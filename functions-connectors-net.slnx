@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/AzureDevOpsApp/polling/">
+    <Project Path="AzureDevOpsApp/polling/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/AzureDevOpsApp/webhook/">
+    <Project Path="AzureDevOpsApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
   <Folder Name="/office365App/webhook/">
     <Project Path="office365App/webhook/functions-connectors-net.csproj" />
   </Folder>
