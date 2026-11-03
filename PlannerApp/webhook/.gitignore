@@ -1,0 +1,7 @@
+bin/
+obj/
+.azure/
+local.settings.json
+.local.settings.*.tmp
+.notification-*.json
+.parameters-*.json

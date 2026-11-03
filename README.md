@@ -11,6 +11,7 @@
 | [genericApp](genericApp/) | Any connector | Generic untyped triggers — receives raw JSON `string` payloads without SDK model dependency |
 | [office365App](office365App/) ([polling](office365App/polling/), [webhook](office365App/webhook/)) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
 | [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
+| [PlannerApp](PlannerApp/) ([polling](PlannerApp/polling/), [webhook](PlannerApp/webhook/)) | [Planner](https://learn.microsoft.com/connectors/planner/) | New task, completed task, optional assignment to the connection user (basic plans only) |
 | [sharepointApp](sharepointApp/) ([polling](sharepointApp/polling/), [webhook](sharepointApp/webhook/)) | [SharePoint Online](https://learn.microsoft.com/connectors/sharepointonline/) | File and list-item changes, forms, Syntex, and recurring digests |
 | [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
 

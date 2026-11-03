@@ -1,0 +1,5 @@
+[
+  { "functionName": "OnNewTask", "operationName": "OnNewTask_V3", "description": "When a new task is created", "planScoped": true },
+  { "functionName": "OnCompleteTask", "operationName": "OnCompleteTask_V3", "description": "When a task is completed", "planScoped": true },
+  { "functionName": "OnTaskAssignedToMe", "operationName": "OnTaskAssignedToMe_V2", "description": "When a task is assigned to me", "planScoped": false }
+]

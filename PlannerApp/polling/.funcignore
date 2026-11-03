@@ -1,0 +1,6 @@
+.git*
+.azure
+infra
+README.md
+local.settings*
+obj
