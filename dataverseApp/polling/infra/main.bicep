@@ -26,6 +26,12 @@ param dataverseEnvironmentUrl string
 @description('Dataverse logical table name for combined row changes, e.g. account (not the accounts entity set).')
 param dataverseTableName string = 'account'
 
+@description('Opt in to all three separate row-added, row-modified and row-deleted operations. Overlaps combined row events without adding always-ready instances.')
+param enableSeparateRowTriggers bool = false
+@minLength(1)
+@description('Entity-set name for separate operations, e.g. accounts; distinct from the combined logical table name.')
+param dataverseEntitySetName string = 'accounts'
+
 param enableActionTrigger bool = false
 param eventCatalog string = ''
 param eventCategory string = ''
@@ -33,7 +39,7 @@ param eventTable string = ''
 param eventAction string = ''
 
 metadata name = 'Azure Functions Microsoft Dataverse Poll Delivery (.NET)'
-metadata description = 'Current Dataverse combined row changes and optional action-performed events with Poll delivery.'
+metadata description = 'Dataverse combined row changes, optional separate row operations and action-performed events with Poll delivery.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -50,7 +56,6 @@ var effectiveTelemetryLocation = empty(telemetryLocation) ? location : telemetry
 
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
-var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
 var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
 var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
@@ -81,16 +86,6 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   }
 }
 
-module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'funcUserAssignedIdentity'
-  scope: rg
-  params: {
-    location: location
-    tags: tags
-    name: functionAppIdentityName
-  }
-}
-
 module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   name: '${uniqueString(deployment().name, location)}-appinsights'
   scope: rg
@@ -101,11 +96,6 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
         principalId: userPrincipalId
@@ -135,21 +125,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
       containers: [{ name: deploymentStorageContainerName }]
     }
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: storageBlobDataOwner
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageQueueDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageTableDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: storageBlobDataOwner
         principalId: userPrincipalId
@@ -198,10 +173,13 @@ module pollTriggers './poll-triggers.bicep' = {
   scope: rg
   name: '${connectorNamespaceName}-poll-triggers'
   params: {
+    functionAppName: functionAppName
     namespaceName: connectorNamespace.outputs.name
     connectionName: connectorNamespace.outputs.connectionName
     environmentUrl: dataverseEnvironmentUrl
     tableName: dataverseTableName
+    enableSeparateRowTriggers: enableSeparateRowTriggers
+    entitySetName: dataverseEntitySetName
     enableActionTrigger: enableActionTrigger
     eventCatalog: eventCatalog
     eventCategory: eventCategory
@@ -212,13 +190,10 @@ module pollTriggers './poll-triggers.bicep' = {
 
 var allAppSettings = union({
   AzureWebJobsStorage__credential: 'managedidentity'
-  AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
-  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
+  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
-  AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   ConnectorNamespace__credential: 'managedidentity'
-  ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
   ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
 }, pollTriggers.outputs.triggerConfigSettings)
 
@@ -234,9 +209,6 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     httpsOnly: true
     managedIdentities: {
       systemAssigned: true
-      userAssignedResourceIds: [
-        '${funcUserAssignedIdentity.outputs.resourceId}'
-      ]
     }
     functionAppConfig: {
       deployment: {
@@ -244,18 +216,14 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
           type: 'blobContainer'
           value: '${storageAccount.outputs.primaryBlobEndpoint}${deploymentStorageContainerName}'
           authentication: {
-            type: 'UserAssignedIdentity'
-            userAssignedIdentityResourceId: funcUserAssignedIdentity.outputs.resourceId
+            type: 'SystemAssignedIdentity'
           }
         }
       }
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
-        alwaysReady: concat(
-          [{ name: 'function:ondataverserowchanged', instanceCount: 1 }],
-          enableActionTrigger ? [{ name: 'function:ondataverseactionperformed', instanceCount: 1 }] : []
-        )
+        alwaysReady: []
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -275,15 +243,25 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
-// Grant the function app's user-assigned MI access to the Dataverse connection.
-// The Poll listeners use the function app's user-assigned identity.
+// Assign app roles after its identity exists, avoiding storage/app dependency cycles.
+module functionAppRbac './functionAppRbac.bicep' = {
+  scope: rg
+  name: '${functionAppName}-rbac'
+  params: {
+    storageAccountName: storageAccount.outputs.name
+    appInsightsName: monitoring.outputs.name
+    functionAppPrincipalId: functionApp.outputs.systemAssignedMIPrincipalId!
+  }
+}
+
+// Grant the function app's system-assigned identity access to the Dataverse connection.
 module functionAccessPolicy './functionAccessPolicy.bicep' = {
   scope: rg
   name: '${connectorNamespaceName}-func-policy'
   params: {
     connectorNamespaceName: connectorNamespace.outputs.name
     connectionName: connectorNamespace.outputs.connectionName
-    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
+    functionAppPrincipalId: functionApp.outputs.systemAssignedMIPrincipalId!
   }
 }
 

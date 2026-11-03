@@ -26,21 +26,6 @@ resource dataverseConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   }
 }
 
-// Connector Namespace system MI -> Dataverse connection (needed to poll triggers).
-resource dataverseConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: dataverseConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
 resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
   parent: dataverseConnection
   name: 'dev-user'

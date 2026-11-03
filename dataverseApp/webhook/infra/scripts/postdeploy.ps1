@@ -1,4 +1,7 @@
+#requires -Version 7.3
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
+. (Join-Path $PSScriptRoot 'action-cleanup.ps1')
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw 'Install the connector-namespace Azure CLI extension before running this script.'
 }
@@ -14,68 +17,57 @@ if ([string]$outputs.enableActionTrigger -notin @('true', 'false')) {
     throw 'Missing or invalid azd output enableActionTrigger. Run azd provision first.'
 }
 $actionEnabled = [string]$outputs.enableActionTrigger -eq 'true'
+if ([string]$outputs.enableSeparateRowTriggers -notin @('true', 'false')) {
+    throw 'Missing or invalid azd output enableSeparateRowTriggers. Run azd provision first.'
+}
+$separateEnabled = [string]$outputs.enableSeparateRowTriggers -eq 'true'
+if ($separateEnabled -and [string]::IsNullOrWhiteSpace([string]$outputs.dataverseEntitySetName)) {
+    throw 'Missing azd output dataverseEntitySetName.'
+}
 if ($actionEnabled) {
     foreach ($name in @('eventCatalog', 'eventCategory', 'eventTable', 'eventAction')) {
         if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) { throw "Missing business-event value $name." }
     }
 }
 
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if (Test-Path -LiteralPath $localSettingsPath) {
-    $item = Get-Item -LiteralPath $localSettingsPath -Force
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw 'local.settings.json must be a regular file.'
-    }
-    Write-Host 'Existing local.settings.json preserved.'
-} else {
-    $localSettings = @{
-        IsEncrypted = $false
-        Values = @{
-            AzureWebJobsStorage = 'UseDevelopmentStorage=true'
-            FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
-            'AzureWebJobs.OnDataverseActionPerformed.Disabled' = (-not $actionEnabled).ToString().ToLowerInvariant()
-        }
-    }
-    $stagingPath = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N')).json"
-    try {
-        [IO.File]::WriteAllText(
-            $stagingPath,
-            ($localSettings | ConvertTo-Json -Depth 4),
-            [Text.UTF8Encoding]::new($false))
-        $validated = Get-Content -LiteralPath $stagingPath -Raw | ConvertFrom-Json -AsHashtable
-        if ($validated.IsEncrypted -ne $false -or $validated.Values.Count -ne 3) {
-            throw 'Generated local settings failed validation.'
-        }
-        foreach ($name in $localSettings.Values.Keys) {
-            if ($validated.Values[$name] -cne $localSettings.Values[$name]) {
-                throw "Generated local setting '$name' failed validation."
-            }
-        }
-        [IO.File]::Move($stagingPath, $localSettingsPath)
-        Write-Host 'Created ignored local.settings.json using Azurite.'
-    } finally {
-        if (Test-Path -LiteralPath $stagingPath) {
-            Remove-Item -LiteralPath $stagingPath -ErrorAction Stop
-        }
-    }
+$localValues = @{
+    AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+    FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+    'AzureWebJobs.OnDataverseActionPerformed.Disabled' = (-not $actionEnabled).ToString().ToLowerInvariant()
+    'AzureWebJobs.OnDataverseRowAdded.Disabled' = (-not $separateEnabled).ToString().ToLowerInvariant()
+    'AzureWebJobs.OnDataverseRowModified.Disabled' = (-not $separateEnabled).ToString().ToLowerInvariant()
+    'AzureWebJobs.OnDataverseRowDeleted.Disabled' = (-not $separateEnabled).ToString().ToLowerInvariant()
 }
+Write-LocalSettings $localValues
 
-if (-not $actionEnabled) {
-    $name = "$($outputs.connectorNamespaceConnectionName)-ondataverseactionperformed"
+$optionalTriggers = @(
+    @{ functionName = 'OnDataverseActionPerformed'; operationName = 'BusinessEventsTrigger'; enabled = $actionEnabled }
+    @{ functionName = 'OnDataverseRowAdded'; operationName = 'GetOnNewItems_V2'; enabled = $separateEnabled }
+    @{ functionName = 'OnDataverseRowModified'; operationName = 'GetOnUpdatedItems_V2'; enabled = $separateEnabled }
+    @{ functionName = 'OnDataverseRowDeleted'; operationName = 'GetOnDeletedItems_V2'; enabled = $separateEnabled }
+)
+$disabledTriggers = @($optionalTriggers | Where-Object { -not $_.enabled })
+$actionContext = Get-DataverseActionContext $outputs Webhook
+$actionJournal = Get-DataverseActionJournal (Join-Path $PSScriptRoot '../..') $actionContext
+if ($disabledTriggers.Count -gt 0 -or $actionEnabled) {
     $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
-    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" -o json
-    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse action subscriptions.' }
+    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" `
+        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse subscriptions.' }
     $configs = ($raw -join "`n") | ConvertFrom-Json
-    $existing = @($configs.value | Where-Object name -eq $name)
-    if ($existing.Count -gt 0) {
-        if ($existing.Count -ne 1 -or
-            $existing[0].properties.operationName -ne 'BusinessEventsTrigger' -or
-            $existing[0].properties.connectionDetails.connectionName -ne $outputs.connectorNamespaceConnectionName) {
-            throw "Refusing to delete '$name': it does not match this sample's action subscription."
+    $actionConfigs = @($configs.value | Where-Object name -EQ $actionContext.triggerName)
+    if ($actionConfigs.Count -gt 1) { throw 'Ambiguous Dataverse action configuration.' }
+    if (-not $actionEnabled) {
+        Protect-DataverseActionRegistration $actionContext $actionJournal $actionConfigs[0] $outputs
+    }
+    foreach ($trigger in $disabledTriggers) {
+        $name = "$($outputs.connectorNamespaceConnectionName)-$($trigger.functionName.ToLowerInvariant())"
+        $existing = @($configs.value | Where-Object name -eq $name)
+        if ($existing.Count -gt 0) {
+            az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse subscription '$name'." }
+            Write-Host "Removed Connector Namespace configuration '$name' because its function is disabled."
         }
-        az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
-        if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse action subscription '$name'." }
-        Write-Host "Removed sample-owned action subscription '$name' because the action is disabled."
     }
 }
 
@@ -148,15 +140,45 @@ if ($actionEnabled) {
         )
     }
 }
-$failed = @()
+if ($separateEnabled) {
+    foreach ($trigger in $optionalTriggers | Where-Object operationName -ne 'BusinessEventsTrigger') {
+        $triggers += @{
+            functionName = $trigger.functionName
+            operationName = $trigger.operationName
+            parameters = @(
+                @{ name = 'dataset'; value = $organization }
+                @{ name = 'table'; value = $outputs.dataverseEntitySetName }
+            )
+        }
+    }
+}
 foreach ($trigger in $triggers) {
     $name = "$($outputs.connectorNamespaceConnectionName)-$($trigger.functionName.ToLowerInvariant())"
-    $bodyFile = Join-Path $PSScriptRoot ".notification-details-$([Guid]::NewGuid().ToString('N')).json"
+    if ($trigger.operationName -eq 'BusinessEventsTrigger') {
+        Protect-DataverseActionRegistration $actionContext $actionJournal $actionConfigs[0] $outputs -BeforeCreate
+        if ($actionConfigs.Count -eq 1) {
+            $expected = @{}
+            foreach ($parameter in $trigger.parameters) { $expected[$parameter.name] = [string]$parameter.value }
+            $current = @{}
+            foreach ($parameter in $actionConfigs[0].properties.parameters) { $current[$parameter.name] = [string]$parameter.value }
+            Assert-DataverseActionContext $expected $current
+            Write-Host "Preserved existing Dataverse action configuration '$name'; no new source registration requested."
+            continue
+        }
+    }
+    $bodyFile = Join-Path ([IO.Path]::GetTempPath()) "dataverse-notification-$([Guid]::NewGuid().ToString('N')).json"
     $body = @{
         properties = @{
             connectionDetails = @{ connectionName = $outputs.connectorNamespaceConnectionName; connectorName = 'commondataservice' }
             operationName = $trigger.operationName
             parameters = $trigger.parameters
+            metadata = @{
+                destinationType = 'functionApp'
+                functionAppName = $outputs.functionAppName
+                functionAppResourceGroup = $outputs.resourceGroupName
+                functionAppSubscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
+                functionName = $trigger.functionName
+            }
             state = 'Enabled'
             type = 'NotSpecified'
             notificationDetails = @{
@@ -165,15 +187,41 @@ foreach ($trigger in $triggers) {
             }
         }
     }
+    $bodyOwned = $false
+    $failure = $null
     try {
-        [IO.File]::WriteAllText($bodyFile, ($body | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
-        Write-Host "Creating current Dataverse trigger '$name' ($($trigger.operationName))..."
+        $stream = New-PrivateStagingStream $bodyFile
+        $bodyOwned = $true
+        $writeFailure = $null
+        try {
+            $stream.Write([Text.UTF8Encoding]::new($false).GetBytes(($body | ConvertTo-Json -Depth 8)))
+            $stream.Flush($true)
+        } catch {
+            $writeFailure = $_
+            throw
+        } finally {
+            try { $stream.Dispose() } catch {
+                if ($null -eq $writeFailure) { throw 'Could not close private callback staging stream.' }
+                Write-Warning 'Could not close private callback staging stream; original failure preserved.'
+            }
+        }
+        Write-Host "Configuring Dataverse trigger '$name' ($($trigger.operationName))..."
         $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs/${name}?api-version=2026-05-01-preview"
-        az rest --method put --url $uri --body "@$bodyFile" -o none
-        if ($LASTEXITCODE -ne 0) { $failed += $trigger.operationName }
+        az rest --method put --url $uri --body "@$bodyFile" -o none 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not configure Dataverse trigger '$name' ($($trigger.operationName)). Inspect its Connector Namespace status; callback credentials were not logged."
+        }
+    } catch {
+        $failure = $_
+        throw
     } finally {
-        Remove-Item -LiteralPath $bodyFile -ErrorAction SilentlyContinue
+        try {
+            if ($bodyOwned -and [IO.File]::Exists($bodyFile)) { [IO.File]::Delete($bodyFile) }
+        } catch {
+            if ($null -eq $failure) { throw 'Could not clean owned callback staging file.' }
+            Write-Warning 'Could not clean owned callback staging file; original failure preserved.'
+        }
     }
 }
-if ($failed.Count -gt 0) { throw "Dataverse trigger registration failed: $($failed -join ', '). See the service errors above." }
-Write-Host 'Current Dataverse webhook trigger configuration complete.'
+if (-not $actionEnabled) { Assert-DataverseActionSourceCleanup $actionJournal }
+Write-Host 'Dataverse webhook trigger configuration complete.'

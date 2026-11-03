@@ -1,6 +1,9 @@
+#requires -Version 7.3
 param([switch] $ForceLocalSettings)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
+. (Join-Path $PSScriptRoot 'action-cleanup.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw 'Install the connector-namespace Azure CLI extension before running this script.'
@@ -30,47 +33,55 @@ $localValues = @{
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
 }
 foreach ($functionName in @(
-    'OnDataverseRowChanged', 'OnDataverseActionPerformed')) {
+    'OnDataverseRowChanged', 'OnDataverseActionPerformed',
+    'OnDataverseRowAdded', 'OnDataverseRowModified', 'OnDataverseRowDeleted')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing $setting in triggerConfigSettings."
     }
     $localValues[$setting] = $triggerSettings.$setting
 }
-$disabledSetting = 'AzureWebJobs.OnDataverseActionPerformed.Disabled'
-if ([string]::IsNullOrWhiteSpace([string]$triggerSettings.$disabledSetting)) {
-    throw "Missing $disabledSetting in triggerConfigSettings."
+$optionalTriggers = @(
+    @{ functionName = 'OnDataverseActionPerformed' }
+    @{ functionName = 'OnDataverseRowAdded' }
+    @{ functionName = 'OnDataverseRowModified' }
+    @{ functionName = 'OnDataverseRowDeleted' }
+)
+$disabledTriggers = @()
+foreach ($trigger in $optionalTriggers) {
+    $setting = "AzureWebJobs.$($trigger.functionName).Disabled"
+    if ([string]$triggerSettings.$setting -notin @('true', 'false')) {
+        throw "Missing or invalid $setting in triggerConfigSettings."
+    }
+    $localValues[$setting] = [string]$triggerSettings.$setting
+    if ([string]$triggerSettings.$setting -eq 'true') { $disabledTriggers += $trigger }
 }
-$localValues[$disabledSetting] = [string]$triggerSettings.$disabledSetting
-if ([string]$triggerSettings.$disabledSetting -eq 'true') {
-    $name = 'dataverse-ondataverseactionperformed'
+$actionContext = Get-DataverseActionContext $outputs Poll
+$actionJournal = Get-DataverseActionJournal (Join-Path $PSScriptRoot '../..') $actionContext
+$actionDisabled = $localValues['AzureWebJobs.OnDataverseActionPerformed.Disabled'] -eq 'true'
+if ($disabledTriggers.Count -gt 0 -or -not $actionDisabled) {
     $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
-    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" -o json
-    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse action subscriptions.' }
+    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" `
+        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse subscriptions.' }
     $configs = ($raw -join "`n") | ConvertFrom-Json
-    $existing = @($configs.value | Where-Object name -eq $name)
-    if ($existing.Count -gt 0) {
-        if ($existing.Count -ne 1 -or
-            $existing[0].properties.operationName -ne 'BusinessEventsTrigger' -or
-            $existing[0].properties.connectionDetails.connectionName -ne $outputs.connectorNamespaceConnectionName) {
-            throw "Refusing to delete '$name': it does not match this sample's action subscription."
+    $actionConfigs = @($configs.value | Where-Object name -EQ $actionContext.triggerName)
+    if ($actionConfigs.Count -gt 1) { throw 'Ambiguous Dataverse action configuration.' }
+    if (-not $actionDisabled -and $actionConfigs.Count -eq 0) {
+        throw 'Enabled Dataverse action configuration is missing. Run azd provision first.'
+    }
+    Protect-DataverseActionRegistration $actionContext $actionJournal $actionConfigs[0] $outputs
+    foreach ($trigger in $disabledTriggers) {
+        $name = "dataverse-$($trigger.functionName.ToLowerInvariant())"
+        $existing = @($configs.value | Where-Object name -eq $name)
+        if ($existing.Count -gt 0) {
+            az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse subscription '$name'." }
+            Write-Host "Removed Connector Namespace configuration '$name' because its function is disabled."
         }
-        az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
-        if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse action subscription '$name'." }
-        Write-Host "Removed sample-owned action subscription '$name' because the action is disabled."
     }
 }
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
-    Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
-} else {
-    $localSettings = @{ IsEncrypted = $false; Values = $localValues }
-    [IO.File]::WriteAllText(
-        $localSettingsPath,
-        ($localSettings | ConvertTo-Json -Depth 4),
-        [Text.UTF8Encoding]::new($false))
-    Write-Host 'Created ignored local.settings.json using developer credentials and Azurite.'
-}
+Write-LocalSettings $localValues -Force:$ForceLocalSettings
 
 function Get-ConnectionStatus {
     $status = az connector-namespace connection show `
@@ -83,6 +94,7 @@ function Get-ConnectionStatus {
 
 if ((Get-ConnectionStatus) -eq 'Connected') {
     Write-Host 'Dataverse connection is already authorized.'
+    if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
     return
 }
 
@@ -120,6 +132,7 @@ do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
         Write-Host 'Dataverse connection authorized. The Poll trigger configuration is provisioned.'
+        if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
         return
     }
 } while ((Get-Date) -lt $deadline)

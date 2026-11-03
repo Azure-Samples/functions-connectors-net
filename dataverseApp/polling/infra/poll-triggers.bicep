@@ -1,8 +1,12 @@
 param namespaceName string
 param connectionName string
+param functionAppName string
 @minLength(1)
 param environmentUrl string
 param tableName string = 'account'
+param enableSeparateRowTriggers bool = false
+@minLength(1)
+param entitySetName string = 'accounts'
 param enableActionTrigger bool = false
 param eventCatalog string = ''
 param eventCategory string = ''
@@ -10,6 +14,11 @@ param eventTable string = ''
 param eventAction string = ''
 
 var organization = endsWith(environmentUrl, '/') ? substring(environmentUrl, 0, length(environmentUrl) - 1) : environmentUrl
+var separateTriggers = [
+  { functionName: 'OnDataverseRowAdded', operationName: 'GetOnNewItems_V2' }
+  { functionName: 'OnDataverseRowModified', operationName: 'GetOnUpdatedItems_V2' }
+  { functionName: 'OnDataverseRowDeleted', operationName: 'GetOnDeletedItems_V2' }
+]
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
   name: namespaceName
@@ -22,6 +31,13 @@ resource rowTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-p
     connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
     deliveryMode: 'Poll'
     operationName: 'SubscribeWebhookTrigger'
+    metadata: {
+      destinationType: 'functionApp'
+      functionAppName: functionAppName
+      functionAppResourceGroup: resourceGroup().name
+      functionAppSubscriptionId: subscription().subscriptionId
+      functionName: 'OnDataverseRowChanged'
+    }
     parameters: [
       { name: 'organization', value: organization }
       { name: 'entityname', value: tableName }
@@ -41,6 +57,13 @@ resource actionTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-0
     connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
     deliveryMode: 'Poll'
     operationName: 'BusinessEventsTrigger'
+    metadata: {
+      destinationType: 'functionApp'
+      functionAppName: functionAppName
+      functionAppResourceGroup: resourceGroup().name
+      functionAppSubscriptionId: subscription().subscriptionId
+      functionName: 'OnDataverseActionPerformed'
+    }
     parameters: [
       { name: 'organization', value: organization }
       { name: 'catalog', value: eventCatalog }
@@ -54,6 +77,30 @@ resource actionTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-0
   }
 }
 
+resource separateRowTriggers 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in separateTriggers: if (enableSeparateRowTriggers) {
+  parent: connectorNamespace
+  name: 'dataverse-${toLower(trigger.functionName)}'
+  properties: {
+    connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
+    deliveryMode: 'Poll'
+    operationName: trigger.operationName
+    metadata: {
+      destinationType: 'functionApp'
+      functionAppName: functionAppName
+      functionAppResourceGroup: resourceGroup().name
+      functionAppSubscriptionId: subscription().subscriptionId
+      functionName: trigger.functionName
+    }
+    parameters: [
+      { name: 'dataset', value: organization }
+      { name: 'table', value: entitySetName }
+    ]
+    state: 'Enabled'
+    type: 'NotSpecified'
+    description: 'Opt-in separate row-added, row-modified or row-deleted Dataverse operation exposed by Connector Namespace.'
+  }
+}]
+
 var receiveUri = split(string(rowTrigger.properties.pollingEndpoints.receiveUri), '?')[0]
 var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
 
@@ -65,4 +112,10 @@ output triggerConfigSettings object = {
   OnDataverseRowChangedTriggerConfigName: rowTrigger.name
   OnDataverseActionPerformedTriggerConfigName: 'dataverse-ondataverseactionperformed'
   'AzureWebJobs.OnDataverseActionPerformed.Disabled': string(!enableActionTrigger)
+  OnDataverseRowAddedTriggerConfigName: 'dataverse-ondataverserowadded'
+  OnDataverseRowModifiedTriggerConfigName: 'dataverse-ondataverserowmodified'
+  OnDataverseRowDeletedTriggerConfigName: 'dataverse-ondataverserowdeleted'
+  'AzureWebJobs.OnDataverseRowAdded.Disabled': string(!enableSeparateRowTriggers)
+  'AzureWebJobs.OnDataverseRowModified.Disabled': string(!enableSeparateRowTriggers)
+  'AzureWebJobs.OnDataverseRowDeleted.Disabled': string(!enableSeparateRowTriggers)
 }
