@@ -1,0 +1,8 @@
+{
+  "stack": {
+    "runtime": "dotnet",
+    "language": "c#"
+  },
+  "profiles": ["flex"],
+  "defaultProfile": "flex"
+}
