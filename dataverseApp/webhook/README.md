@@ -99,10 +99,12 @@ To complete cleanup, an authorized Dataverse administrator must identify the exa
 3. Start the local Functions host:
 
    ```powershell
-   func start
+   func start --enableAuth
    ```
 
-Real events require a public HTTPS callback and the local connector system key. The hook targets Azure only; it does not create a tunnel or accept local overrides.
+Core Tools v4 bypasses local key authentication by default. Use `--enableAuth` to enforce it before exposing the host through a public tunnel.
+
+Real events require a public HTTPS callback authenticated with the local host's `connector_extension` system key, not the deployed Function App's key. The hook targets Azure only; it does not create a tunnel or accept local overrides.
 
 ## Verify
 

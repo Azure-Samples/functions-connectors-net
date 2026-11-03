@@ -157,7 +157,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
 }
 
 // Connector Namespace + Dataverse connection (OAuth).
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
   params: {
@@ -244,7 +244,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
 }
 
 // Assign app roles after its identity exists, avoiding storage/app dependency cycles.
-module functionAppRbac './functionAppRbac.bicep' = {
+module functionAppRbac './function-access.bicep' = {
   scope: rg
   name: '${functionAppName}-rbac'
   params: {
@@ -255,7 +255,7 @@ module functionAppRbac './functionAppRbac.bicep' = {
 }
 
 // Grant the function app's system-assigned identity access to the Dataverse connection.
-module functionAccessPolicy './functionAccessPolicy.bicep' = {
+module functionAccessPolicy './connection-access.bicep' = {
   scope: rg
   name: '${connectorNamespaceName}-func-policy'
   params: {
