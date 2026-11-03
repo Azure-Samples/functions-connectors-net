@@ -1,0 +1,16 @@
+.azure/
+local.settings.json
+local.settings.*.tmp
+local.settings.tmp.*
+**/[Bb]in/
+**/[Oo]bj/
+publish/
+*.log
+__azurite_db*
+__blobstorage__/
+__queuestorage__/
+.azurite/
+.azurite-data/
+infra/main.json
+.trigger-*.json
+.trigger-json.*

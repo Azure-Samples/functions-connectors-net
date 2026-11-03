@@ -12,6 +12,7 @@
 | [office365App](office365App/) ([polling](office365App/polling/), [webhook](office365App/webhook/)) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
 | [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
 | [sharepointApp](sharepointApp/) ([polling](sharepointApp/polling/), [webhook](sharepointApp/webhook/)) | [SharePoint Online](https://learn.microsoft.com/connectors/sharepointonline/) | File and list-item changes, forms, Syntex, and recurring digests |
+| [SalesforceApp](SalesforceApp/) ([polling](SalesforceApp/polling/), [webhook](SalesforceApp/webhook/)) | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) | `GetOnNewItems`, `GetOnUpdatedItems` (polling-backed source; Poll or Webhook delivery) |
 | [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
 
 Each sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.

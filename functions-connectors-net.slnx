@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/SalesforceApp/polling/">
+    <Project Path="SalesforceApp/polling/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/SalesforceApp/webhook/">
+    <Project Path="SalesforceApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
   <Folder Name="/office365App/webhook/">
     <Project Path="office365App/webhook/functions-connectors-net.csproj" />
   </Folder>
