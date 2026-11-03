@@ -2,7 +2,6 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
-param functionAppPrincipalId string
 param userPrincipalId string = ''
 param tenantId string = tenant().tenantId
 
@@ -20,35 +19,6 @@ resource onedriveConnection 'Microsoft.Web/connectorGateways/connections@2026-05
   name: connectionName
   properties: {
     connectorName: 'onedriveforbusiness'
-  }
-}
-
-// The namespace detects source changes; the function/developer receives and acknowledges events.
-resource namespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: onedriveConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
-resource functionAppAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: onedriveConnection
-  name: 'functionapp-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: functionAppPrincipalId
-        tenantId: tenantId
-      }
-    }
   }
 }
 

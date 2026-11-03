@@ -1,6 +1,7 @@
 param([switch] $ForceLocalSettings)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw 'Install the connector-namespace Azure CLI extension before running this script.'
@@ -37,17 +38,7 @@ foreach ($functionName in @('OnNewFileContent', 'OnUpdatedFileContent', 'OnNewFi
     $localValues[$setting] = $triggerSettings.$setting
 }
 
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
-    Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
-} else {
-    $localSettings = @{ IsEncrypted = $false; Values = $localValues }
-    [IO.File]::WriteAllText(
-        $localSettingsPath,
-        ($localSettings | ConvertTo-Json -Depth 4),
-        [Text.UTF8Encoding]::new($false))
-    Write-Host 'Created ignored local.settings.json using developer credentials and Azurite.'
-}
+Write-LocalSettings $localValues -Force:$ForceLocalSettings
 
 function Get-ConnectionStatus {
     $status = az connector-namespace connection show `

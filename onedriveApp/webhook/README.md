@@ -1,12 +1,6 @@
 # OneDrive for Business Webhook Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
-and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
-The Connector Namespace delivers authenticated events to the function's public HTTPS callback.
-Each function logs the trigger name and, for typed batches, the item count
-(for example, `Received OnNewFile trigger (2 items)`). No item metadata, file
-content, or payload length is logged. Storage is required for Functions host state
-and deployment.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector). The Connector Namespace delivers authenticated events to the function's public HTTPS callback. Each function logs the trigger name and, for typed batches, the item count (for example, `Received OnNewFile trigger (2 items)`). No item metadata, file content, or payload length is logged. Storage is required for Functions host state and deployment.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -15,17 +9,13 @@ and deployment.
 | `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created-(properties-only)) | File created (properties only) |
 | `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | File modified (properties only) |
 
-Properties-only events use typed SDK models. The SDK has no payload models for
-the binary-content events (`type: string, format: binary` upstream); those bind
-raw JSON as `string` and log only the trigger name, without parsing for a count.
+Properties-only events use typed SDK models. The SDK has no payload models for the binary-content events (`type: string, format: binary` upstream); those bind raw JSON as `string` and log only the trigger name. `OnNewFileContent` demonstrates both observed callback shapes: a text `body` string becomes UTF-8 bytes, while a binary `body` object decodes its `$content` base64 without changing the bytes. Missing or invalid bodies/base64 fail the invocation before the success log. `OnUpdatedFileContent` retains the raw payload. This is decoding inside the handler, not a direct `byte[]` trigger binding or an SDK binary-helper fix.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+,
-  and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
-- PowerShell 7 (default hook), or Bash with `jq` for the alternative hook.
-- For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-  and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
+- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+, and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
+- PowerShell 7.3+ (.NET 7+, default hook), or Bash with `jq` and the `link` utility for the alternative hook.
+- For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
 - A OneDrive for Business account and permission to complete OAuth consent.
 - [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
@@ -46,10 +36,7 @@ azd env new onedrive-webhook
 azd up
 ```
 
-Complete OAuth in the browser opened by the hook, wait for **Connected**, and
-select the folder to monitor. Non-interactive runs require `ONEDRIVE_FOLDER_ID`
-set to a connector folder ID, not a name/path; use `root` explicitly for root.
-Selection errors do not fall back to root.
+Complete OAuth in the browser opened by the hook, wait for **Connected**, and select the folder to monitor. Non-interactive runs require `ONEDRIVE_FOLDER_ID` set to a connector folder ID, not a name/path; use `root` explicitly for root. Selection errors do not fall back to root.
 
 ## Optional configuration
 
@@ -65,12 +52,11 @@ Set environment values with `azd env set <setting> <value>` before `azd up`.
 
 ## Local development
 
-Requires an authorized Azure connector connection.
+Requires an authorized Azure connector connection. Worker telemetry uses the `ConnectorNamespace` identity settings; omit managed-identity settings locally to use developer credentials. Azure deployments use the Function App's system-assigned identity for storage and telemetry. An incremental redeployment does not delete a previous user-assigned identity or its role assignments; remove them only after verifying system-assigned access.
 
 1. Prepare `local.settings.json`.
 
-   Use the ignored file generated during `azd up`; existing settings are preserved.
-   Only if the file is missing, rerun setup:
+   Use the ignored file generated during `azd up`; existing settings are preserved. Only if the file is missing, rerun setup:
 
    ```powershell
    azd hooks run postdeploy
@@ -89,8 +75,7 @@ Requires an authorized Azure connector connection.
    func start --enableAuth
    ```
 
-4. Configure a public HTTPS tunnel and each function's callback using the
-   [webhook configuration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#webhook-delivery).
+4. Configure a public HTTPS tunnel and each function's callback using the [webhook configuration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#webhook-delivery).
 
 **Security:** Use the local `connector_extension` system key and keep `--enableAuth` enabled while the tunnel is public.
 
@@ -100,12 +85,7 @@ Use [polling](../polling/README.md) to avoid a tunnel.
 
 ## Verify
 
-Check the connection is **Connected** and all four triggers are **Enabled** in
-[Connector Namespaces](https://connectors.azure.com/).
-Create a file smaller than 50 MB and then modify it in the selected folder.
-Allow time for connector detection and telemetry ingestion. In the deployed
-Application Insights resource, open **Logs** and run this query to check all four
-function names across instances:
+Check the connection is **Connected** and all four triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Create a file smaller than 50 MB and then modify it in the selected folder. Allow time for connector detection and telemetry ingestion. In the deployed Application Insights resource, open **Logs** and run this query to check all four function names across instances:
 
 ```kusto
 traces
@@ -115,8 +95,7 @@ traces
 | order by timestamp asc
 ```
 
-See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data).
-After verification, clean up from this sample's selected environment:
+See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data). After verification, clean up from this sample's selected environment:
 
 ```powershell
 azd down --purge

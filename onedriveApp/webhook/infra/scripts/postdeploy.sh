@@ -3,11 +3,23 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_notif_files=()
-settings_temp=""
+app_dir="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/local-settings.sh"
+temp_dir=""
 cleanup_notif_files() {
-    for f in "${_notif_files[@]}"; do rm -f "$f"; done
-    if [ -n "$settings_temp" ]; then rm -f "$settings_temp"; fi
+    result=$?
+    trap - EXIT
+    if [ -n "$temp_dir" ]; then
+        cleanup_failed=false
+        rm -f -- "$temp_dir/notification.json" || cleanup_failed=true
+        rm -f -- "$temp_dir/parameters.json" || cleanup_failed=true
+        rmdir -- "$temp_dir" || cleanup_failed=true
+        if [ "$cleanup_failed" = true ]; then
+            echo 'Could not clean owned callback staging files.' >&2
+            [ "$result" -ne 0 ] || result=1
+        fi
+    fi
+    exit "$result"
 }
 trap cleanup_notif_files EXIT
 
@@ -26,55 +38,33 @@ if ! az extension show --name connector-namespace --query name -o tsv 2>/dev/nul
 fi
 
 # --- Read azd outputs --------------------------------------------------------
-outputs="$(azd env get-values)" ||
+command -v jq >/dev/null || { echo 'Install jq before running this script.' >&2; exit 1; }
+outputs="$(azd env get-values --output json)" ||
     { echo "ERROR: Could not read the selected azd environment." >&2; exit 1; }
-eval "$outputs"
-
-: "${resourceGroupName:?required azd output missing}"
-: "${connectorNamespaceName:?required azd output missing}"
-: "${connectorNamespaceConnectionName:?required azd output missing}"
-: "${functionAppName:?required azd output missing}"
-: "${functionAppDefaultHostname:?required azd output missing}"
+read_output() {
+    jq --binary -er --arg name "$1" '.[$name] | select(type == "string" and test("\\S"))' <<<"$outputs" ||
+        { echo "Missing required azd output $1." >&2; return 1; }
+}
+resourceGroupName="$(read_output resourceGroupName)"
+connectorNamespaceName="$(read_output connectorNamespaceName)"
+connectorNamespaceConnectionName="$(read_output connectorNamespaceConnectionName)"
+functionAppName="$(read_output functionAppName)"
+functionAppDefaultHostname="$(read_output functionAppDefaultHostname)"
+subscriptionId="$(read_output AZURE_SUBSCRIPTION_ID)"
+ONEDRIVE_FOLDER_ID="$(jq --binary -r '.ONEDRIVE_FOLDER_ID // ""' <<<"$outputs")"
 
 onedriveConnectionName="$connectorNamespaceConnectionName"
 
-settings_path="$SCRIPT_DIR/../../local.settings.json"
-if [ -e "$settings_path" ] || [ -L "$settings_path" ]; then
-    if [ ! -f "$settings_path" ]; then
-        echo "ERROR: local.settings.json must be a regular file, not a directory." >&2
-        exit 1
-    fi
-    echo "Existing local.settings.json preserved."
-else
-    command -v jq >/dev/null ||
-        { echo "ERROR: Install jq before generating local.settings.json." >&2; exit 1; }
-    settings_temp="$(mktemp "$(dirname "$settings_path")/.local-settings.XXXXXX")" ||
-        { echo "ERROR: Could not create temporary local settings file." >&2; exit 1; }
-    cp "$SCRIPT_DIR/../../local.settings.example.json" "$settings_temp" ||
-        { echo "ERROR: Could not copy the local settings template." >&2; exit 1; }
-    jq -es 'length == 1 and .[0] == {
-        IsEncrypted: false,
-        Values: {
-            AzureWebJobsStorage: "UseDevelopmentStorage=true",
-            FUNCTIONS_WORKER_RUNTIME: "dotnet-isolated"
-        }
-    }' "$settings_temp" >/dev/null ||
-        { echo "ERROR: Expected only local Azurite storage and the isolated worker runtime in the settings template." >&2; exit 1; }
-    mv -n "$settings_temp" "$settings_path" ||
-        { echo "ERROR: Could not move local settings into place." >&2; exit 1; }
-    if [ -e "$settings_temp" ]; then
-        echo "ERROR: local.settings.json appeared during generation; existing settings were not overwritten." >&2
-        exit 1
-    fi
-    settings_temp=""
-    echo "Created ignored local.settings.json for Azurite and the isolated worker."
-fi
+write_local_settings '{"IsEncrypted":false,"Values":{"AzureWebJobsStorage":"UseDevelopmentStorage=true","FUNCTIONS_WORKER_RUNTIME":"dotnet-isolated"}}'
 
 get_connection_status() {
-    az connector-namespace connection show \
+    local raw_status
+    raw_status=$(az connector-namespace connection show \
         -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
         -n "$onedriveConnectionName" \
-        --query "properties.overallStatus" -o tsv 2>/dev/null || true
+        --query "properties.overallStatus" -o tsv 2>/dev/null) ||
+        { echo 'Could not read the OneDrive connection status.' >&2; return 1; }
+    printf '%s\n' "${raw_status%$'\r'}"
 }
 
 # --- Authorize the OneDrive connection (OAuth consent) ----------------------
@@ -101,14 +91,16 @@ else
                 --connection-name "$onedriveConnectionName" \
                 --parameters "$consentParameters" \
                 --query "value[0].link" -o tsv 2>/dev/null || true)
-            if [ -z "$link" ]; then
+            link="${link%$'\r'}"
+            if [ -z "$link" ] || [ "$link" = null ]; then
                 link=$(az connector-namespace connection list-consent-links \
                     -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
                     --connection-name "$onedriveConnectionName" \
                     --parameters "$consentParameters" \
                     --query "link" -o tsv 2>/dev/null || true)
+                link="${link%$'\r'}"
             fi
-            [ -n "$link" ] && break
+            [ -n "$link" ] && [ "$link" != null ] && break
         fi
         echo "   list-consent-links attempt $i failed; retrying in 5s..."
         sleep 5
@@ -119,7 +111,7 @@ else
         exit 1
     fi
 
-    if [ -z "$link" ]; then
+    if [ -z "$link" ] || [ "$link" = null ]; then
         echo "ERROR: list-consent-links returned no link."
         exit 1
     fi
@@ -163,55 +155,60 @@ if [ -z "$onedriveFolderId" ]; then
         exit 1
     fi
 fi
+[[ "$onedriveFolderId" =~ [^[:space:]] ]] ||
+    { echo 'OneDrive folderId must be a nonempty string.' >&2; exit 1; }
 echo "Using ONEDRIVE_FOLDER_ID=$onedriveFolderId"
 azd env set ONEDRIVE_FOLDER_ID "$onedriveFolderId" > /dev/null
 
 # --- Create Connector Namespace trigger configs -----------------------------
 echo ""
 echo "Fetching connector extension key for $functionAppName..."
-connectorExtensionKey=$(az functionapp keys list -g "$resourceGroupName" -n "$functionAppName" --query "systemKeys.connector_extension" -o tsv)
-if [ -z "$connectorExtensionKey" ]; then
+existing=$(az connector-namespace trigger list -g "$resourceGroupName" --namespace "$connectorNamespaceName" --query '[].name' -o json 2>/dev/null) ||
+    { echo 'Could not list existing webhook trigger configurations.' >&2; exit 1; }
+jq --binary -e 'type == "array" and all(.[]; type == "string")' <<<"$existing" >/dev/null ||
+    { echo 'Invalid trigger list response.' >&2; exit 1; }
+connectorExtensionKey=$(az functionapp keys list -g "$resourceGroupName" -n "$functionAppName" --query "systemKeys.connector_extension" -o tsv 2>/dev/null) ||
+    { echo 'Could not fetch the connector_extension system key.' >&2; exit 1; }
+connectorExtensionKey="${connectorExtensionKey%$'\r'}"
+if [ -z "$connectorExtensionKey" ] || [ "$connectorExtensionKey" = null ]; then
     echo "ERROR: could not fetch connector_extension system key."
     exit 1
 fi
+candidate_dir=$(mktemp -d "${TMPDIR:-/tmp}/onedrive-callback.XXXXXXXX") ||
+    { echo 'Could not create callback staging directory.' >&2; exit 1; }
+temp_dir=$candidate_dir
 
 create_trigger() {
     local functionName="$1"
     local operationName="$2"
-    local parameters="$3"
     local triggerName="${onedriveConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
     local callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-    local notifFile
-    notifFile="$(mktemp)" ||
-        { echo "ERROR: Could not create temporary notification file." >&2; exit 1; }
-    _notif_files+=("$notifFile")
-    printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
+    jq --binary -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
+        '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' > "$temp_dir/notification.json"
+    jq --binary -n --arg folder "$onedriveFolderId" '[{name:"folderId",value:$folder}]' > "$temp_dir/parameters.json"
 
     echo ""
-    echo "Creating trigger '$triggerName' for $functionName ($operationName)..."
-
-    az connector-namespace trigger delete \
-        -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-        -n "$triggerName" --yes 2>/dev/null || true
-
-    az connector-namespace trigger create \
+    echo "Configuring trigger '$triggerName' for $functionName ($operationName)..."
+    local verb=create
+    if jq --binary -e --arg name "$triggerName" 'index($name) != null' <<<"$existing" >/dev/null; then verb=update; fi
+    az connector-namespace trigger "$verb" \
         -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
         -n "$triggerName" \
         --connection-details "{connectionName:${onedriveConnectionName},connectorName:onedriveforbusiness}" \
         --operation-name "$operationName" \
-        --parameters "$parameters" \
-        --notification-details "@${notifFile}" \
+        --parameters "@$temp_dir/parameters.json" \
+        --notification-details "@$temp_dir/notification.json" \
+        --state Enabled \
         --description "OneDrive ${operationName} -> ${functionName}" \
-        --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${AZURE_SUBSCRIPTION_ID},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
-        -o none
-
-    rm -f "$notifFile"
+        --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${subscriptionId},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
+        -o none 2>/dev/null ||
+        { echo "Could not configure webhook trigger $triggerName." >&2; return 1; }
 }
 
-create_trigger "OnNewFileContent" "OnNewFileV2" "[{name:folderId,value:'$onedriveFolderId'}]"
-create_trigger "OnUpdatedFileContent" "OnUpdatedFileV2" "[{name:folderId,value:'$onedriveFolderId'}]"
-create_trigger "OnNewFile" "OnNewFilesV2" "[{name:folderId,value:'$onedriveFolderId'}]"
-create_trigger "OnUpdatedFile" "OnUpdatedFilesV2" "[{name:folderId,value:'$onedriveFolderId'}]"
+create_trigger "OnNewFileContent" "OnNewFileV2"
+create_trigger "OnUpdatedFileContent" "OnUpdatedFileV2"
+create_trigger "OnNewFile" "OnNewFilesV2"
+create_trigger "OnUpdatedFile" "OnUpdatedFilesV2"
 
 echo ""
 echo "Post-deployment configuration complete."

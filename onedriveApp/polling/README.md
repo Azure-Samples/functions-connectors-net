@@ -1,11 +1,6 @@
 # OneDrive for Business Polling Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
-and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector)
-with `DeliveryMode = Poll`. The host receives events outbound from the Connector
-Namespace; no public callback or tunnel is required. Each function logs the trigger
-name and, for typed batches, the item count (for example,
-`Received OnNewFile trigger (2 items)`).
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. Each function logs the trigger name and, for typed batches, the item count (for example, `Received OnNewFile trigger (2 items)`).
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -14,18 +9,13 @@ name and, for typed batches, the item count (for example,
 | `OnNewFile` | [`OnNewFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-created-(properties-only)) | File created (properties only) |
 | `OnUpdatedFile` | [`OnUpdatedFilesV2`](https://learn.microsoft.com/connectors/onedriveforbusiness/#when-a-file-is-modified-(properties-only)) | File modified (properties only) |
 
-Properties-only events use typed SDK models. The SDK has no payload models for
-the binary-content events (`type: string, format: binary` upstream); those bind
-raw JSON as `string` and log only the trigger name, without parsing for a count.
-No item metadata, file content, or payload length is logged.
+Properties-only events use typed SDK models. The SDK has no payload models for the binary-content events (`type: string, format: binary` upstream); those bind raw JSON as `string` and log only the trigger name, without parsing for a count. No item metadata, file content, or payload length is logged.
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+,
-  and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
-- PowerShell 7 (default hook), or Bash with `jq` for the alternative hook.
-- For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-  and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
+- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+, and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
+- PowerShell 7.3+ (.NET 7+, default hook), or Bash with `jq` and the `link` utility for the alternative hook.
+- For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
 - A OneDrive for Business account and permission to complete OAuth consent.
 - [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
@@ -37,9 +27,7 @@ No item metadata, file content, or payload length is logged.
 
 ## Deploy to Azure
 
-Run from this folder, using a different environment name from the webhook sample.
-Use the **connector folder ID**, not a name/path; set `root` explicitly to monitor
-the root folder. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
+Run from this folder, using a different environment name from the webhook sample. Use the **connector folder ID**, not a name/path; set `root` explicitly to monitor the root folder. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
 
 ```powershell
 az login
@@ -50,9 +38,6 @@ azd up
 ```
 
 Complete OAuth in the browser opened by the hook and wait for **Connected**.
-
-**Cost:** Four 2048 MB always-ready instances (one per function) incur ongoing
-baseline charges while idle to keep the Poll listeners running.
 
 ## Optional configuration
 
@@ -94,15 +79,13 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the ignored file generated during `azd up`, containing the endpoint and four config names.
-   Sign in as the authorized developer:
+   Use the ignored file generated during `azd up`, containing the endpoint and four config names. Sign in as the authorized developer:
 
    ```powershell
    az login
    ```
 
-   Only if the file is missing, run `azd hooks run postdeploy` from this folder's selected environment.
-   Existing files are preserved; see Optional configuration to regenerate changed settings.
+   Only if the file is missing, run `azd hooks run postdeploy` from this folder's selected environment. Existing files are preserved; see Optional configuration to regenerate changed settings.
 
 2. Start Azurite in a separate terminal:
 
@@ -117,16 +100,11 @@ If the Function App is already deployed, stop it before running locally to avoid
    func start
    ```
 
-Use developer credentials locally, not deployed managed-identity settings.
+Use developer credentials locally, not deployed managed-identity settings. Worker telemetry uses the `ConnectorNamespace` identity settings independently of the connector host. Azure deployments use the Function App's system-assigned identity for storage, polling, and telemetry. An incremental redeployment does not delete a previous user-assigned identity or its role assignments; remove them only after verifying system-assigned access.
 
 ## Verify
 
-Check the connection is **Connected** and all four triggers are **Enabled** in
-[Connector Namespaces](https://connectors.azure.com/).
-Create a file smaller than 50 MB and then modify it in the monitored folder.
-Allow time for connector detection and telemetry ingestion. In the deployed
-Application Insights resource, open **Logs** and run this query to check all four
-function names across instances:
+Check the connection is **Connected** and all four triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Create a file smaller than 50 MB and then modify it in the monitored folder. Allow time for connector detection and telemetry ingestion. In the deployed Application Insights resource, open **Logs** and run this query to check all four function names across instances:
 
 ```kusto
 traces
@@ -136,15 +114,13 @@ traces
 | order by timestamp asc
 ```
 
-See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data).
-After verification, clean up from this sample's selected environment:
+See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data). After verification, clean up from this sample's selected environment:
 
 ```powershell
 azd down --purge
 ```
 
-Delivery is at least once; moving a file within OneDrive does not create a new-file
-event.
+Delivery is at least once; moving a file within OneDrive does not create a new-file event.
 
 ## More
 

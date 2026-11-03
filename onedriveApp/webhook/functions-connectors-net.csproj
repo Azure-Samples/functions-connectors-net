@@ -11,14 +11,16 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Azure" Version="1.14.1" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
     <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.10.0" />
-    <PackageReference Include="Azure.Connectors.Sdk" Version="0.14.0-preview.1" />
+    <PackageReference Include="Azure.Connectors.Sdk" Version="0.15.0-preview.1" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Connector" Version="1.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="infra/**;README.md;local.settings.example.json" />
+    <Compile Remove="tests/**" />
+    <None Remove="infra/**;tests/**;README.md;local.settings.example.json" />
     <None Update="host.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

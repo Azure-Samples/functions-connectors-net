@@ -2,12 +2,13 @@
 .azure
 .vscode
 infra
+tests
 obj
 local.settings.json
 .local-settings.*
+.local-settings-*
 local.settings.example.json
 README.md
-NuGet.config
 __azurite_db*
 __blobstorage__
 __queuestorage__

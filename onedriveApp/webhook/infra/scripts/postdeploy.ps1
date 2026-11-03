@@ -7,6 +7,9 @@
 [CmdletBinding()]
 param()
 
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
+
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 
 # --- Pre-flight: verify the connector-namespace CLI extension is installed ----
@@ -31,39 +34,15 @@ $functionAppHostname    = $outputs.functionAppDefaultHostname
 $subscriptionId         = $outputs.AZURE_SUBSCRIPTION_ID
 $onedriveFolderId       = $outputs.ONEDRIVE_FOLDER_ID
 
-if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $onedriveConnectionName -or -not $functionAppName) {
+if (-not $resourceGroupName -or -not $connectorNamespaceName -or -not $onedriveConnectionName -or
+    -not $functionAppName -or -not $functionAppHostname -or -not $subscriptionId) {
     Write-Host "ERROR: required azd outputs missing. Run 'azd provision' first." -ForegroundColor Red
     exit 1
 }
 
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if (Test-Path -LiteralPath $localSettingsPath) {
-    if (-not (Test-Path -LiteralPath $localSettingsPath -PathType Leaf)) {
-        throw 'local.settings.json must be a regular file, not a directory.'
-    }
-    Write-Host 'Existing local.settings.json preserved.'
-} else {
-    $settingsDirectory = Split-Path -Parent $localSettingsPath
-    $settingsTemp = Join-Path $settingsDirectory ".local-settings.$([Guid]::NewGuid().ToString('N'))"
-    try {
-        $template = Join-Path $settingsDirectory 'local.settings.example.json'
-        Copy-Item -LiteralPath $template -Destination $settingsTemp -ErrorAction Stop
-        $settings = Get-Content -LiteralPath $settingsTemp -Raw -ErrorAction Stop |
-            ConvertFrom-Json -ErrorAction Stop
-        if (@($settings.PSObject.Properties).Count -ne 2 -or
-            $settings.IsEncrypted -isnot [bool] -or $settings.IsEncrypted -or
-            @($settings.Values.PSObject.Properties).Count -ne 2 -or
-            $settings.Values.AzureWebJobsStorage -cne 'UseDevelopmentStorage=true' -or
-            $settings.Values.FUNCTIONS_WORKER_RUNTIME -cne 'dotnet-isolated') {
-            throw 'The webhook settings template must contain only local Azurite storage and the isolated worker runtime.'
-        }
-        [IO.File]::Move($settingsTemp, $localSettingsPath)
-        Write-Host 'Created ignored local.settings.json for Azurite and the isolated worker.'
-    } finally {
-        if (Test-Path -LiteralPath $settingsTemp) {
-            Remove-Item -LiteralPath $settingsTemp -ErrorAction Stop
-        }
-    }
+Write-LocalSettings @{
+    AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+    FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
 }
 
 function Select-FromList {
@@ -292,6 +271,9 @@ if (-not $onedriveFolderId) {
     }
 }
 
+if ($onedriveFolderId -isnot [string] -or [string]::IsNullOrWhiteSpace($onedriveFolderId)) {
+    throw 'OneDrive folderId must be a nonempty string.'
+}
 azd env set ONEDRIVE_FOLDER_ID $onedriveFolderId | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw 'Could not save ONEDRIVE_FOLDER_ID in the selected azd environment. Trigger registration has not started.'
@@ -300,13 +282,6 @@ Write-Host "Saved ONEDRIVE_FOLDER_ID=$onedriveFolderId" -ForegroundColor Green
 
 # --- Create Connector Namespace trigger configs -----------------------------
 Write-Host ""
-Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
-$connectorExtensionKey = az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv
-if (-not $connectorExtensionKey) {
-    Write-Host "ERROR: could not fetch connector_extension system key from $functionAppName." -ForegroundColor Red
-    exit 1
-}
-
 $triggers = @(
     @{ functionName = 'OnNewFileContent'; operationName = 'OnNewFileV2' },
     @{ functionName = 'OnUpdatedFileContent'; operationName = 'OnUpdatedFileV2' },
@@ -314,58 +289,82 @@ $triggers = @(
     @{ functionName = 'OnUpdatedFile'; operationName = 'OnUpdatedFilesV2' }
 )
 
-$triggerFailures = @()
+$raw = az connector-namespace trigger list -g $resourceGroupName --namespace $connectorNamespaceName --query '[].name' -o json 2>$null
+if ($LASTEXITCODE -ne 0) { throw 'Could not list existing webhook trigger configurations.' }
+$existing = ($raw -join "`n") | ConvertFrom-Json -NoEnumerate
+if ($null -ne $existing -and $existing -isnot [array]) { throw 'Invalid trigger list response.' }
+if (@($existing | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count) {
+    throw 'Invalid trigger names in list response.'
+}
+$connectorExtensionKey = az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connectorExtensionKey) -or $connectorExtensionKey -eq 'null') {
+    throw 'Could not fetch the connector_extension system key.'
+}
 foreach ($trigger in $triggers) {
     $functionName = $trigger.functionName
     $operationName = $trigger.operationName
     $triggerName = "$onedriveConnectionName-$($functionName.ToLower())"
     $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$functionName"
-    $parametersJson = "[{name:folderId,value:'$onedriveFolderId'}]"
-    $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-    @{
-        callbackUrl = $callbackUrl
-        authentication = @{
-            type = "QueryString"
-            name = "code"
-            value = $connectorExtensionKey
-        }
-    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-    Write-Host ""
-    Write-Host "Creating trigger '$triggerName' for $functionName ($operationName)..." -ForegroundColor Yellow
-
+    $notifFile = Join-Path ([IO.Path]::GetTempPath()) "onedrive-notification-$([guid]::NewGuid()).json"
+    $parametersFile = Join-Path ([IO.Path]::GetTempPath()) "onedrive-parameters-$([guid]::NewGuid()).json"
+    $ownedFiles = [Collections.Generic.List[string]]::new()
+    $failure = $null
     try {
-        az connector-namespace trigger delete `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            -n $triggerName --yes 2>$null | Out-Null
-
-        az connector-namespace trigger create `
+        $documents = @(
+            @{ path = $notifFile; value = @{
+                callbackUrl = $callbackUrl
+                authentication = @{ type = 'QueryString'; name = 'code'; value = $connectorExtensionKey }
+            } },
+            @{ path = $parametersFile; value = @(@{ name = 'folderId'; value = $onedriveFolderId }) }
+        )
+        foreach ($document in $documents) {
+            $stream = New-PrivateStagingStream $document.path
+            $ownedFiles.Add($document.path)
+            $streamFailure = $null
+            try {
+                $json = ConvertTo-Json -InputObject $document.value -Depth 4 -Compress
+                $stream.Write([Text.UTF8Encoding]::new($false).GetBytes($json))
+                $stream.Flush($true)
+            } catch { $streamFailure = $_; throw }
+            finally {
+                try { $stream.Dispose() }
+                catch {
+                    if ($null -eq $streamFailure) { throw 'Could not close owned callback staging stream.' }
+                    Write-Warning 'Could not close owned staging stream; original failure preserved.'
+                }
+            }
+        }
+        $verb = if ($triggerName -in $existing) { 'update' } else { 'create' }
+        az connector-namespace trigger $verb `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
             --connection-details "{connectionName:$onedriveConnectionName,connectorName:onedriveforbusiness}" `
             --operation-name $operationName `
-            --parameters $parametersJson `
+            --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
+            --state Enabled `
             --description "OneDrive $operationName -> $functionName" `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$functionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
-            -o none | Out-Null
+            -o none 2>$null | Out-Null
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARNING: Failed to create trigger '$triggerName'. Continuing with remaining triggers." -ForegroundColor Yellow
-            $triggerFailures += $triggerName
+            throw "Could not configure webhook trigger $triggerName."
         }
-    }
-    finally {
-        Remove-Item $notifFile -ErrorAction SilentlyContinue
+    } catch {
+        $failure = $_
+        throw
+    } finally {
+        $cleanupFailed = $false
+        foreach ($path in $ownedFiles) {
+            try { if ([IO.File]::Exists($path)) { [IO.File]::Delete($path) } }
+            catch { $cleanupFailed = $true; Write-Warning 'Could not clean owned callback staging file.' }
+        }
+        if ($cleanupFailed -and $null -eq $failure) { throw 'Callback staging cleanup failed.' }
     }
 }
 
 Write-Host ""
-if ($triggerFailures.Count -eq 0) {
-    Write-Host "Connector Namespace trigger configs created successfully." -ForegroundColor Green
-} else {
-    throw "Some trigger configs failed: $($triggerFailures -join ', ')"
-}
+Write-Host "Connector Namespace trigger configs configured successfully." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Post-deployment configuration complete." -ForegroundColor Green
