@@ -8,12 +8,3 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 | [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS callback required for real events |
 
 Both samples include combined row changes, action-performed events, and three opt-in separate row-added, row-modified and row-deleted operations exposed by Connector Namespace. Combined row changes are enabled by default. See each sample's README for setup and supported triggers.
-
-## Offline checks
-
-From the repository root, run:
-
-```powershell
-pwsh -NoProfile -File dataverseApp\tests\Test-ActionCleanup.ps1
-pwsh -NoProfile -File dataverseApp\tests\Test-Infrastructure.ps1
-```
