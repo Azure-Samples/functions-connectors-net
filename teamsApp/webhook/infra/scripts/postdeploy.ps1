@@ -1,5 +1,6 @@
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
 & (Join-Path $PSScriptRoot 'validate-triggers.ps1')
 $additionalTriggers = @(
     Get-Content (Join-Path $PSScriptRoot '../additional-triggers.json') -Raw | ConvertFrom-Json
@@ -16,41 +17,9 @@ $rawOutputs = azd env get-values --output json
 if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
 $outputs = ($rawOutputs -join "`n") | ConvertFrom-Json
 
-$localSettingsPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../local.settings.json'))
-if (Test-Path -LiteralPath $localSettingsPath) {
-    $item = Get-Item -LiteralPath $localSettingsPath -Force
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw 'local.settings.json must be a regular file.'
-    }
-    Write-Host 'Existing local.settings.json preserved.'
-}
-else {
-    $stagingPath = Join-Path (Split-Path $localSettingsPath) ".local-settings-$([Guid]::NewGuid().ToString('N')).json"
-    try {
-        $localSettings = @{
-            IsEncrypted = $false
-            Values = @{
-                AzureWebJobsStorage = 'UseDevelopmentStorage=true'
-                FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
-            }
-        }
-        [IO.File]::WriteAllText(
-            $stagingPath, ($localSettings | ConvertTo-Json -Depth 3),
-            [Text.UTF8Encoding]::new($false))
-        $stagedSettings = Get-Content -LiteralPath $stagingPath -Raw | ConvertFrom-Json
-        if ($stagedSettings.IsEncrypted -ne $false -or
-            $stagedSettings.Values.AzureWebJobsStorage -cne 'UseDevelopmentStorage=true' -or
-            $stagedSettings.Values.FUNCTIONS_WORKER_RUNTIME -cne 'dotnet-isolated') {
-            throw 'Generated local settings failed validation.'
-        }
-        [IO.File]::Move($stagingPath, $localSettingsPath)
-        Write-Host 'Created ignored local.settings.json for Azurite and the local Functions host.'
-    }
-    finally {
-        if (Test-Path -LiteralPath $stagingPath) {
-            Remove-Item -LiteralPath $stagingPath -ErrorAction Stop
-        }
-    }
+Write-LocalSettings @{
+    AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+    FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
 }
 
 $resourceGroupName = $outputs.resourceGroupName
@@ -59,6 +28,10 @@ $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
 $functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
+foreach ($name in @('resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
+    'functionAppName', 'functionAppDefaultHostname', 'AZURE_SUBSCRIPTION_ID')) {
+    if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) { throw "Missing azd output $name." }
+}
 
 # --- Required Teams identifiers ---
 # Teams triggers are scoped to a specific team (and channel for message triggers).
@@ -142,7 +115,15 @@ if (-not $teamsGroupId -or -not $teamsChannelId) {
     }
 }
 
-# Fetch the connector extension system key
+$rawTriggers = az connector-namespace trigger list -g $resourceGroupName --namespace $connectorNamespaceName --query '[].name' -o json 2>$null
+if ($LASTEXITCODE -ne 0) { throw 'Could not list existing Teams trigger configurations.' }
+$existingTriggers = ($rawTriggers -join "`n") | ConvertFrom-Json -NoEnumerate
+if ($existingTriggers -isnot [array] -or
+    @($existingTriggers | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count) {
+    throw 'Invalid Teams trigger list response.'
+}
+
+# Fetch the connector extension system key.
 Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
 $connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connectorExtensionKey)) {
@@ -157,47 +138,71 @@ function New-TriggerConfig {
         [object[]] $Parameters = @()
     )
 
-    $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
+    $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLowerInvariant())"
     $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName"
     $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
-    ConvertTo-Json -InputObject @($Parameters) -Depth 30 -Compress |
-        Set-Content -LiteralPath $parametersFile -NoNewline
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-    @{
-        callbackUrl = $callbackUrl
-        authentication = @{
-            type = "QueryString"
-            name = "code"
-            value = $connectorExtensionKey
-        }
-    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-    Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
-
+    $ownedFiles = [Collections.Generic.List[string]]::new()
+    $failure = $null
     try {
-        az connector-namespace trigger delete `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            -n $triggerName --yes 2>$null | Out-Null
-
-        az connector-namespace trigger create `
+        $documents = @(
+            @{ path = $parametersFile; value = @($Parameters) }
+            @{ path = $notifFile; value = @{
+                callbackUrl = $callbackUrl
+                authentication = @{ type = 'QueryString'; name = 'code'; value = $connectorExtensionKey }
+            } }
+        )
+        foreach ($document in $documents) {
+            $stream = New-PrivateStagingStream $document.path
+            $ownedFiles.Add($document.path)
+            $streamFailure = $null
+            try {
+                $json = ConvertTo-Json -InputObject $document.value -Depth 30 -Compress
+                $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json)
+                $stream.Write($bytes)
+                $stream.Flush($true)
+            } catch { $streamFailure = $_; throw }
+            finally {
+                try { $stream.Dispose() }
+                catch {
+                    if ($null -eq $streamFailure) { throw 'Could not close owned callback staging stream.' }
+                    Write-Warning 'Could not close owned staging stream; original failure preserved.'
+                }
+            }
+        }
+        $verb = if ($triggerName -in $existingTriggers) { 'update' } else { 'create' }
+        Write-Host "  Configuring trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
+        az connector-namespace trigger $verb `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:teams}" `
             --operation-name $OperationName `
             --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
+            --state Enabled `
             --description $Description `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
-            -o none
+            -o none 2>$null
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
-            exit 1
+            throw "Could not configure Teams trigger $FunctionName."
         }
     }
+    catch {
+        $failure = $_
+        throw
+    }
     finally {
-        Remove-Item $notifFile -ErrorAction SilentlyContinue
-        Remove-Item $parametersFile -ErrorAction SilentlyContinue
+        $cleanupFailed = $false
+        foreach ($path in $ownedFiles) {
+            try {
+                if ([IO.File]::Exists($path)) { [IO.File]::Delete($path) }
+            } catch {
+                $cleanupFailed = $true
+                Write-Warning 'Could not clean owned callback staging file.'
+            }
+        }
+        if ($cleanupFailed -and $null -eq $failure) { throw 'Callback staging cleanup failed.' }
     }
 }
 

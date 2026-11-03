@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if ! command -v pwsh >/dev/null 2>&1; then
-  echo "PowerShell 7 (pwsh) is required for Teams trigger registration." >&2
+  echo "PowerShell 7.3+ (pwsh) is required for Teams trigger registration." >&2
   exit 1
 fi
 

@@ -3,6 +3,7 @@
 *.env
 local.settings.json
 .local-settings-*.json
+.local-settings-*.tmp
 **/[Bb]in/
 **/[Oo]bj/
 publish/

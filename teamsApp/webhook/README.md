@@ -1,10 +1,6 @@
 # Microsoft Teams Webhook Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk)
-and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector).
-The Connector Namespace delivers events to the function's public HTTPS callback.
-Typed handlers log only `Received <FunctionName> trigger ({Count} items)`;
-raw handlers log the event name only.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector). The Connector Namespace delivers events to the function's public HTTPS callback. Typed handlers log only `Received <FunctionName> trigger ({Count} items)`; raw handlers log the event name only.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -20,17 +16,14 @@ raw handlers log the event name only.
 | `RecordingTrigger` | [`RecordingTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-recording-is-available) | Recording available (opt-in, raw JSON) |
 | `TranscriptTrigger` | [`TranscriptTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-transcript-is-available) | Transcript available (opt-in, raw JSON) |
 
-SDK 0.14.0-preview.1 provides typed callback wrappers only for the first four events.
-The seven approved `string` bindings are explicit exceptions: no parsing, inferred
-counts or input/action-response models substitute for missing callback wrappers.
-See the [pinned SDK source](https://github.com/Azure/Connectors-NET-SDK/blob/1d9ce974172e97862fee81dd29682ebfc5ac50d5/src/Azure.Connectors.Sdk/Generated/TeamsExtensions.cs#L3333-L3388).
+SDK 0.15.0-preview.1 provides typed callback wrappers only for the first four events. The seven approved `string` bindings are explicit exceptions: no parsing, inferred counts or input/action-response models substitute for missing callback wrappers. See the [pinned SDK source](https://github.com/Azure/Connectors-NET-SDK/blob/b2ff0f84b9a52b616eba0fcf82264949f5c99afa/src/Azure.Connectors.Sdk/Generated/TeamsExtensions.cs).
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7 for the default hook and the alternative Bash wrapper
+- PowerShell 7.3+ (.NET 7+) for private staging files in the hook and Bash wrapper
 - Azure Functions Core Tools v4 and Azurite for local development
 - A Teams account with team/channel access and permission to authorize the connection
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
@@ -57,9 +50,7 @@ azd env set TEAMS_CHANNEL_ID "<URL-decoded channel ID>"
 azd up
 ```
 
-Use IDs from a Teams channel link, not display names. Complete OAuth when the hook
-opens your browser; connected accounts skip consent. Use a different environment
-name from Poll. Azure resources incur charges; no always-ready instances are configured.
+Use IDs from a Teams channel link, not display names. Complete OAuth when the hook opens your browser; connected accounts skip consent. Use a different environment name from Poll.
 
 ## Optional configuration
 
@@ -70,18 +61,14 @@ name from Poll. Azure resources incur charges; no always-ready instances are con
 | `infra/additional-triggers.json` | Select optional events below |
 | Omit team/channel IDs | Hook offers interactive Graph selection; set both explicitly for noninteractive runs |
 | `azd hooks run postdeploy` | Rerun registration/consent without redeployment |
-| `bash ./infra/scripts/postdeploy.sh` | Alternative entry point; still requires PowerShell 7. For the postdeploy azd hook, use `shell: sh` and this script's path as `run` |
+| `bash ./infra/scripts/postdeploy.sh` | Alternative entry point; still requires PowerShell 7.3+. For the postdeploy azd hook, use `shell: sh` and this script's path as `run` |
 
 ## Optional triggers
 
-Four events are configured by default. To add others, copy the example
-configuration, keep only the events you need, and fill in their required source
-parameters. Setup registers callbacks for the selected events; no separate manual
-listener flags are needed.
+Four events are configured by default. To add others, copy the example configuration, keep only the events you need, and fill in their required source parameters. Setup registers callbacks for the selected events; no separate manual listener flags are needed.
 
 1. Copy `infra/additional-triggers.example.json` to `infra/additional-triggers.json`.
-2. Keep only explicitly authorized events and replace placeholders using actual
-   scopes/enums from the connector UI or exported configuration.
+2. Keep only explicitly authorized events and replace placeholders using actual scopes/enums from the connector UI or exported configuration.
 
 | Operation | Required source parameters |
 | --- | --- |
@@ -91,28 +78,24 @@ listener flags are needed.
 | `WebhookMessageReactionTrigger` | `reactionKey`, `frequency`, `runningPolicy`, `threadType`, dynamic `requestBody` scope |
 | `RecordingTrigger`, `TranscriptTrigger` | `scopeType`, dynamic `body` scope; appropriate meeting licenses/policies |
 
-3. Preserve exact operation/parameter casing, JSON types and nested values.
-   Never copy keys or tokens. Targeted events require `requestBody` even when
-   marked optional in the catalog.
+3. Preserve exact operation/parameter casing, JSON types and nested values. Never copy keys or tokens. Targeted events require `requestBody` even when marked optional in the catalog.
 4. Apply the selection:
 
    ```bash
    azd up
    ```
 
-Hooks reject unsupported/duplicate names, missing/empty values and placeholders;
-the service validates dynamic schemas and permissions.
+Hooks reject unsupported/duplicate names, missing/empty values and placeholders; the service validates dynamic schemas and permissions.
 
-**Selection safety:** Removing an entry does not delete an existing config;
-explicitly disable/delete it to stop callbacks. Broad chats and meeting
-subscriptions are never enabled implicitly.
+**Selection safety:** Removing an entry does not delete an existing config; explicitly disable/delete it to stop callbacks. Broad chats and meeting subscriptions are never enabled implicitly.
 
 ## Local development
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated by postdeploy after `azd up`; existing files are preserved.
-   Only if it is missing, run `azd hooks run postdeploy` to generate it.
+   Use the file generated by postdeploy after `azd up`; existing files are preserved. Only if it is missing, run `azd hooks run postdeploy` to generate it.
+
+   Worker telemetry uses the Function App's system-assigned identity through `ConnectorNamespace` in Azure. Omit managed-identity settings locally; sign in with `az login` if enabling telemetry.
 2. Start Azurite in a separate terminal:
 
    ```bash
@@ -126,31 +109,17 @@ subscriptions are never enabled implicitly.
    func start
    ```
 
-4. Open a public HTTPS tunnel to the local host and register **separate** configs
-   using `/runtime/webhooks/connector?functionName=<FunctionName>`.
-   Authenticate with the local `connector_extension` system key as the `code`
-   query parameter.
+4. Open a public HTTPS tunnel to the local host and register **separate** configs using `/runtime/webhooks/connector?functionName=<FunctionName>`. Authenticate with the local `connector_extension` system key as the `code` query parameter.
 
-**Hook behavior:** The hook targets Azure; it has no local callback override.
-Separate local configs leave deployed callbacks unchanged. If you manually replace
-the deployed configs, rerun `azd hooks run postdeploy` to restore Azure delivery.
+**Hook behavior:** The hook targets Azure; it has no local callback override. Reruns update the selected named registrations without deleting them first. Separate local configs leave deployed callbacks unchanged. If you manually replace the deployed configs, rerun `azd hooks run postdeploy` to restore Azure delivery.
 
-**Access and safety:** The namespace identity requires connection access;
-webhook-only reception needs no Function/developer connection access policy.
-Never commit keys/local settings or expose unauthenticated callbacks.
-Prefer [Poll](../polling/) without a public endpoint.
+**Access and safety:** Webhook-only reception needs no Function/developer connection access policy. Never commit keys/local settings or expose unauthenticated callbacks. Prefer [Poll](../polling/) without a public endpoint.
 
 ## Verify
 
-Check the connection is **Connected** and selected triggers are **Enabled** in
-[Connector Namespaces](https://connectors.azure.com/). Post a new root channel
-message, not a reply, and look for `Received OnNewChannelMessage trigger` in logs.
-Verify mentions/membership only with authorized test activity; optional events
-require their scoped source action and prerequisites. Allow upstream detection
-delays; delivery is at least once. Verify each selected event separately.
+Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Post a new root channel message, not a reply, and look for `Received OnNewChannelMessage trigger` in logs. Verify mentions/membership only with authorized test activity; optional events require their scoped source action and prerequisites. Allow upstream detection delays; delivery is at least once. Verify each selected event separately.
 
-Run `azd down --purge` from this folder to clean up. Use a different environment
-from Poll; preserve the environment name/values when continuing an existing deployment.
+Run `azd down --purge` from this folder to clean up. Use a different environment from Poll; preserve the environment name/values when continuing an existing deployment.
 
 ## More
 

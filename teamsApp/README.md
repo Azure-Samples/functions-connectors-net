@@ -7,5 +7,4 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 | [Polling](polling/) | Function host receives events by polling the namespace | Outbound connection only; no tunnel required |
 | [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS tunnel required for real events |
 
-Samples for Microsoft Teams message, membership, recording, and transcript triggers.
-See each sample's README for setup and supported triggers.
+Samples for Microsoft Teams message, membership, recording, and transcript triggers. See each sample's README for setup and supported triggers.
