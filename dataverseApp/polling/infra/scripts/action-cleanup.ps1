@@ -88,16 +88,25 @@ function Protect-DataverseActionRegistration {
         if ($selectors.organization.TrimEnd('/') -cne $Context.organization) {
             throw 'Refusing Dataverse action cleanup for another source organization.'
         }
+        $destination = $properties.metadata
+        if ($destination.destinationType -cne 'functionApp' -or
+            $destination.functionAppName -ine $Outputs.functionAppName -or
+            $destination.functionAppResourceGroup -ine $Outputs.resourceGroupName -or
+            $destination.functionAppSubscriptionId -ine $Outputs.AZURE_SUBSCRIPTION_ID -or
+            $destination.functionName -cne $Context.functionName) {
+            throw 'Refusing Dataverse action cleanup for another application destination.'
+        }
         if ($Context.mode -eq 'Poll') {
             if ($properties.deliveryMode -cne 'Poll') { throw 'Dataverse action delivery mode differs.' }
         } else {
             if ($properties.deliveryMode -eq 'Poll') { throw 'Dataverse action delivery mode differs.' }
             $callback = [uri]$properties.notificationDetails.callbackUrl
+            # Provider reads redact query values; the exact metadata above binds the function.
             if ([string]::IsNullOrWhiteSpace([string]$Outputs.functionAppDefaultHostname) -or
                 -not $callback.IsAbsoluteUri -or $callback.Scheme -ne 'https' -or
                 $callback.Host -ine $Outputs.functionAppDefaultHostname -or
                 $callback.AbsolutePath -cne '/runtime/webhooks/connector' -or
-                $callback.Query -cne '?functionName=OnDataverseActionPerformed' -or
+                $callback.Query -cnotin @('?functionName=OnDataverseActionPerformed', '?functionName=*sanitized*') -or
                 $callback.UserInfo -or $callback.Fragment) {
                 throw 'Refusing Dataverse action cleanup for another application callback.'
             }

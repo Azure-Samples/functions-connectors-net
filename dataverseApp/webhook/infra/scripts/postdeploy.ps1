@@ -52,7 +52,7 @@ $actionJournal = Get-DataverseActionJournal (Join-Path $PSScriptRoot '../..') $a
 if ($disabledTriggers.Count -gt 0 -or $actionEnabled) {
     $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
     $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" `
-        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
+        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,metadata:properties.metadata,state:properties.state,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse subscriptions.' }
     $configs = ($raw -join "`n") | ConvertFrom-Json
     $actionConfigs = @($configs.value | Where-Object name -EQ $actionContext.triggerName)
@@ -157,6 +157,9 @@ foreach ($trigger in $triggers) {
     if ($trigger.operationName -eq 'BusinessEventsTrigger') {
         Protect-DataverseActionRegistration $actionContext $actionJournal $actionConfigs[0] $outputs -BeforeCreate
         if ($actionConfigs.Count -eq 1) {
+            if ($actionConfigs[0].properties.state -cne 'Enabled') {
+                throw "Existing Dataverse action configuration '$name' is not Enabled. Inspect and enable that configuration in Connector Namespace; it was not recreated."
+            }
             $expected = @{}
             foreach ($parameter in $trigger.parameters) { $expected[$parameter.name] = [string]$parameter.value }
             $current = @{}
@@ -223,5 +226,22 @@ foreach ($trigger in $triggers) {
         }
     }
 }
+foreach ($trigger in $triggers) {
+    $name = "$($outputs.connectorNamespaceConnectionName)-$($trigger.functionName.ToLowerInvariant())"
+    $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs/$name/triggerStatuses/latest?api-version=2026-05-01-preview"
+    $raw = az rest --method get --url $uri `
+        --query '{status:lastExecutionStatus,code:lastExecutionStatusCode,started:lastExecutionStartTime,error:lastExecutionError}' -o json 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "Could not read source status for '$name'; inspect Connector Namespace before testing events." }
+    $status = ($raw -join "`n") | ConvertFrom-Json -AsHashtable
+    if ($status.status -eq 'Failed' -or $status.error.Count -gt 0) {
+        throw "Dataverse source execution failed for '$name'. Inspect its Connector Namespace trigger status for source registration errors; details were not logged."
+    }
+    if ($status.started -and ($status.status -eq 'Succeeded' -or
+        ($status.status -eq 'Skipped' -and $status.code -in @('Accepted', 'OK')))) {
+        Write-Host "Latest source execution succeeded for '$name'; event delivery is not verified."
+    } else {
+        Write-Warning "Source registration/execution for '$name' is pending or unverified. Rerun the hook after initialization and inspect Connector Namespace before testing events."
+    }
+}
 if (-not $actionEnabled) { Assert-DataverseActionSourceCleanup $actionJournal }
-Write-Host 'Dataverse webhook trigger configuration complete.'
+Write-Host 'Dataverse webhook configuration setup complete. Check the reported source status before testing events.'

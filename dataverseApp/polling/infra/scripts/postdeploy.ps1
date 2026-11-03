@@ -62,7 +62,7 @@ $actionDisabled = $localValues['AzureWebJobs.OnDataverseActionPerformed.Disabled
 if ($disabledTriggers.Count -gt 0 -or -not $actionDisabled) {
     $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
     $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" `
-        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
+        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,metadata:properties.metadata,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse subscriptions.' }
     $configs = ($raw -join "`n") | ConvertFrom-Json
     $actionConfigs = @($configs.value | Where-Object name -EQ $actionContext.triggerName)
@@ -92,8 +92,28 @@ function Get-ConnectionStatus {
     return $status
 }
 
+function Check-SourceStatus {
+    foreach ($functionName in @('OnDataverseRowChanged') + @($optionalTriggers.functionName | Where-Object { $localValues["AzureWebJobs.$_.Disabled"] -eq 'false' })) {
+        $name = $triggerSettings."${functionName}TriggerConfigName"
+        $raw = az rest --method get --url "$uri/$name/triggerStatuses/latest?api-version=2026-05-01-preview" `
+            --query '{status:lastExecutionStatus,code:lastExecutionStatusCode,started:lastExecutionStartTime,error:lastExecutionError}' -o json 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Could not read source status for '$name'; inspect Connector Namespace before testing events." }
+        $status = ($raw -join "`n") | ConvertFrom-Json -AsHashtable
+        if ($status.status -eq 'Failed' -or $status.error.Count -gt 0) {
+            throw "Dataverse source execution failed for '$name'. Inspect its Connector Namespace trigger status for source registration errors; details were not logged."
+        }
+        if ($status.started -and ($status.status -eq 'Succeeded' -or
+            ($status.status -eq 'Skipped' -and $status.code -in @('Accepted', 'OK')))) {
+            Write-Host "Latest source execution succeeded for '$name'; event delivery is not verified."
+        } else {
+            Write-Warning "Source registration/execution for '$name' is pending or unverified. Rerun the hook after initialization and inspect Connector Namespace before testing events."
+        }
+    }
+}
+
 if ((Get-ConnectionStatus) -eq 'Connected') {
     Write-Host 'Dataverse connection is already authorized.'
+    Check-SourceStatus
     if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
     return
 }
@@ -131,7 +151,8 @@ $deadline = (Get-Date).AddMinutes(5)
 do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'Dataverse connection authorized. The Poll trigger configuration is provisioned.'
+        Check-SourceStatus
+        Write-Host 'Dataverse connection authorized. Check the reported source status before testing events.'
         if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
         return
     }
