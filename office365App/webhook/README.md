@@ -86,7 +86,9 @@ Empty address disables its listener and skips registration. When disabling an ex
    func start --enableAuth
    ```
 
-4. Expose port 7071 over public HTTPS. Get the local `connector_extension` system key from Azurite's `azure-webjobs-secrets`.
+   Core Tools v4 bypasses local key authentication by default. Use `--enableAuth` before exposing the host through a public tunnel so callback requests must present the system key.
+
+4. Expose port 7071 over public HTTPS. Get the **local** `connector_extension` system key from Azurite's `azure-webjobs-secrets`, not the Azure Function App's key or a function key. Keep it private and use it in the tunnel callback.
 
 5. From the webhook folder, sign in and register the tunnel callback using its provisioned azd environment. This replaces deployed callbacks.
 

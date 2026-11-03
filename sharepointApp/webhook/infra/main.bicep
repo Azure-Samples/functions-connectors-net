@@ -189,7 +189,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
 }
 
 // Connector Namespace + sharepointonline connection.
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
   params: {

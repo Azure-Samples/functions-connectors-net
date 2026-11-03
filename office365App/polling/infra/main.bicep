@@ -133,7 +133,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   name: 'connector-namespace'
   scope: rg
   params: {

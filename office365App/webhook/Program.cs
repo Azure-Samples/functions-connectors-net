@@ -14,7 +14,8 @@ var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {
-        if (!string.IsNullOrEmpty(context.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+        var connectionString = context.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+        if (!string.IsNullOrEmpty(connectionString))
         {
             services.AddAzureClientsCore();
             services.AddOpenTelemetry()
@@ -22,8 +23,11 @@ var host = new HostBuilder()
                 .UseAzureMonitorExporter();
             services.AddOptions<AzureMonitorExporterOptions>()
                 .Configure<AzureComponentFactory>((options, factory) =>
+                {
+                    options.ConnectionString = connectionString;
                     options.Credential = factory.CreateTokenCredential(
-                        context.Configuration.GetSection("ConnectorNamespace")));
+                        context.Configuration.GetSection("ConnectorNamespace"));
+                });
         }
     })
     .Build();

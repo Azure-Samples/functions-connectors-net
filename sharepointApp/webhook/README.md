@@ -112,6 +112,8 @@ Local callback configuration replaces the selected environment's deployed callba
    func start --enableAuth
    ```
 
+   Core Tools v4 bypasses local key authentication by default. Use `--enableAuth` before exposing the host through a public tunnel so callback requests must present the system key.
+
 4. Expose port 7071 through a public HTTPS tunnel in another terminal, for example:
 
    ```bash
