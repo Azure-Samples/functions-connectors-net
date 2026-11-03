@@ -2,26 +2,32 @@
 // Licensed under the MIT License.
 
 using Azure.Monitor.OpenTelemetry.Exporter;
-using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
+using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWorkerDefaults()
-    .ConfigureServices(services =>
+    .ConfigureServices((context, services) =>
     {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")))
+        var connectionString = context.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"];
+        if (!string.IsNullOrEmpty(connectionString))
         {
+            services.AddAzureClients(_ => { });
             services.AddOpenTelemetry()
                 .UseFunctionsWorkerDefaults()
-                .UseAzureMonitorExporter(options =>
+                .UseAzureMonitorExporter();
+            services.AddOptions<AzureMonitorExporterOptions>()
+                .Configure<AzureComponentFactory>((options, factory) =>
                 {
-                    if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_AUTHENTICATION_STRING")))
+                    options.ConnectionString = connectionString;
+                    if (!string.IsNullOrEmpty(context.Configuration["APPLICATIONINSIGHTS_AUTHENTICATION_STRING"]))
                     {
-                        options.Credential = new DefaultAzureCredential();
+                        options.Credential = factory.CreateTokenCredential(
+                            context.Configuration.GetSection("ConnectorNamespace"));
                     }
                 });
         }

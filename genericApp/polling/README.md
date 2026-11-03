@@ -1,29 +1,24 @@
 # Generic Connector Polling Trigger (.NET)
 
-`OnGenericConnectorEvent` receives raw JSON through `[ConnectorTrigger] string
-payload` with `DeliveryMode = Poll`, logging only the trigger name per invocation.
-Generic intentionally uses no SDK model. No public callback or
-tunnel is needed.
+`OnGenericConnectorEvent` receives raw JSON through `[ConnectorTrigger] string payload` with `DeliveryMode = Poll`, logging only the trigger name per invocation. Generic intentionally uses no SDK model. No public callback or tunnel is needed.
 
 ## Prerequisites
 
-Requires .NET 10 SDK, Functions Core Tools v4, Azure CLI, and Azurite for local storage.
-Use an existing authorized Connector Namespace connection and
-enabled Poll trigger configuration; this sample has no `azd` provisioning or
-postdeploy hooks. Follow the [Poll setup and access-policy guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#poll-delivery).
-Both the namespace identity and receiving developer/app identity need connection access.
+Requires .NET 10 SDK, Functions Core Tools v4, Azure CLI, and Azurite for local storage. Use an existing authorized Connector Namespace connection and enabled Poll trigger configuration; this sample has no `azd` provisioning or postdeploy hooks. Follow the [Poll setup and access-policy guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#poll-delivery). The receiving developer/app identity needs connection access.
 
 ## Deploy to Azure
 
-Use an existing .NET 10 isolated Function App with host/deployment storage.
-Configure its settings:
+Use an existing .NET 10 isolated Function App with host/deployment storage. Enable its **system-assigned managed identity** and use that app's principal ID for connection access and resource roles. Keep the namespace's system-assigned identity. Configure its settings:
 
 | Setting | Value |
 | --- | --- |
 | `GenericTriggerConfigName` | Existing enabled Poll trigger configuration name |
 | `ConnectorNamespace__pollingEndpoint` | Base derived from its service `pollingEndpoints.receiveUri` |
-| `ConnectorNamespace__credential` | `managedidentity`; enable the app's identity and grant connection access |
-| `ConnectorNamespace__clientId` | User-assigned identity client ID; omit for system-assigned identity |
+| `ConnectorNamespace__credential` | `managedidentity`; uses the app's system-assigned identity |
+| `AzureWebJobsStorage__credential` | `managedidentity` |
+| `AzureWebJobsStorage__blobServiceUri`, `AzureWebJobsStorage__queueServiceUri`, `AzureWebJobsStorage__tableServiceUri` | Host storage account's Blob, Queue, and Table endpoints |
+
+Grant the app principal Storage Blob Data Owner, Storage Queue Data Contributor, and Storage Table Data Contributor on host storage. For Flex deployment storage, use `SystemAssignedIdentity` authentication and grant Storage Blob Data Contributor on its container (the host account's Blob Data Owner role covers it if shared).
 
 Publish from this folder:
 
@@ -32,39 +27,26 @@ az login
 func azure functionapp publish <function-app-name>
 ```
 
-Local settings are not published. Use separate trigger configurations for separate
-delivery environments.
-
-The retained Flex E2E setup uses **one billed always-ready
-instance**, including while idle ([pricing](https://azure.microsoft.com/pricing/details/functions/)):
-
-```shell
-az functionapp scale config always-ready set --subscription <subscription-id> --resource-group <resource-group> --name <function-app> --settings function:ongenericconnectorevent=1
-az functionapp scale config show --subscription <subscription-id> --resource-group <resource-group> --name <function-app> --query alwaysReady
-```
+Local settings are not published. Use separate trigger configurations for separate delivery environments.
 
 ## Optional configuration
 
 | Option | Configuration |
 | --- | --- |
-| Verified always-ready setup | PowerShell 7: `infra/scripts/set-always-ready.ps1 -SubscriptionId <id> -ResourceGroupName <group> -FunctionAppName <app>`; retains the same paid instance |
 | Telemetry | Set `APPLICATIONINSIGHTS_CONNECTION_STRING` |
-| Entra telemetry | Also set `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`, grant Monitoring Metrics Publisher, and set `AZURE_CLIENT_ID` for a user-assigned identity; the worker uses `DefaultAzureCredential` |
+| Entra telemetry | Set `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`; grant the app's system principal Monitoring Metrics Publisher on Application Insights. The worker independently uses `ConnectorNamespace__credential=managedidentity`; omit identity settings locally for developer credentials |
 
 ## Local development
 
-1. Prepare `local.settings.json`.
-   If absent, copy `local.settings.example.json`; otherwise preserve existing values.
-2. Set `GenericTriggerConfigName` and `ConnectorNamespace__pollingEndpoint`.
-   Derive the endpoint from the service's `pollingEndpoints.receiveUri`:
+1. Prepare `local.settings.json`. If absent, copy `local.settings.example.json`; otherwise preserve existing values.
+2. Set `GenericTriggerConfigName` and `ConnectorNamespace__pollingEndpoint`. Derive the endpoint from the service's `pollingEndpoints.receiveUri`:
 
    | Receive URI | Endpoint setting |
    | --- | --- |
    | `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
    | `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
 
-   Preserve the host/gateway; omit operation paths and queries. The same rule
-   applies in Azure. `ConnectorNamespace` is a setting prefix, not a connection name.
+   Preserve the host/gateway; omit operation paths and queries. The same rule applies in Azure. `ConnectorNamespace` is a setting prefix, not a connection name.
 3. Omit managed-identity settings locally and sign in with your developer identity:
 
    ```shell
@@ -73,8 +55,7 @@ az functionapp scale config show --subscription <subscription-id> --resource-gro
 
 4. Start Azurite for Functions storage. `UseDevelopmentStorage=true` is local only.
 
-If the Function App is already deployed, stop it before running locally to avoid competing listeners.
-Separate trigger configurations also provide isolated testing.
+If the Function App is already deployed, stop it before running locally to avoid competing listeners. Separate trigger configurations also provide isolated testing.
 
 5. Build and start from this folder:
 
@@ -85,17 +66,12 @@ Separate trigger configurations also provide isolated testing.
 
 ## Verify
 
-Cause an event for your configured operation. The approved E2E example uses
-[Azure Blob add/modify (properties only) V2](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2));
-the handler itself remains connector-neutral. Expect `OnGenericConnectorEvent
-(generic API) trigger received.` for each invocation.
+Cause an event for your configured operation. The approved E2E example uses [Azure Blob add/modify (properties only) V2](https://learn.microsoft.com/connectors/azureblob/#when-a-blob-is-added-or-modified-(properties-only)-(v2)); the handler itself remains connector-neutral. Expect `OnGenericConnectorEvent (generic API) trigger received.` for each invocation.
 
-Confirm a successful function invocation, not merely a running HTTP/admin host.
-Delivery is at least once; failures may be redelivered. This sample neither
-deduplicates nor exposes Poll `MessageId` metadata. Do not delete shared resources
-during cleanup.
+Confirm a successful function invocation, not merely a running HTTP/admin host. Delivery is at least once; failures may be redelivered. This sample neither deduplicates nor exposes Poll `MessageId` metadata. Do not delete shared resources during cleanup.
 
 ## More
 
 - [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
 - [Azure Blob source example reference](https://learn.microsoft.com/connectors/azureblob/)
+- [Flex system-assigned identity and storage reference](https://github.com/Azure-Samples/azure-functions-flex-consumption-samples/blob/main/IaC/bicep/main.bicep)
