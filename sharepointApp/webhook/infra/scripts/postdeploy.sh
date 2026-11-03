@@ -110,6 +110,7 @@ do
     -n "${triggerName}" \
     --connection-details "{connectionName:${connectorNamespaceConnectionName},connectorName:sharepointonline}" \
     --operation-name "${operationName}" \
+    --state Enabled \
     --parameters "@${paramsFile}" \
     --notification-details "@${notifFile}" \
     --description "${description}" \

@@ -114,6 +114,7 @@ foreach ($trigger in $triggerConfigs) {
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:sharepointonline}" `
             --operation-name $trigger.OperationName `
+            --state Enabled `
             --parameters "@$paramsFile" `
             --notification-details "@$notifFile" `
             --description $trigger.Description `
