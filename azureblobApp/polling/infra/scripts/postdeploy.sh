@@ -11,6 +11,9 @@ for argument in "$@"; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+app_dir="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/local-settings.sh"
+command -v jq >/dev/null 2>&1 || { echo 'ERROR: jq 1.6 or later is required for the Bash hook.' >&2; exit 1; }
 if ! az extension show --name connector-namespace --query name -o tsv >/dev/null 2>&1; then
     echo "ERROR: Install the connector-namespace Azure CLI extension before running this script." >&2
     exit 1
@@ -22,7 +25,7 @@ read_output() {
         echo "ERROR: Could not read azd output $1." >&2
         return 1
     fi
-    value="${value//$'\r'/}"
+    value="${value%$'\r'}"
     if [[ -z "${value//[[:space:]]/}" || "$value" == "null" ]]; then
         echo "ERROR: Missing azd output $1. Run azd provision first." >&2
         return 1
@@ -36,30 +39,11 @@ connectionName=$(read_output connectorNamespaceConnectionName)
 pollingEndpoint=$(read_output connectorPollingEndpoint)
 triggerConfigName=$(read_output onUpdatedFileTriggerConfigName)
 
-json_escape() {
-    local value="$1"
-    value="${value//\\/\\\\}"
-    value="${value//\"/\\\"}"
-    value="${value//$'\n'/\\n}"
-    value="${value//$'\r'/\\r}"
-    value="${value//$'\t'/\\t}"
-    printf '%s' "$value"
-}
-
-localSettingsPath="$SCRIPT_DIR/../../local.settings.json"
-if [[ -e "$localSettingsPath" && "$forceLocalSettings" != true ]]; then
-    echo "Existing local.settings.json preserved. Use --force-local-settings to regenerate it."
-else
-    if ! settingsTemp=$(mktemp "$SCRIPT_DIR/../../.local-settings.XXXXXX"); then
-        echo "ERROR: Could not create the local settings staging file." >&2
-        exit 1
-    fi
-    trap 'rm -f "$settingsTemp"' EXIT
-    printf '{\n  "IsEncrypted": false,\n  "Values": {\n    "AzureWebJobsStorage": "UseDevelopmentStorage=true",\n    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",\n    "ConnectorNamespace__pollingEndpoint": "%s",\n    "OnUpdatedFileTriggerConfigName": "%s"\n  }\n}\n' \
-        "$(json_escape "$pollingEndpoint")" "$(json_escape "$triggerConfigName")" > "$settingsTemp"
-    mv "$settingsTemp" "$localSettingsPath"
-    echo "Created ignored local.settings.json using developer credentials and Azurite."
-fi
+localSettings=$(connector_jq -n --arg endpoint "$pollingEndpoint" --arg trigger "$triggerConfigName" \
+    '{IsEncrypted:false,Values:{AzureWebJobsStorage:"UseDevelopmentStorage=true",
+      FUNCTIONS_WORKER_RUNTIME:"dotnet-isolated",ConnectorNamespace__pollingEndpoint:$endpoint,
+      OnUpdatedFileTriggerConfigName:$trigger}}')
+write_local_settings "$localSettings" "$forceLocalSettings"
 
 get_connection_status() {
     local status
@@ -69,7 +53,7 @@ get_connection_status() {
         echo "ERROR: Could not read the Azure Blob connection status." >&2
         return 1
     fi
-    printf '%s' "${status//$'\r'/}"
+    printf '%s' "${status%$'\r'}"
 }
 
 status=$(get_connection_status)
@@ -87,7 +71,7 @@ for attempt in 1 2 3 4 5; do
         --parameters "$consentParameters" --query 'value[0].link' -o tsv 2>/dev/null); then
         link=""
     fi
-    link="${link//$'\r'/}"
+    link="${link%$'\r'}"
     if [[ -z "$link" || "$link" == null ]]; then
         if ! link=$(az connector-namespace connection list-consent-links \
             -g "$resourceGroupName" --namespace "$connectorNamespaceName" --connection-name "$connectionName" \
@@ -95,7 +79,7 @@ for attempt in 1 2 3 4 5; do
             link=""
         fi
     fi
-    link="${link//$'\r'/}"
+    link="${link%$'\r'}"
     [[ -n "$link" && "$link" != null ]] && break
     link=""
     if [[ "$attempt" -lt 5 ]]; then sleep 5; fi

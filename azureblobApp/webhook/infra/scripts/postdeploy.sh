@@ -3,15 +3,25 @@
 #
 # The Azure Blob connection uses Entra ID (OAuth) authentication.
 # This script authorizes the connection via interactive consent,
-# then creates the trigger config pointing at the function's connector webhook URL.
+# then configures the trigger pointing at the function's connector webhook URL.
 
 set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_notif_files=()
-cleanup_notif_files() { for f in "${_notif_files[@]}"; do rm -f "$f"; done; }
-trap cleanup_notif_files EXIT
+app_dir="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$SCRIPT_DIR/local-settings.sh"
+command -v jq >/dev/null 2>&1 || { echo 'ERROR: jq 1.6 or later is required for the Bash hook.' >&2; exit 1; }
+notifFile=''
+cleanup_callback() {
+    result=$?
+    trap - EXIT
+    if [[ -n "$notifFile" ]]; then
+        rm -f -- "$notifFile" || { echo 'Could not clean owned callback staging file.' >&2; [[ "$result" -ne 0 ]] || result=1; }
+    fi
+    exit "$result"
+}
+trap cleanup_callback EXIT
 
 echo "Post-deployment configuration..."
 
@@ -34,7 +44,7 @@ read_output() {
         echo "ERROR: Could not read azd output $1." >&2
         return 1
     fi
-    value="${value//$'\r'/}"
+    value="${value%$'\r'}"
     if [[ -z "${value//[[:space:]]/}" || "$value" == "null" ]]; then
         if [[ -z "${2:-}" ]]; then
             echo "ERROR: Missing azd output $1. Run azd provision first." >&2
@@ -58,41 +68,25 @@ else
 fi
 AZURE_SUBSCRIPTION_ID=$(read_output AZURE_SUBSCRIPTION_ID)
 
-localSettingsPath="$SCRIPT_DIR/../../local.settings.json"
-if [[ -L "$localSettingsPath" || ( -e "$localSettingsPath" && ! -f "$localSettingsPath" ) ]]; then
-    echo "ERROR: local.settings.json must be a regular file." >&2
-    exit 1
-elif [[ -f "$localSettingsPath" ]]; then
-    echo "Existing local.settings.json preserved."
-else
-    if ! settingsTemp=$(mktemp "$SCRIPT_DIR/../../.local-settings.XXXXXX"); then
-        echo "ERROR: Could not create the local settings staging file." >&2
-        exit 1
-    fi
-    _notif_files+=("$settingsTemp")
-    localSettings='{
+localSettings='{
   "IsEncrypted": false,
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated"
   }
 }'
-    printf '%s\n' "$localSettings" > "$settingsTemp"
-    if [[ "$(cat "$settingsTemp")" != "$localSettings" ]]; then
-        echo "ERROR: Could not validate the generated local settings." >&2
-        exit 1
-    fi
-    mv -n "$settingsTemp" "$localSettingsPath"
-    if [[ -d "$localSettingsPath" ]]; then
-        _notif_files+=("$localSettingsPath/${settingsTemp##*/}")
-        echo "ERROR: local.settings.json became a directory during setup." >&2
-        exit 1
-    fi
-    if [[ -e "$settingsTemp" ]]; then
-        echo "ERROR: local.settings.json appeared during setup; existing settings preserved." >&2
-        exit 1
-    fi
-    echo "Created ignored local.settings.json using Azurite."
+write_local_settings "$localSettings"
+
+functionName="OnUpdatedFile"
+operationName="OnUpdatedFiles_V2"
+triggerName="${connectorNamespaceConnectionName}-onupdatedfile"
+existing=$(az connector-namespace trigger list -g "$resourceGroupName" --namespace "$connectorNamespaceName" --query '[].name' -o json 2>/dev/null) ||
+    { echo 'Could not list existing Azure Blob trigger configurations.' >&2; exit 1; }
+connector_jq -e 'type == "array" and all(.[]; type == "string")' <<<"$existing" >/dev/null 2>/dev/null ||
+    { echo 'Invalid Azure Blob trigger configuration list.' >&2; exit 1; }
+verb=create
+if connector_jq -e --arg name "$triggerName" 'index($name) != null' <<<"$existing" >/dev/null; then
+    verb=update
 fi
 
 # --- Authorize the Azure Blob connection (OAuth consent) --------------------
@@ -108,7 +102,7 @@ get_connection_status() {
         echo "ERROR: Could not read the Azure Blob connection status." >&2
         return 1
     fi
-    printf '%s' "${status//$'\r'/}"
+    printf '%s' "${status%$'\r'}"
 }
 
 currentStatus=$(get_connection_status)
@@ -124,6 +118,7 @@ else
             --connection-name "$connectorNamespaceConnectionName" \
             --parameters "$consentParams" \
             --query "value[0].link" -o tsv 2>/dev/null || true)
+        link="${link%$'\r'}"
 
         if [ -z "$link" ] || [ "$link" = "null" ]; then
             link=$(az connector-namespace connection list-consent-links \
@@ -131,6 +126,7 @@ else
                 --connection-name "$connectorNamespaceConnectionName" \
                 --parameters "$consentParams" \
                 --query "link" -o tsv 2>/dev/null || true)
+            link="${link%$'\r'}"
         fi
 
         [ -n "$link" ] && [ "$link" != "null" ] && break
@@ -178,42 +174,42 @@ echo "Container '${containerName}' -> folderId '${folderId}'"
 # --- Create Connector Namespace trigger config -------------------------------
 echo ""
 echo "Fetching connector extension key for $functionAppName..."
-connectorExtensionKey=$(az functionapp keys list -g "$resourceGroupName" -n "$functionAppName" --query "systemKeys.connector_extension" -o tsv)
-if [ -z "$connectorExtensionKey" ]; then
+connectorExtensionKey=$(az functionapp keys list -g "$resourceGroupName" -n "$functionAppName" --query "systemKeys.connector_extension" -o tsv 2>/dev/null) ||
+    { echo 'ERROR: Could not read connector_extension system key.' >&2; exit 1; }
+connectorExtensionKey="${connectorExtensionKey%$'\r'}"
+if [[ -z "${connectorExtensionKey//[[:space:]]/}" || "$connectorExtensionKey" == null ]]; then
     echo "ERROR: could not fetch connector_extension system key."
     exit 1
 fi
 
-functionName="OnUpdatedFile"
-operationName="OnUpdatedFiles_V2"
-triggerName="${connectorNamespaceConnectionName}-$(echo "$functionName" | tr '[:upper:]' '[:lower:]')"
 callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-if ! notifFile=$(mktemp); then
+if ! acquiredNotif=$(mktemp "$SCRIPT_DIR/.notification-details.XXXXXXXX"); then
     echo "ERROR: Could not create the notification request file." >&2
     exit 1
 fi
-_notif_files+=("$notifFile")
-printf '{"callbackUrl":"%s","authentication":{"type":"QueryString","name":"code","value":"%s"}}' "$callbackUrl" "$connectorExtensionKey" > "$notifFile"
+notifFile="$acquiredNotif"
+connector_jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
+    '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' > "$notifFile" ||
+    { echo 'Could not write callback staging file.' >&2; exit 1; }
 
 echo ""
-echo "Creating trigger '${triggerName}' for ${functionName} (${operationName})..."
+echo "Configuring trigger '${triggerName}' for ${functionName} (${operationName})..."
 
-az connector-namespace trigger delete \
-    -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-    -n "$triggerName" --yes 2>/dev/null || true
-
-az connector-namespace trigger create \
+az connector-namespace trigger "$verb" \
     -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
     -n "$triggerName" \
     --connection-details "{connectionName:${connectorNamespaceConnectionName},connectorName:azureblob}" \
     --operation-name "$operationName" \
     --parameters "[{name:dataset,value:'${monitoredStorageAccountName}'},{name:folderId,value:'${folderId}'}]" \
     --notification-details "@${notifFile}" \
+    --state Enabled \
     --description "When a blob is added or modified (properties only) (V2)" \
     --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${AZURE_SUBSCRIPTION_ID},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
-    -o none
+    -o none 2>/dev/null ||
+    { echo "Could not configure Azure Blob trigger $triggerName." >&2; exit 1; }
 
-rm -f "$notifFile"
+rm -f -- "$notifFile" || { echo 'Could not clean owned callback staging file.' >&2; exit 1; }
+notifFile=''
 
 echo ""
 echo "Post-deployment configuration complete."

@@ -55,16 +55,6 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   }
 }
 
-module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'function-identity'
-  scope: rg
-  params: {
-    name: 'id-${resourceToken}'
-    location: location
-    tags: tags
-  }
-}
-
 module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   name: 'appinsights'
   scope: rg
@@ -75,11 +65,6 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
         principalId: userPrincipalId
@@ -109,21 +94,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
       containers: [{ name: deploymentStorageContainerName }]
     }
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: storageBlobDataOwner
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageQueueDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageTableDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: storageBlobDataOwner
         principalId: userPrincipalId
@@ -184,7 +154,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   name: 'connector-namespace'
   scope: rg
   params: {
@@ -192,7 +162,6 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: connectorNamespaceLocation
     tags: tags
     connectionName: 'cnsc-${resourceToken}'
-    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
     userPrincipalId: userPrincipalId
   }
 }
@@ -210,13 +179,10 @@ module pollTriggers './poll-triggers.bicep' = {
 
 var allAppSettings = {
   AzureWebJobsStorage__credential: 'managedidentity'
-  AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
-  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
+  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
-  AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
   ConnectorNamespace__credential: 'managedidentity'
-  ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
   ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
   OnUpdatedFileTriggerConfigName: pollTriggers.outputs.triggerConfigName
 }
@@ -232,7 +198,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     serverFarmResourceId: functionAppPlan.outputs.resourceId
     httpsOnly: true
     managedIdentities: {
-      userAssignedResourceIds: [funcUserAssignedIdentity.outputs.resourceId]
+      systemAssigned: true
     }
     functionAppConfig: {
       deployment: {
@@ -240,20 +206,14 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
           type: 'blobContainer'
           value: '${storageAccount.outputs.primaryBlobEndpoint}${deploymentStorageContainerName}'
           authentication: {
-            type: 'UserAssignedIdentity'
-            userAssignedIdentityResourceId: funcUserAssignedIdentity.outputs.resourceId
+            type: 'SystemAssignedIdentity'
           }
         }
       }
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
-        alwaysReady: [
-          {
-            name: 'function:onupdatedfile'
-            instanceCount: 1
-          }
-        ]
+        alwaysReady: []
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -269,6 +229,18 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
         properties: allAppSettings
       }
     ]
+  }
+}
+
+module functionAppRbac './function-access.bicep' = {
+  name: 'function-app-rbac'
+  scope: rg
+  params: {
+    storageAccountName: storageAccount.outputs.name
+    appInsightsName: monitoring.outputs.name
+    functionAppPrincipalId: functionApp.outputs.systemAssignedMIPrincipalId!
+    namespaceName: connectorNamespace.outputs.name
+    connectionName: connectorNamespace.outputs.connectionName
   }
 }
 

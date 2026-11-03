@@ -2,7 +2,6 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
-param functionAppPrincipalId string
 param userPrincipalId string = ''
 param tenantId string = tenant().tenantId
 
@@ -22,35 +21,6 @@ resource azureblobConnection 'Microsoft.Web/connectorGateways/connections@2026-0
     connectorName: 'azureblob'
     parameterValueSet: {
       name: 'tokenBasedAuth'
-    }
-  }
-}
-
-// The namespace polls the source; the host and developer identities receive and acknowledge events.
-resource namespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: azureblobConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
-resource functionAppAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: azureblobConnection
-  name: 'functionapp-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: functionAppPrincipalId
-        tenantId: tenantId
-      }
     }
   }
 }
