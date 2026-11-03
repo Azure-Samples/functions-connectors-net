@@ -77,7 +77,7 @@ Requires an authorized Azure connector connection. Worker telemetry uses the `Co
 
 4. Configure a public HTTPS tunnel and each function's callback using the [webhook configuration guide](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#webhook-delivery).
 
-**Security:** Use the local `connector_extension` system key and keep `--enableAuth` enabled while the tunnel is public.
+**Security:** Core Tools v4 bypasses key authentication locally by default. Start with `func start --enableAuth` before exposing a public tunnel, and use the local host's `connector_extension` system key for the callback, not the Azure-deployed app's key.
 
 After testing locally, rerun `azd hooks run postdeploy` to restore Azure delivery, then close the tunnel.
 
