@@ -39,11 +39,10 @@ Use separate azd environments for the two modes. Commands in each quickstart pro
 From the repository root:
 
 ```powershell
-dotnet run --project .\SalesforceApp\tests\SalesforceChecks.csproj
 az bicep build --file .\SalesforceApp\polling\infra\main.bicep
 az bicep build --file .\SalesforceApp\webhook\infra\main.bicep
 ```
 
-PowerShell hooks require PowerShell 7.3+ (.NET 7+) for private callback staging with Unix file permissions. Bash hooks support Bash 3.2+ and require `jq` and standard shell utilities; webhook registration also requires `mktemp` and Azure CLI support for `az rest`. Hook checks use isolated test copies, real `jq` and mocked Azure commands, never live trigger registration. Bicep compiles the templates but the preview `Microsoft.Web/connectorGateways@2026-05-01-preview` types are not available to the local compiler; its BCP081 warnings mean provider properties still need live validation on an approved target.
+PowerShell hooks require PowerShell 7.3+ (.NET 7+) for private callback staging with Unix file permissions. Bash hooks support Bash 3.2+ and require `jq` and standard shell utilities; webhook registration also requires `mktemp` and Azure CLI support for `az rest`. Bicep compiles the templates but the preview `Microsoft.Web/connectorGateways@2026-05-01-preview` types are not available to the local compiler; its BCP081 warnings mean provider properties still need live validation on an approved target.
 
 Delivery contracts: [Poll configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md#poll-delivery), [polling-backed Webhook registration](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/webhook-trigger-registration/SKILL.md), [SDK signature mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#salesforce-connector).
