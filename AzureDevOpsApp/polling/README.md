@@ -4,7 +4,13 @@ An independent .NET isolated Function App receiving Connector Namespace Poll eve
 
 ## Quickstart
 
-Install the root README prerequisites plus Functions Core Tools and Azurite for local runs. Bash hooks need Bash and `jq`; Windows hooks use PowerShell 7. Run from **this directory**, with an environment name distinct from the webhook app.
+Install the root README prerequisites, including Azure CLI with `az rest` and the `connector-namespace` extension, which is still used to list configurations and manage source connections.
+
+Windows hooks use PowerShell 7; Bash hooks need Bash and `jq` 1.7+ to preserve unmodified large numeric literals, plus the bundled `cygpath` when using Git Bash on Windows. Hooks need a writable private temporary directory.
+
+The signed-in Azure identity must be allowed to list, read and update trigger configurations in the selected namespace. Azure permissions do not replace the source permissions described in the overview.
+
+Local runs additionally need Functions Core Tools and Azurite. Run from **this directory**, with an environment name distinct from the webhook app.
 
 After the exact Azure deployment target and source organization/project have been approved:
 
@@ -45,7 +51,13 @@ Only after approval, generate a safe event in the chosen target. Typed handlers 
 
 ## Stopping and conditional triggers
 
-Stopping the local host does **not** stop namespace polling. Disable the relevant namespace trigger configurations when a test ends. Turning an opt-in parameter off and reprovisioning does not remove an existing configuration: the postdeploy hook explicitly disables previously created opt-out configurations. An existing local settings file is intentionally preserved; manually reconcile its disabled flags after changing selections, or archive it deliberately before regenerating. Never run simultaneous local and deployed receivers against the same configuration when testing a single consumer.
+Stopping the local host does **not** stop namespace polling. Change the relevant opt-in parameters and run `azd up` to apply the selected lifecycle.
+
+Provisioning creates or re-enables selected configurations at the same deterministic resource IDs. The postdeploy hook disables existing opt-out configurations through ARM REST while preserving their Poll delivery mode and original writable settings.
+
+Never-created opt-out configurations are skipped. Existing configurations are retained, not deleted and recreated; ordinary opt-out needs no manual cloud cleanup.
+
+An existing local settings file is intentionally preserved; manually reconcile its disabled flags after changing selections, or archive it deliberately before regenerating. Never run simultaneous local and deployed receivers against the same configuration when testing a single consumer.
 
 Offline commands:
 
