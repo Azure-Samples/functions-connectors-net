@@ -291,6 +291,7 @@ output dataverseEnvironmentUrl string = dataverseEnvironmentUrl
 
 @description('The Dataverse logical table name monitored by the trigger.')
 output dataverseTableName string = dataverseTableName
+output dataverseEntitySetName string = dataverseEntitySetName
 
 output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
 output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings

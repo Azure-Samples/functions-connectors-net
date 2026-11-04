@@ -63,7 +63,9 @@ For action-performed, supply all four actual event-selector identifiers:
 | `DATAVERSE_EVENT_TABLE=<logical-table>` | Table identifier accepted by the event selector |
 | `DATAVERSE_EVENT_ACTION=<SDK-message>` | Action's `sdkmessagename` |
 
-Separate row events overlap the combined subscription. Set their flag to `false` and rerun `azd up` to disable them and remove their configurations.
+Separate row events overlap the combined subscription. Set an optional trigger's flag to `false` and rerun `azd up` to disable and retain its namespace configuration.
+
+Set the flag back to `true` and rerun `azd up` to re-enable the same configuration. An optional configuration that was never created needs no cleanup.
 
 Use a dedicated namespace for this sample, not one containing unrelated registrations.
 
@@ -107,13 +109,11 @@ Verify action-performed only with an authorized action on your own fixture. Allo
 
 ## Cleanup
 
-To disable action-performed, set `DATAVERSE_ENABLE_ACTION_TRIGGER` to `false` and rerun `azd up`. Removing its Connector Namespace configuration does not prove its Dataverse callback was deleted.
+Ordinary opt-out disables and retains optional configurations, including action-performed. It does not require manual source cleanup.
 
-1. Have an authorized administrator identify the exact-owned callback using subscription/audit evidence and delete only that callback.
-2. Verify an authenticated `GET /api/data/v9.2/callbackregistrations(<exact-id>)` returns **404** and the namespace configuration is absent.
-3. Remove only the pending marker printed by the hook, then rerun the hook.
+Permanent teardown or changing action selectors is different: removing a namespace configuration does not prove its Dataverse source callback is inactive or deleted.
 
-If cleanup is unverified, keep the marker and do not replace the action subscription. Poll registrations are provisioned before hook checks, so complete cleanup before provisioning a replacement.
+Before replacing an action subscription, have an authorized administrator verify exact-owned source cleanup using supported source evidence. Preserve its cleanup marker until confirmed; a readable callback row alone does not establish whether it is active.
 
 Remove this environment's Azure resources from this folder:
 

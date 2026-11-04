@@ -10,3 +10,5 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 Both samples log received events.
 
 Combined row changes are enabled by default; separate added, modified and deleted events and action-performed events are opt-in.
+
+Polling opt-out disables and retains optional namespace configurations; opting back in re-enables them.

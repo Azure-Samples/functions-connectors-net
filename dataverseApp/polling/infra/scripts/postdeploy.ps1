@@ -42,42 +42,138 @@ foreach ($functionName in @(
     $localValues[$setting] = $triggerSettings.$setting
 }
 $optionalTriggers = @(
-    @{ functionName = 'OnDataverseActionPerformed' }
-    @{ functionName = 'OnDataverseRowAdded' }
-    @{ functionName = 'OnDataverseRowModified' }
-    @{ functionName = 'OnDataverseRowDeleted' }
+    @{ functionName = 'OnDataverseActionPerformed'; operationName = 'BusinessEventsTrigger' }
+    @{ functionName = 'OnDataverseRowAdded'; operationName = 'GetOnNewItems_V2' }
+    @{ functionName = 'OnDataverseRowModified'; operationName = 'GetOnUpdatedItems_V2' }
+    @{ functionName = 'OnDataverseRowDeleted'; operationName = 'GetOnDeletedItems_V2' }
 )
-$disabledTriggers = @()
 foreach ($trigger in $optionalTriggers) {
     $setting = "AzureWebJobs.$($trigger.functionName).Disabled"
     if ([string]$triggerSettings.$setting -notin @('true', 'false')) {
         throw "Missing or invalid $setting in triggerConfigSettings."
     }
     $localValues[$setting] = [string]$triggerSettings.$setting
-    if ([string]$triggerSettings.$setting -eq 'true') { $disabledTriggers += $trigger }
 }
 $actionContext = Get-DataverseActionContext $outputs Poll
 $actionJournal = Get-DataverseActionJournal (Join-Path $PSScriptRoot '../..') $actionContext
-$actionDisabled = $localValues['AzureWebJobs.OnDataverseActionPerformed.Disabled'] -eq 'true'
-if ($disabledTriggers.Count -gt 0 -or -not $actionDisabled) {
-    $uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
-    $raw = az rest --method get --url "${uri}?api-version=2026-05-01-preview" `
-        --query '{value:value[].{id:id,name:name,properties:{connectionDetails:properties.connectionDetails,operationName:properties.operationName,parameters:properties.parameters,metadata:properties.metadata,deliveryMode:properties.deliveryMode,notificationDetails:{callbackUrl:properties.notificationDetails.callbackUrl}}}}' -o json
+$uri = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/triggerConfigs"
+$inventoryFile = Join-Path ([IO.Path]::GetTempPath()) "dataverse-poll-inventory-$([Guid]::NewGuid().ToString('N')).json"
+$inventoryOwned = $false
+$inventoryFailure = $null
+try {
+    $stream = New-PrivateStagingStream $inventoryFile
+    $inventoryOwned = $true
+    $stream.Dispose()
+    # Read the raw response; Windows CLI console output can discard Unicode.
+    az rest --method get --url "${uri}?api-version=2026-05-01-preview" --output-file $inventoryFile -o none 2>$null
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing Dataverse subscriptions.' }
-    $configs = ($raw -join "`n") | ConvertFrom-Json
-    $actionConfigs = @($configs.value | Where-Object name -EQ $actionContext.triggerName)
-    if ($actionConfigs.Count -gt 1) { throw 'Ambiguous Dataverse action configuration.' }
-    if (-not $actionDisabled -and $actionConfigs.Count -eq 0) {
-        throw 'Enabled Dataverse action configuration is missing. Run azd provision first.'
+    $inventoryJson = Get-Content -LiteralPath $inventoryFile -Raw -Encoding utf8
+} catch {
+    $inventoryFailure = $_
+    throw
+} finally {
+    try {
+        if ($inventoryOwned -and [IO.File]::Exists($inventoryFile)) { [IO.File]::Delete($inventoryFile) }
+    } catch {
+        if ($null -eq $inventoryFailure) { throw 'Could not clean private Dataverse inventory staging file.' }
+        Write-Warning 'Could not clean private inventory staging file; original failure preserved.'
     }
-    Protect-DataverseActionRegistration $actionContext $actionJournal $actionConfigs[0] $outputs
-    foreach ($trigger in $disabledTriggers) {
-        $name = "dataverse-$($trigger.functionName.ToLowerInvariant())"
-        $existing = @($configs.value | Where-Object name -eq $name)
-        if ($existing.Count -gt 0) {
-            az rest --method delete --url "$uri/${name}?api-version=2026-05-01-preview" -o none
-            if ($LASTEXITCODE -ne 0) { throw "Could not remove disabled Dataverse subscription '$name'." }
-            Write-Host "Removed Connector Namespace configuration '$name' because its function is disabled."
+}
+$jsonOptions = [System.Text.Json.JsonDocumentOptions]::new()
+$jsonOptions.MaxDepth = 100
+$inventoryDom = [System.Text.Json.Nodes.JsonNode]::Parse($inventoryJson, $null, $jsonOptions)
+$serializerOptions = [System.Text.Json.JsonSerializerOptions]::new()
+$serializerOptions.MaxDepth = 100
+$configNodes = @{}
+foreach ($node in $inventoryDom['value'].AsArray()) {
+    $configNodes[$node['name'].ToString()] = $node
+}
+$configs = $inventoryJson | ConvertFrom-Json -AsHashtable
+foreach ($trigger in $optionalTriggers) {
+    $name = $triggerSettings."$($trigger.functionName)TriggerConfigName"
+    $desiredState = if ($localValues["AzureWebJobs.$($trigger.functionName).Disabled"] -eq 'true') { 'Disabled' } else { 'Enabled' }
+    $existing = @($configs.value | Where-Object name -CEQ $name)
+    if ($existing.Count -gt 1) { throw "Ambiguous Dataverse configuration '$name'." }
+    if ($existing.Count -eq 0) {
+        if ($desiredState -eq 'Enabled') { throw "Selected Dataverse configuration '$name' is missing. Run azd provision first." }
+        continue
+    }
+    $config = $existing[0]
+    $properties = $config.properties
+    $destination = $properties.metadata
+    if ($config.id -ine "$uri/$name".Replace('https://management.azure.com', '') -or
+        $properties.deliveryMode -cne 'Poll' -or
+        $properties.operationName -cne $trigger.operationName -or
+        $properties.connectionDetails.connectionName -cne $outputs.connectorNamespaceConnectionName -or
+        $properties.connectionDetails.connectorName -cne 'commondataservice' -or
+        $destination.destinationType -cne 'functionApp' -or
+        $destination.functionAppName -ine $outputs.functionAppName -or
+        $destination.functionAppResourceGroup -ine $outputs.resourceGroupName -or
+        $destination.functionAppSubscriptionId -ine $outputs.AZURE_SUBSCRIPTION_ID -or
+        $destination.functionName -cne $trigger.functionName) {
+        throw "Refusing to change Dataverse configuration '$name' with a different source or destination binding."
+    }
+    if ($trigger.operationName -eq 'BusinessEventsTrigger') {
+        Protect-DataverseActionRegistration $actionContext $actionJournal $config $outputs
+    } else {
+        if ([string]::IsNullOrWhiteSpace([string]$outputs.dataverseEntitySetName)) {
+            throw 'Missing dataverseEntitySetName output. Run azd provision before reconciling separate row configurations.'
+        }
+        if (@($properties.parameters).Count -ne 2) { throw "Unexpected Dataverse selectors for '$name'." }
+        $expected = @{ dataset = $outputs.dataverseEnvironmentUrl.TrimEnd('/'); table = $outputs.dataverseEntitySetName }
+        $selectors = @{}
+        foreach ($parameter in $properties.parameters) {
+            if ($selectors.ContainsKey($parameter.name)) { throw "Ambiguous Dataverse selector for '$name'." }
+            $selectors[$parameter.name] = $parameter.value
+        }
+        Assert-DataverseActionContext $expected $selectors
+    }
+    if ($properties.state -ceq $desiredState) { continue }
+    # Keep request values in the JSON DOM; PowerShell converts ISO-looking strings to dates.
+    $body = [System.Text.Json.Nodes.JsonNode]::Parse(
+        '{"properties":' + $configNodes[$name]['properties'].ToJsonString($serializerOptions) + '}', $null, $jsonOptions)
+    [void]$body['properties'].AsObject().Remove('provisioningState')
+    [void]$body['properties'].AsObject().Remove('pollingEndpoints')
+    $body['properties']['state'] = [System.Text.Json.Nodes.JsonValue]::Create([string]$desiredState)
+    $bodyJson = $body.ToJsonString($serializerOptions)
+    $bodyFile = Join-Path ([IO.Path]::GetTempPath()) "dataverse-poll-state-$([Guid]::NewGuid().ToString('N')).json"
+    $owned = $false
+    $failure = $null
+    try {
+        $stream = New-PrivateStagingStream $bodyFile
+        $owned = $true
+        $writeFailure = $null
+        try {
+            $stream.Write([Text.UTF8Encoding]::new($false).GetBytes($bodyJson))
+            $stream.Flush($true)
+        } catch {
+            $writeFailure = $_
+            throw
+        } finally {
+            try { $stream.Dispose() } catch {
+                if ($null -eq $writeFailure) { throw 'Could not close private Dataverse state-update staging stream.' }
+                Write-Warning 'Could not close private state-update staging stream; original failure preserved.'
+            }
+        }
+        az rest --method put --url "$uri/${name}?api-version=2026-05-01-preview" --body "@$bodyFile" -o none 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Could not set Dataverse configuration '$name' to $desiredState; inspect Connector Namespace before retrying." }
+        $raw = az rest --method get --url "$uri/${name}?api-version=2026-05-01-preview" `
+            --query '{state:properties.state,deliveryMode:properties.deliveryMode}' -o json 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Could not verify Dataverse configuration '$name' after its state update." }
+        $updated = ($raw -join "`n") | ConvertFrom-Json
+        if ($updated.state -cne $desiredState -or $updated.deliveryMode -cne 'Poll') {
+            throw "Dataverse configuration '$name' did not retain the requested state and Poll delivery."
+        }
+        Write-Host "Dataverse configuration '$name' is $desiredState; its namespace configuration was retained."
+    } catch {
+        $failure = $_
+        throw
+    } finally {
+        try {
+            if ($owned -and [IO.File]::Exists($bodyFile)) { [IO.File]::Delete($bodyFile) }
+        } catch {
+            if ($null -eq $failure) { throw 'Could not clean private Dataverse state-update staging file.' }
+            Write-Warning 'Could not clean private state-update staging file; original failure preserved.'
         }
     }
 }
@@ -114,7 +210,6 @@ function Check-SourceStatus {
 if ((Get-ConnectionStatus) -eq 'Connected') {
     Write-Host 'Dataverse connection is already authorized.'
     Check-SourceStatus
-    if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
     return
 }
 
@@ -153,7 +248,6 @@ do {
     if ((Get-ConnectionStatus) -eq 'Connected') {
         Check-SourceStatus
         Write-Host 'Dataverse connection authorized. Check the reported source status before testing events.'
-        if ($actionDisabled) { Assert-DataverseActionSourceCleanup $actionJournal }
         return
     }
 } while ((Get-Date) -lt $deadline)
