@@ -18,11 +18,9 @@ public class BlobFunctions
     }
 
     [Function("OnUpdatedFile")]
-    [BlobOutput("connector-messages/{rand-guid}.json", Connection = "AzureWebJobsStorage")]
-    public string OnUpdatedFile(
+    public void OnUpdatedFile(
         [ConnectorTrigger] AzureBlobOnUpdatedFilesTriggerPayload payload)
     {
-        _logger.LogInformation("Received OnUpdatedFile trigger");
-        return System.Text.Json.JsonSerializer.Serialize(payload);
+        _logger.LogInformation("Received OnUpdatedFile trigger ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

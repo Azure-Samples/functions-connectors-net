@@ -6,7 +6,7 @@
 
 | Folder | Connector | Triggers |
 | ------ | --------- | -------- |
-| [azureblobApp](azureblobApp/) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) | `onNewFile`, `onUpdatedFile` |
+| [azureblobApp](azureblobApp/) ([webhook](azureblobApp/webhook/), [polling](azureblobApp/polling/)) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) | `OnUpdatedFile` |
 | [dataverseApp](dataverseApp/) | [Microsoft Dataverse](https://learn.microsoft.com/connectors/commondataservice/) | `onDataverseRowChanged` (+ `listDataverseRows` SDK action) |
 | [genericApp](genericApp/) | Any connector | Generic untyped triggers — receives raw JSON `string` payloads without SDK model dependency |
 | [office365App](office365App/) ([polling](office365App/polling/), [webhook](office365App/webhook/)) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |

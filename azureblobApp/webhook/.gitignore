@@ -1,0 +1,9 @@
+.azure/
+bin/
+obj/
+local.settings.json
+.local-settings*
+.notification-details*
+__azurite_db*
+__blobstorage__/
+__queuestorage__/
