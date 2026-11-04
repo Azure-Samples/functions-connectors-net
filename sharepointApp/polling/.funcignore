@@ -7,7 +7,6 @@ local.settings.json
 local.settings.example.json
 README.md
 LICENSE
-NuGet.config
 __azurite_db*
 __blobstorage__
 __queuestorage__

@@ -2,7 +2,6 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
-param functionAppPrincipalId string
 param userPrincipalId string = ''
 param tenantId string = tenant().tenantId
 
@@ -20,35 +19,6 @@ resource sharepointConnection 'Microsoft.Web/connectorGateways/connections@2026-
   name: connectionName
   properties: {
     connectorName: 'sharepointonline'
-  }
-}
-
-// The namespace checks SharePoint for events; the function identity receives and acknowledges them.
-resource namespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: sharepointConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
-resource functionAppAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: sharepointConnection
-  name: 'functionapp-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: functionAppPrincipalId
-        tenantId: tenantId
-      }
-    }
   }
 }
 
