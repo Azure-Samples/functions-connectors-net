@@ -4,7 +4,9 @@ The Functions host receives and acknowledges queued Connector Namespace events u
 
 ## Prerequisites
 
-Use .NET 10 SDK, Azure CLI >= 2.75.0, `azd`, PowerShell >= 7.3 (.NET 7 or later for private staging streams), and the `connector-namespace` CLI extension from the [root prerequisites](../../README.md#prerequisites). Local execution also needs Functions Core Tools v4 and Azurite. Bash hooks support Bash 3.2 syntax and require `jq`, `mktemp`, and POSIX `link`. To use Bash hooks, change `azure.yaml`'s postdeploy shell/run to `sh` / `./infra/scripts/postdeploy.sh`.
+Use .NET 10 SDK, Azure CLI >= 2.75.0, `azd`, PowerShell >= 7.3 (.NET 7 or later for private staging streams), and the `connector-namespace` CLI extension from the [root prerequisites](../../README.md#prerequisites). Poll state updates use core Azure CLI `az rest`; the extension remains required for trigger listing and connection/consent operations. The signed-in identity needs read/write access to the namespace's trigger configurations.
+
+Local execution also needs Functions Core Tools v4 and Azurite. Bash hooks support Bash 3.2 syntax and require `jq` 1.7+, `mktemp`, POSIX `link`, and permission to create private temporary files beside the scripts; on Windows, use Git Bash. To use Bash hooks, change `azure.yaml`'s postdeploy shell/run to `sh` / `./infra/scripts/postdeploy.sh`.
 
 Have an explicitly approved Azure target and existing basic plan, group ID, and Planner-enabled connection user who belongs to that group. Premium plans are unsupported. Review the [prerequisite matrix](../README.md#testability-and-prerequisites) before deployment.
 
@@ -25,7 +27,7 @@ Select the approved subscription/region when prompted. `CONNECTOR_NAMESPACE_LOCA
 
 ## Optional
 
-Assignment events cover the **connection user's tasks across plans**, not only `PLANNER_PLAN_ID`. With explicit scope approval, set `PLANNER_ENABLE_ASSIGNED_TO_ME` to `true` and rerun `azd up`. Returning it to `false` disables the Function and any existing assignment trigger during postdeploy.
+Assignment events cover the **connection user's tasks across plans**, not only `PLANNER_PLAN_ID`. With explicit scope approval, set `PLANNER_ENABLE_ASSIGNED_TO_ME` to `true` and rerun `azd up`. Returning it to `false` disables the Function and any existing assignment trigger during postdeploy. The hook reads that trigger's exact resource ID and disables it with a REST GET/PUT, preserving its Poll configuration.
 
 ## Local
 

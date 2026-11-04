@@ -12,7 +12,8 @@ function New-PrivateStagingStream {
 
 function Write-PrivateStagingJson {
     param([IO.Stream] $Stream, $Value)
-    $json = ConvertTo-Json -InputObject $Value -Depth 8 -Compress
+    $json = if ($Value -is [System.Text.Json.Nodes.JsonNode]) { $Value.ToJsonString() }
+        else { ConvertTo-Json -InputObject $Value -Depth 8 -Compress -WarningAction Stop }
     $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json)
     $Stream.Write($bytes, 0, $bytes.Length)
     $Stream.Flush($true)
