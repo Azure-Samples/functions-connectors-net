@@ -1,4 +1,10 @@
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
+& (Join-Path $PSScriptRoot 'validate-triggers.ps1')
+$additionalTriggers = @(
+    Get-Content (Join-Path $PSScriptRoot '../additional-triggers.json') -Raw | ConvertFrom-Json
+)
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     Write-Host "ERROR: The 'connector-namespace' Azure CLI extension is required." -ForegroundColor Red
@@ -7,7 +13,14 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 }
 
 # Outputs from azd
-$outputs = azd env get-values --output json | ConvertFrom-Json
+$rawOutputs = azd env get-values --output json
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
+$outputs = ($rawOutputs -join "`n") | ConvertFrom-Json
+
+Write-LocalSettings @{
+    AzureWebJobsStorage = 'UseDevelopmentStorage=true'
+    FUNCTIONS_WORKER_RUNTIME = 'dotnet-isolated'
+}
 
 $resourceGroupName = $outputs.resourceGroupName
 $connectorNamespaceName = $outputs.connectorNamespaceName
@@ -15,6 +28,10 @@ $connectorNamespaceConnectionName = $outputs.connectorNamespaceConnectionName
 $functionAppName = $outputs.functionAppName
 $functionAppHostname = $outputs.functionAppDefaultHostname
 $subscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
+foreach ($name in @('resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
+    'functionAppName', 'functionAppDefaultHostname', 'AZURE_SUBSCRIPTION_ID')) {
+    if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) { throw "Missing azd output $name." }
+}
 
 # --- Required Teams identifiers ---
 # Teams triggers are scoped to a specific team (and channel for message triggers).
@@ -59,7 +76,9 @@ function Get-ConnectionOverallStatus {
         -n $connectorNamespaceConnectionName `
         --query "properties.overallStatus" -o tsv 2>$null
 
-    if ($LASTEXITCODE -ne 0 -or -not $status) { return $null }
+    if ($LASTEXITCODE -ne 0 -or -not $status) {
+        throw 'Could not read the Teams connection status.'
+    }
     return $status
 }
 
@@ -96,9 +115,20 @@ if (-not $teamsGroupId -or -not $teamsChannelId) {
     }
 }
 
-# Fetch the connector extension system key
+$rawTriggers = az connector-namespace trigger list -g $resourceGroupName --namespace $connectorNamespaceName --query '[].name' -o json 2>$null
+if ($LASTEXITCODE -ne 0) { throw 'Could not list existing Teams trigger configurations.' }
+$existingTriggers = ($rawTriggers -join "`n") | ConvertFrom-Json -NoEnumerate
+if ($existingTriggers -isnot [array] -or
+    @($existingTriggers | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_) }).Count) {
+    throw 'Invalid Teams trigger list response.'
+}
+
+# Fetch the connector extension system key.
 Write-Host "Fetching connector extension key for $functionAppName..." -ForegroundColor Cyan
 $connectorExtensionKey = (az functionapp keys list -g $resourceGroupName -n $functionAppName --query "systemKeys.connector_extension" -o tsv)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connectorExtensionKey)) {
+    throw 'Could not obtain the connector extension system key. Deploy the Function App before registering callbacks.'
+}
 
 function New-TriggerConfig {
     param(
@@ -108,44 +138,71 @@ function New-TriggerConfig {
         [object[]] $Parameters = @()
     )
 
-    $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLower())"
+    $triggerName = "$connectorNamespaceConnectionName-$($FunctionName.ToLowerInvariant())"
     $callbackUrl = "https://$functionAppHostname/runtime/webhooks/connector?functionName=$FunctionName"
-    $parametersShorthand = "[" + (($Parameters | ForEach-Object { "{name:$($_.name),value:'$($_.value)'}" }) -join ",") + "]"
+    $parametersFile = Join-Path $PSScriptRoot ".trigger-parameters-$([System.Guid]::NewGuid().ToString('N')).json"
     $notifFile = Join-Path $PSScriptRoot ".notification-details-$([System.Guid]::NewGuid().ToString('N')).json"
-    @{
-        callbackUrl = $callbackUrl
-        authentication = @{
-            type = "QueryString"
-            name = "code"
-            value = $connectorExtensionKey
-        }
-    } | ConvertTo-Json -Depth 3 -Compress | Set-Content -Path $notifFile -NoNewline
-
-    Write-Host "  Creating trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
-
+    $ownedFiles = [Collections.Generic.List[string]]::new()
+    $failure = $null
     try {
-        az connector-namespace trigger delete `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            -n $triggerName --yes 2>$null | Out-Null
-
-        az connector-namespace trigger create `
+        $documents = @(
+            @{ path = $parametersFile; value = @($Parameters) }
+            @{ path = $notifFile; value = @{
+                callbackUrl = $callbackUrl
+                authentication = @{ type = 'QueryString'; name = 'code'; value = $connectorExtensionKey }
+            } }
+        )
+        foreach ($document in $documents) {
+            $stream = New-PrivateStagingStream $document.path
+            $ownedFiles.Add($document.path)
+            $streamFailure = $null
+            try {
+                $json = ConvertTo-Json -InputObject $document.value -Depth 30 -Compress
+                $bytes = [Text.UTF8Encoding]::new($false).GetBytes($json)
+                $stream.Write($bytes)
+                $stream.Flush($true)
+            } catch { $streamFailure = $_; throw }
+            finally {
+                try { $stream.Dispose() }
+                catch {
+                    if ($null -eq $streamFailure) { throw 'Could not close owned callback staging stream.' }
+                    Write-Warning 'Could not close owned staging stream; original failure preserved.'
+                }
+            }
+        }
+        $verb = if ($triggerName -in $existingTriggers) { 'update' } else { 'create' }
+        Write-Host "  Configuring trigger: $FunctionName -> $OperationName" -ForegroundColor Cyan
+        az connector-namespace trigger $verb `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             -n $triggerName `
             --connection-details "{connectionName:$connectorNamespaceConnectionName,connectorName:teams}" `
             --operation-name $OperationName `
-            --parameters $parametersShorthand `
+            --parameters "@$parametersFile" `
             --notification-details "@$notifFile" `
+            --state Enabled `
             --description $Description `
             --metadata "{destinationType:functionApp,functionAppName:$functionAppName,functionAppResourceGroup:$resourceGroupName,functionAppSubscriptionId:$subscriptionId,functionName:$FunctionName,recurrenceFrequency:Minute,recurrenceInterval:'5'}" `
-            -o none
+            -o none 2>$null
 
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "  Failed to create trigger config for $FunctionName." -ForegroundColor Red
-            exit 1
+            throw "Could not configure Teams trigger $FunctionName."
         }
     }
+    catch {
+        $failure = $_
+        throw
+    }
     finally {
-        Remove-Item $notifFile -ErrorAction SilentlyContinue
+        $cleanupFailed = $false
+        foreach ($path in $ownedFiles) {
+            try {
+                if ([IO.File]::Exists($path)) { [IO.File]::Delete($path) }
+            } catch {
+                $cleanupFailed = $true
+                Write-Warning 'Could not clean owned callback staging file.'
+            }
+        }
+        if ($cleanupFailed -and $null -eq $failure) { throw 'Callback staging cleanup failed.' }
     }
 }
 
@@ -186,7 +243,15 @@ New-TriggerConfig `
         @{ name = "groupId"; value = $teamsGroupId }
     )
 
-Write-Host "All trigger configs created." -ForegroundColor Green
+foreach ($trigger in $additionalTriggers) {
+    New-TriggerConfig `
+        -FunctionName $trigger.functionName `
+        -OperationName $trigger.functionName `
+        -Description "Teams $($trigger.functionName) event" `
+        -Parameters @($trigger.parameters)
+}
+
+Write-Host "All selected trigger configs created." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Authorizing teams connection..." -ForegroundColor Yellow
@@ -203,18 +268,26 @@ else {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $resourceGroupName --namespace $connectorNamespaceName `
             --connection-name $connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query "value[0].link" -o tsv 2>$null
 
-        if (($LASTEXITCODE -ne 0 -or -not $consentLink) -and $attempt -lt 5) {
+        if (-not $consentLink -or $consentLink -eq 'null') {
+            $consentLink = az connector-namespace connection list-consent-links `
+                -g $resourceGroupName --namespace $connectorNamespaceName `
+                --connection-name $connectorNamespaceConnectionName `
+                --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
+                --query "link" -o tsv 2>$null
+        }
+        if ($consentLink -and $consentLink -ne 'null') { break }
+        $consentLink = $null
+        if ($attempt -lt 5) {
             Write-Host "Consent link not ready yet. Retrying in 5 seconds..." -ForegroundColor Yellow
             Start-Sleep -Seconds 5
         }
     }
 
     if (-not $consentLink) {
-        Write-Host "Failed to generate a consent URL for the Teams connection." -ForegroundColor Red
-        exit 1
+        throw 'Could not obtain a Teams consent URL.'
     }
 
     Write-Host "Consent URL: $consentLink" -ForegroundColor Cyan
@@ -258,6 +331,6 @@ else {
 }
 
 Write-Host ""
-Write-Host "Done. All 4 Teams triggers are configured." -ForegroundColor Green
+Write-Host "Done. All selected Teams triggers are configured." -ForegroundColor Green
 Write-Host "Tail logs: az functionapp log tail -g $resourceGroupName -n $functionAppName" -ForegroundColor Green
 Write-Host ""

@@ -20,8 +20,11 @@
   <Folder Name="/sharepointApp/webhook/">
     <Project Path="sharepointApp/webhook/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/teamsApp/">
-    <Project Path="teamsApp/functions-connectors-net.csproj" />
+  <Folder Name="/teamsApp/webhook/">
+    <Project Path="teamsApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/teamsApp/polling/">
+    <Project Path="teamsApp/polling/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/genericApp/">
     <Project Path="genericApp/functions-connectors-net.csproj" />

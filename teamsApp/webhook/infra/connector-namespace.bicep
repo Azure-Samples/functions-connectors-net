@@ -2,7 +2,6 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
-param tenantId string = tenant().tenantId
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = {
   name: name
@@ -21,21 +20,6 @@ resource teamsConnection 'Microsoft.Web/connectorGateways/connections@2026-05-01
   }
 }
 
-// Connector Namespace system MI -> Teams connection (needed to poll triggers).
-resource teamsConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
-  parent: teamsConnection
-  name: 'connector-namespace-msi'
-  properties: {
-    principal: {
-      type: 'ActiveDirectory'
-      identity: {
-        objectId: connectorNamespace.identity.principalId
-        tenantId: tenantId
-      }
-    }
-  }
-}
-
 @description('The resource ID of the Connector Namespace.')
 output resourceId string = connectorNamespace.id
 
@@ -44,6 +28,3 @@ output name string = connectorNamespace.name
 
 @description('The name of the Teams connection on the namespace.')
 output connectionName string = teamsConnection.name
-
-@description('Runtime URL for the Teams connection.')
-output teamsConnectionRuntimeUrl string = teamsConnection.properties.connectionRuntimeUrl

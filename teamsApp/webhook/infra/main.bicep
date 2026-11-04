@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Region for Application Insights and Log Analytics; may differ from the Function App region.')
+param telemetryLocation string = 'eastus2'
+
 metadata name = 'Azure Functions Teams Connector Trigger (.NET)'
 metadata description = 'Connector Namespace trigger sample using system key authentication on the callback URL.'
 
@@ -33,10 +36,9 @@ var tags = { 'azd-env-name': environmentName }
 
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
-var functionAppIdentityName = '${abbrs.managedIdentityUserAssignedIdentities}${resourceToken}'
 var resourceGroupName = '${abbrs.resourcesResourceGroups}${environmentName}'
 var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
-var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
+var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}-${telemetryLocation}'
 var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
 var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
 var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
@@ -58,19 +60,9 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   scope: rg
   params: {
     name: logAnalyticsName
-    location: location
+    location: telemetryLocation
     tags: tags
     dataRetention: 30
-  }
-}
-
-module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'funcUserAssignedIdentity'
-  scope: rg
-  params: {
-    location: location
-    tags: tags
-    name: functionAppIdentityName
   }
 }
 
@@ -79,16 +71,11 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: location
+    location: telemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
         principalId: userPrincipalId
@@ -117,25 +104,9 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
     blobServices: {
       containers: [
         { name: deploymentStorageContainerName }
-        { name: 'connector-messages' }
       ]
     }
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: storageBlobDataOwner
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageQueueDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageTableDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: storageBlobDataOwner
         principalId: userPrincipalId
@@ -168,7 +139,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
 }
 
 // Connector Namespace + teams connection.
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
   params: {
@@ -181,12 +152,10 @@ module connectorNamespace './connectorNamespace.bicep' = {
 
 var allAppSettings = {
   AzureWebJobsStorage__credential: 'managedidentity'
-  AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
-  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
+  APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
-  AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
-  TEAMS_CONNECTION_RUNTIME_URL: connectorNamespace.outputs.teamsConnectionRuntimeUrl
+  ConnectorNamespace__credential: 'managedidentity'
 }
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
@@ -200,9 +169,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     serverFarmResourceId: functionAppPlan.outputs.resourceId
     httpsOnly: true
     managedIdentities: {
-      userAssignedResourceIds: [
-        '${funcUserAssignedIdentity.outputs.resourceId}'
-      ]
+      systemAssigned: true
     }
     functionAppConfig: {
       deployment: {
@@ -210,8 +177,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
           type: 'blobContainer'
           value: '${storageAccount.outputs.primaryBlobEndpoint}${deploymentStorageContainerName}'
           authentication: {
-            type: 'UserAssignedIdentity'
-            userAssignedIdentityResourceId: funcUserAssignedIdentity.outputs.resourceId
+            type: 'SystemAssignedIdentity'
           }
         }
       }
@@ -225,7 +191,8 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
       }
     }
     siteConfig: {
-      alwaysOn: false
+      minTlsVersion: '1.2'
+      functionsRuntimeScaleMonitoringEnabled: false
     }
     configs: [
       {
@@ -233,6 +200,17 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
         properties: allAppSettings
       }
     ]
+  }
+}
+
+// Assign app permissions after creation to avoid a storage/app dependency cycle.
+module functionAppAccess './function-access.bicep' = {
+  name: 'function-app-access'
+  scope: rg
+  params: {
+    principalId: functionApp.outputs.systemAssignedMIPrincipalId!
+    storageAccountName: storageAccount.outputs.name
+    appInsightsName: monitoring.outputs.name
   }
 }
 
