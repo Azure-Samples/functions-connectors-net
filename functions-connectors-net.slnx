@@ -5,8 +5,11 @@
   <Folder Name="/office365App/polling/">
     <Project Path="office365App/polling/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/azureblobApp/">
-    <Project Path="azureblobApp/functions-connectors-net.csproj" />
+  <Folder Name="/azureblobApp/webhook/">
+    <Project Path="azureblobApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/azureblobApp/polling/">
+    <Project Path="azureblobApp/polling/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/dataverseApp/webhook/">
     <Project Path="dataverseApp/webhook/functions-connectors-net.csproj" />
@@ -14,8 +17,11 @@
   <Folder Name="/dataverseApp/polling/">
     <Project Path="dataverseApp/polling/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/onedriveApp/">
-    <Project Path="onedriveApp/functions-connectors-net.csproj" />
+  <Folder Name="/onedriveApp/polling/">
+    <Project Path="onedriveApp/polling/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/onedriveApp/webhook/">
+    <Project Path="onedriveApp/webhook/functions-connectors-net.csproj" />
   </Folder>
   <Folder Name="/sharepointApp/polling/">
     <Project Path="sharepointApp/polling/functions-connectors-net.csproj" />
@@ -23,10 +29,16 @@
   <Folder Name="/sharepointApp/webhook/">
     <Project Path="sharepointApp/webhook/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/teamsApp/">
-    <Project Path="teamsApp/functions-connectors-net.csproj" />
+  <Folder Name="/teamsApp/webhook/">
+    <Project Path="teamsApp/webhook/functions-connectors-net.csproj" />
   </Folder>
-  <Folder Name="/genericApp/">
-    <Project Path="genericApp/functions-connectors-net.csproj" />
+  <Folder Name="/teamsApp/polling/">
+    <Project Path="teamsApp/polling/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/genericApp/webhook/">
+    <Project Path="genericApp/webhook/functions-connectors-net.csproj" />
+  </Folder>
+  <Folder Name="/genericApp/polling/">
+    <Project Path="genericApp/polling/functions-connectors-net.csproj" />
   </Folder>
 </Solution>

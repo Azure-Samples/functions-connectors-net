@@ -8,6 +8,9 @@
     "OnFlaggedEmailTriggerConfigName": "office365-onflaggedemail",
     "OnNewMentionMeEmailTriggerConfigName": "office365-onnewmentionmeemail",
     "OnNewCalendarEventTriggerConfigName": "office365-onnewcalendarevent",
-    "OnUpcomingEventTriggerConfigName": "office365-onupcomingevent"
+    "OnUpcomingEventTriggerConfigName": "office365-onupcomingevent",
+    "OnSharedMailboxNewEmailTriggerConfigName": "office365-onsharedmailboxnewemail",
+    "OnCalendarUpdatedItemsTriggerConfigName": "office365-oncalendarupdateditems",
+    "AzureWebJobs.OnSharedMailboxNewEmail.Disabled": "true"
   }
 }
