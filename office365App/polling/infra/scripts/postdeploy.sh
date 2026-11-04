@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 app_dir="$(cd "$script_dir/../.." && pwd)"
 source "$script_dir/local-settings.sh"
@@ -41,10 +42,58 @@ local_settings_json=$(connector_jq -n --argjson outputs "$outputs" --argjson set
       FUNCTIONS_WORKER_RUNTIME: "dotnet-isolated",
       ConnectorNamespace__pollingEndpoint: $outputs.connectorPollingEndpoint,
       "AzureWebJobs.OnSharedMailboxNewEmail.Disabled":
-        ((($outputs.office365SharedMailboxAddress // "") | length) == 0 | tostring)
+        (($outputs.office365SharedMailboxAddress // "" | test("\\S") | not) | tostring)
     } + $settings)
   }')
 write_local_settings "$local_settings_json" "$force_local_settings"
+
+if ! connector_jq -e '.office365SharedMailboxAddress // "" | test("\\S")' <<<"$outputs" >/dev/null; then
+  trigger_name=$(connector_jq -r '.OnSharedMailboxNewEmailTriggerConfigName' <<<"$trigger_settings")
+  existing_configs=$(az connector-namespace trigger list \
+    -g "$resource_group" --namespace "$namespace" --query '[].{name:name,id:id}' -o json)
+  trigger_id=$(connector_jq -r --arg name "$trigger_name" '.[] | select(.name == $name) | .id' <<<"$existing_configs")
+  if [[ -n "$trigger_id" ]]; then
+    [[ "$(printf '%s' "$trigger_id" | tr '[:upper:]' '[:lower:]')" == /subscriptions/*/triggerconfigs/"$trigger_name" ]] ||
+      { echo "Invalid resource ID for trigger $trigger_name." >&2; exit 1; }
+    (
+      body_file=''
+      read_file=''
+      cleanup_update() {
+        result=$?
+        trap - EXIT
+        if [[ -n "$read_file" ]]; then
+          rm -f -- "$read_file" ||
+            { echo 'Could not clean owned trigger-read staging file.' >&2; [[ "$result" -ne 0 ]] || result=1; }
+        fi
+        if [[ -n "$body_file" ]]; then
+          rm -f -- "$body_file" ||
+            { echo 'Could not clean owned trigger-update staging file.' >&2; [[ "$result" -ne 0 ]] || result=1; }
+        fi
+        exit "$result"
+      }
+      trap cleanup_update EXIT
+      url="https://management.azure.com${trigger_id}?api-version=2026-05-01-preview"
+      acquired=$(mktemp "$script_dir/.trigger-read.XXXXXXXX") ||
+        { echo 'Could not create trigger-read staging file.' >&2; exit 1; }
+      read_file="$acquired"
+      read_path="$read_file"
+      if command -v cygpath >/dev/null 2>&1; then read_path=$(cygpath -w "$read_file"); fi
+      az rest --method get --url "$url" --output-file "$read_path" -o none ||
+        { echo "Could not read trigger $trigger_name." >&2; exit 1; }
+      body=$(connector_jq -ce '
+        if .properties.deliveryMode != "Poll" then error("Expected Poll delivery mode")
+        else {properties: (.properties | del(.provisioningState, .pollingEndpoints) | .state = "Disabled")}
+        end' "$read_file")
+      acquired=$(mktemp "$script_dir/.trigger-update.XXXXXXXX") ||
+        { echo 'Could not create trigger-update staging file.' >&2; exit 1; }
+      body_file="$acquired"
+      printf '%s\n' "$body" >"$body_file" ||
+        { echo 'Could not write trigger-update staging file.' >&2; exit 1; }
+      az rest --method put --url "$url" --body "@$body_file" -o none ||
+        { echo "Could not disable trigger $trigger_name." >&2; exit 1; }
+    )
+  fi
+fi
 
 connection_status() {
   local cli_status

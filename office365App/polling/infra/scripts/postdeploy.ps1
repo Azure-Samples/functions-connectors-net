@@ -48,6 +48,59 @@ $localValues['AzureWebJobs.OnSharedMailboxNewEmail.Disabled'] =
 
 Write-LocalSettings $localValues -Force:$ForceLocalSettings
 
+if ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)) {
+    $triggerName = $triggerSettings.OnSharedMailboxNewEmailTriggerConfigName
+    $existingTriggers = az connector-namespace trigger list `
+        -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
+        --query '[].{name:name,id:id}' -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not list existing Office 365 trigger configurations.' }
+    $existing = (($existingTriggers -join "`n") | ConvertFrom-Json) | Where-Object name -EQ $triggerName
+    if ($existing) {
+        if ($existing.id -notlike '/subscriptions/*' -or
+            -not $existing.id.EndsWith("/triggerConfigs/$triggerName", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Invalid resource ID for trigger $triggerName."
+        }
+        $url = "https://management.azure.com$($existing.id)?api-version=2026-05-01-preview"
+        $readFile = Join-Path $PSScriptRoot ".trigger-read-$([guid]::NewGuid().ToString('N')).json"
+        $readFiles = [Collections.Generic.List[string]]::new()
+        $readFailure = $null
+        try {
+            Write-PrivateJsonFile $readFile @{} $readFiles
+            az rest --method get --url $url --output-file $readFile -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not read trigger $triggerName." }
+            $resource = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($readFile, [Text.Encoding]::UTF8))
+        } catch {
+            $readFailure = $_
+            throw
+        } finally {
+            Remove-OwnedStaging $readFiles $readFailure
+        }
+        $properties = $resource['properties']
+        if ($properties['deliveryMode'].ToString() -ne 'Poll') {
+            throw "Expected Poll delivery mode for trigger $triggerName."
+        }
+        $null = $properties.Remove('provisioningState')
+        $null = $properties.Remove('pollingEndpoints')
+        $properties['state'] = [System.Text.Json.Nodes.JsonNode]::Parse('"Disabled"')
+        $null = $resource.Remove('properties')
+        $body = [System.Text.Json.Nodes.JsonObject]::new()
+        $body.Add('properties', $properties)
+        $bodyFile = Join-Path $PSScriptRoot ".trigger-update-$([guid]::NewGuid().ToString('N')).json"
+        $ownedFiles = [Collections.Generic.List[string]]::new()
+        $failure = $null
+        try {
+            Write-PrivateJsonFile $bodyFile $body $ownedFiles
+            az rest --method put --url $url --body "@$bodyFile" -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not disable trigger $triggerName." }
+        } catch {
+            $failure = $_
+            throw
+        } finally {
+            Remove-OwnedStaging $ownedFiles $failure
+        }
+    }
+}
+
 function Get-ConnectionStatus {
     $status = az connector-namespace connection show `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `

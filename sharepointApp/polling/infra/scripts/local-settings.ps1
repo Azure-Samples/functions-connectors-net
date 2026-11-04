@@ -49,7 +49,11 @@ function Write-PrivateJsonFile {
     $OwnedFiles.Add($Path)
     $streamFailure = $null
     try {
-        $json = ConvertTo-Json -InputObject $Value -Depth 6 -Compress
+        $json = if ($Value -is [System.Text.Json.Nodes.JsonNode]) {
+            $Value.ToJsonString([System.Text.Json.JsonSerializerOptions]@{ MaxDepth = 64 })
+        } else {
+            ConvertTo-Json -InputObject $Value -Depth 6 -Compress
+        }
         $stream.Write([Text.UTF8Encoding]::new($false).GetBytes($json))
         $stream.Flush($true)
     } catch { $streamFailure = $_; throw }

@@ -17,11 +17,11 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash and `jq` for the alternative script
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later, signed in with permission to read and write trigger configurations in the Connector Namespace; polling state updates use `az rest`
+- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash with `jq` 1.7 or later (standard distribution, preserving large JSON number literals) and standard file tools (`mktemp`, `link`, `mv`, `rm`, and `tr`) for the alternative script, including Git Bash on Windows; the hook needs write access to this sample and its scripts folder for private temporary JSON files
 - An Office 365 mailbox and permission to authorize the connection
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
-- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli), still required for trigger listing, connection status, and OAuth consent:
 
   ```bash
   curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
@@ -62,7 +62,13 @@ Set environment values before `azd up`. Six personal triggers are configured by 
 | `pwsh ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` / `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
 | `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs |
 
-Empty address disables its listener and skips registration. When disabling an existing shared source, also disable/delete its namespace config; incremental deployment does not remove skipped resources. Regenerate local settings to apply the selection locally.
+Clear the address and rerun `azd up` to disable the shared-mailbox listener and any existing shared-mailbox Poll trigger configuration; an absent configuration is left absent.
+
+Set the address again and rerun `azd up` to create or re-enable the same deterministic configuration through Bicep. No manual namespace cleanup is needed for normal selection changes.
+
+Disabling preserves the configuration and does not delete an upstream source subscription. Regenerate local settings to apply the selection locally.
+
+The hook disables deselected Poll triggers through ARM REST, preserving their delivery mode and writable properties. The current CLI extension's `trigger update` omits `deliveryMode`, so it is not used for Poll state changes.
 
 Hooks preserve existing local settings unless the force option is selected, and reject directories and links at the settings path.
 
