@@ -87,7 +87,13 @@ Four events are configured by default. To add others, copy the example configura
 
 Hooks reject unsupported/duplicate names, missing/empty values and placeholders; the service validates dynamic schemas and permissions.
 
-**Selection safety:** Unselected optional listeners are disabled. Removing an entry does not delete existing ARM configs; explicitly disable/delete them to stop collection. Broad chats and meeting subscriptions are never enabled implicitly. If existing local settings were preserved, regenerate them with `-ForceLocalSettings` or update only the selected, authorized optional listener flags.
+**Selection safety:** After changing the selection, run `azd up`: Bicep creates or updates selected configurations as Enabled, and postdeploy automatically disables existing deselected configurations at the seven deterministic sample-owned optional Poll IDs. Reselecting an event re-enables the same ID without deleting or recreating it.
+
+Missing deselected configurations are skipped; the four default events and unrelated namespace configurations are not disabled. The hook rejects a conflicting delivery mode, operation or connection instead of changing it. Broad chats and meeting subscriptions are never enabled implicitly.
+
+This reconciles configuration state, not upstream subscription teardown or already queued events; no manual Connector Namespace cleanup is needed for ordinary selection changes. This behavior applies to polling only, not webhook registrations.
+
+Existing local settings remain preserved; regenerate them with `-ForceLocalSettings` or update only the selected, authorized optional listener flags.
 
 ## Local development
 
