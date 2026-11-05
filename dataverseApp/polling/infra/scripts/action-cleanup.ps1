@@ -42,9 +42,20 @@ function Assert-DataverseActionContext {
         throw 'Dataverse action cleanup context is invalid; preserve the journal for manual investigation.'
     }
     foreach ($name in $Expected.Keys) {
-        if ([string]$Expected[$name] -cne [string]$Actual[$name]) {
-            throw "Dataverse action cleanup context differs at '$name'; refusing to adopt or delete a registration."
+        if ($name -ceq 'organization') {
+            $expectedOrganization = $null
+            $actualOrganization = $null
+            if ([uri]::TryCreate([string]$Expected[$name], [UriKind]::Absolute, [ref]$expectedOrganization) -and
+                [uri]::TryCreate([string]$Actual[$name], [UriKind]::Absolute, [ref]$actualOrganization) -and
+                $expectedOrganization.Scheme -eq 'https' -and $actualOrganization.Scheme -eq 'https' -and
+                -not $actualOrganization.UserInfo -and -not $actualOrganization.Query -and -not $actualOrganization.Fragment -and
+                $actualOrganization.AbsolutePath -eq '/' -and $expectedOrganization.Equals($actualOrganization)) {
+                continue
+            }
+        } elseif ([string]$Expected[$name] -ceq [string]$Actual[$name]) {
+            continue
         }
+        throw "Dataverse action cleanup context differs at '$name'; refusing to adopt or delete a registration."
     }
 }
 
@@ -85,9 +96,7 @@ function Protect-DataverseActionRegistration {
             }
             $selectors[$name] = [string]$values[0].value
         }
-        if ($selectors.organization.TrimEnd('/') -cne $Context.organization) {
-            throw 'Refusing Dataverse action cleanup for another source organization.'
-        }
+        Assert-DataverseActionContext @{ organization = $Context.organization } @{ organization = $selectors.organization }
         $destination = $properties.metadata
         if ($destination.destinationType -cne 'functionApp' -or
             $destination.functionAppName -ine $Outputs.functionAppName -or

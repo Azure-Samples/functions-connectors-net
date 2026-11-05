@@ -67,6 +67,8 @@ Separate row events overlap the combined subscription. Set an optional trigger's
 
 Set the flag back to `true` and rerun `azd up` to re-enable the same configuration. An optional configuration that was never created needs no cleanup.
 
+The postdeploy hook checks action selectors and its cleanup journal before creating or re-enabling the action configuration. Changed selectors or a missing configuration with a pending cleanup marker are rejected before an action write.
+
 Use a dedicated namespace for this sample, not one containing unrelated registrations.
 
 ## Local development
@@ -113,7 +115,7 @@ Ordinary opt-out disables and retains optional configurations, including action-
 
 Permanent teardown or changing action selectors is different: removing a namespace configuration does not prove its Dataverse source callback is inactive or deleted.
 
-Before replacing an action subscription, have an authorized administrator verify exact-owned source cleanup using supported source evidence. Preserve its cleanup marker until confirmed; a readable callback row alone does not establish whether it is active.
+Before replacing an action subscription, have an authorized administrator verify exact-owned source cleanup using supported source evidence. Preserve its cleanup marker until confirmed, including after a failed first creation; a readable callback row alone does not establish whether it is active.
 
 Remove this environment's Azure resources from this folder:
 

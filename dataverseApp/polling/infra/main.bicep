@@ -181,10 +181,6 @@ module pollTriggers './poll-triggers.bicep' = {
     enableSeparateRowTriggers: enableSeparateRowTriggers
     entitySetName: dataverseEntitySetName
     enableActionTrigger: enableActionTrigger
-    eventCatalog: eventCatalog
-    eventCategory: eventCategory
-    eventTable: eventTable
-    eventAction: eventAction
   }
 }
 
@@ -295,3 +291,7 @@ output dataverseEntitySetName string = dataverseEntitySetName
 
 output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
 output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
+output eventCatalog string = eventCatalog
+output eventCategory string = eventCategory
+output eventTable string = eventTable
+output eventAction string = eventAction

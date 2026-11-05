@@ -11,7 +11,8 @@ if (-not (az extension show --name connector-namespace --query name -o tsv 2>$nu
 
 $raw = azd env get-values --output json
 if ($LASTEXITCODE -ne 0) { throw 'Could not read the selected azd environment.' }
-$outputs = ($raw -join "`n") | ConvertFrom-Json
+$outputsJson = $raw -join "`n"
+$outputs = $outputsJson | ConvertFrom-Json
 
 foreach ($name in @(
     'resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
@@ -94,27 +95,54 @@ foreach ($trigger in $optionalTriggers) {
     $desiredState = if ($localValues["AzureWebJobs.$($trigger.functionName).Disabled"] -eq 'true') { 'Disabled' } else { 'Enabled' }
     $existing = @($configs.value | Where-Object name -CEQ $name)
     if ($existing.Count -gt 1) { throw "Ambiguous Dataverse configuration '$name'." }
-    if ($existing.Count -eq 0) {
-        if ($desiredState -eq 'Enabled') { throw "Selected Dataverse configuration '$name' is missing. Run azd provision first." }
-        continue
+    $creating = $existing.Count -eq 0
+    $isAction = $trigger.operationName -eq 'BusinessEventsTrigger'
+    if ($creating) {
+        if ($desiredState -eq 'Disabled') { continue }
+        if (-not $isAction) { throw "Selected Dataverse configuration '$name' is missing. Run azd provision first." }
     }
-    $config = $existing[0]
-    $properties = $config.properties
-    $destination = $properties.metadata
-    if ($config.id -ine "$uri/$name".Replace('https://management.azure.com', '') -or
-        $properties.deliveryMode -cne 'Poll' -or
-        $properties.operationName -cne $trigger.operationName -or
-        $properties.connectionDetails.connectionName -cne $outputs.connectorNamespaceConnectionName -or
-        $properties.connectionDetails.connectorName -cne 'commondataservice' -or
-        $destination.destinationType -cne 'functionApp' -or
-        $destination.functionAppName -ine $outputs.functionAppName -or
-        $destination.functionAppResourceGroup -ine $outputs.resourceGroupName -or
-        $destination.functionAppSubscriptionId -ine $outputs.AZURE_SUBSCRIPTION_ID -or
-        $destination.functionName -cne $trigger.functionName) {
-        throw "Refusing to change Dataverse configuration '$name' with a different source or destination binding."
+    $config = if ($creating) { $null } else { $existing[0] }
+    if (-not $creating) {
+        $properties = $config.properties
+        $destination = $properties.metadata
+        if ($config.id -ine "$uri/$name".Replace('https://management.azure.com', '') -or
+            $properties.deliveryMode -cne 'Poll' -or
+            $properties.operationName -cne $trigger.operationName -or
+            $properties.connectionDetails.connectionName -cne $outputs.connectorNamespaceConnectionName -or
+            $properties.connectionDetails.connectorName -cne 'commondataservice' -or
+            $destination.destinationType -cne 'functionApp' -or
+            $destination.functionAppName -ine $outputs.functionAppName -or
+            $destination.functionAppResourceGroup -ine $outputs.resourceGroupName -or
+            $destination.functionAppSubscriptionId -ine $outputs.AZURE_SUBSCRIPTION_ID -or
+            $destination.functionName -cne $trigger.functionName) {
+            throw "Refusing to change Dataverse configuration '$name' with a different source or destination binding."
+        }
     }
-    if ($trigger.operationName -eq 'BusinessEventsTrigger') {
-        Protect-DataverseActionRegistration $actionContext $actionJournal $config $outputs
+    if ($isAction) {
+        if ($name -cne $actionContext.triggerName) { throw 'Unexpected Dataverse action configuration name.' }
+        if ($desiredState -eq 'Enabled') {
+            $desiredSelectors = [ordered]@{ organization = $outputs.dataverseEnvironmentUrl.TrimEnd('/') }
+            $outputDom = [System.Text.Json.Nodes.JsonNode]::Parse($outputsJson, $null, $jsonOptions)
+            foreach ($pair in @(
+                @('catalog', 'eventCatalog'), @('category', 'eventCategory'),
+                @('entityname', 'eventTable'), @('sdkmessagename', 'eventAction'))) {
+                $value = $outputDom[$pair[1]]
+                if ($null -eq $value -or [string]::IsNullOrWhiteSpace($value.GetValue[string]())) {
+                    throw "Missing action selector $($pair[1]). Run azd provision first."
+                }
+                $outputs.($pair[1]) = $value.GetValue[string]()
+                $desiredSelectors[$pair[0]] = $outputs.($pair[1])
+            }
+            if (-not $creating) {
+                $currentSelectors = @{}
+                foreach ($parameter in $properties.parameters) {
+                    if ($currentSelectors.ContainsKey($parameter.name)) { throw 'Ambiguous Dataverse action selector.' }
+                    $currentSelectors[$parameter.name] = [string]$parameter.value
+                }
+                Assert-DataverseActionContext $desiredSelectors $currentSelectors
+            }
+        }
+        Protect-DataverseActionRegistration $actionContext $actionJournal $config $outputs -BeforeCreate:($desiredState -eq 'Enabled')
     } else {
         if ([string]::IsNullOrWhiteSpace([string]$outputs.dataverseEntitySetName)) {
             throw 'Missing dataverseEntitySetName output. Run azd provision before reconciling separate row configurations.'
@@ -128,10 +156,35 @@ foreach ($trigger in $optionalTriggers) {
         }
         Assert-DataverseActionContext $expected $selectors
     }
-    if ($properties.state -ceq $desiredState) { continue }
-    # Keep request values in the JSON DOM; PowerShell converts ISO-looking strings to dates.
-    $body = [System.Text.Json.Nodes.JsonNode]::Parse(
-        '{"properties":' + $configNodes[$name]['properties'].ToJsonString($serializerOptions) + '}', $null, $jsonOptions)
+    if (-not $creating -and $properties.state -ceq $desiredState) { continue }
+    if ($creating) {
+        $parameters = @(
+            foreach ($selector in $desiredSelectors.Keys) { @{ name = $selector; value = $desiredSelectors[$selector] } }
+        )
+        $newBody = @{
+            properties = @{
+                connectionDetails = @{ connectionName = $outputs.connectorNamespaceConnectionName; connectorName = 'commondataservice' }
+                deliveryMode = 'Poll'
+                operationName = $trigger.operationName
+                parameters = $parameters
+                metadata = @{
+                    destinationType = 'functionApp'
+                    functionAppName = $outputs.functionAppName
+                    functionAppResourceGroup = $outputs.resourceGroupName
+                    functionAppSubscriptionId = $outputs.AZURE_SUBSCRIPTION_ID
+                    functionName = $trigger.functionName
+                }
+                state = 'Enabled'
+                type = 'NotSpecified'
+                description = 'Current Dataverse action-performed operation with Poll delivery.'
+            }
+        }
+        $body = [System.Text.Json.Nodes.JsonNode]::Parse(($newBody | ConvertTo-Json -Depth 10), $null, $jsonOptions)
+    } else {
+        # Keep existing request values in the JSON DOM; PowerShell converts ISO-looking strings to dates.
+        $body = [System.Text.Json.Nodes.JsonNode]::Parse(
+            '{"properties":' + $configNodes[$name]['properties'].ToJsonString($serializerOptions) + '}', $null, $jsonOptions)
+    }
     [void]$body['properties'].AsObject().Remove('provisioningState')
     [void]$body['properties'].AsObject().Remove('pollingEndpoints')
     $body['properties']['state'] = [System.Text.Json.Nodes.JsonValue]::Create([string]$desiredState)
