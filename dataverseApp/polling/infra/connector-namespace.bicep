@@ -6,6 +6,7 @@ param name string
 param location string
 param tags object = {}
 param connectionName string
+param userPrincipalId string
 param tenantId string = tenant().tenantId
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = {
@@ -25,15 +26,14 @@ resource dataverseConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   }
 }
 
-// Connector Namespace system MI -> Dataverse connection (needed to poll triggers).
-resource dataverseConnectionNamespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
+resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
   parent: dataverseConnection
-  name: 'connector-namespace-msi'
+  name: 'dev-user'
   properties: {
     principal: {
       type: 'ActiveDirectory'
       identity: {
-        objectId: connectorNamespace.identity.principalId
+        objectId: userPrincipalId
         tenantId: tenantId
       }
     }
@@ -48,6 +48,3 @@ output name string = connectorNamespace.name
 
 @description('The name of the Dataverse connection on the namespace.')
 output connectionName string = dataverseConnection.name
-
-@description('Runtime URL for the Dataverse connection.')
-output dataverseConnectionRuntimeUrl string = dataverseConnection.properties.connectionRuntimeUrl
