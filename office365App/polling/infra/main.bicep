@@ -16,6 +16,9 @@ param location string
 @description('Region for the Connector Namespace.')
 param connectorNamespaceLocation string = 'westcentralus'
 
+@description('Application Insights region; defaults to the resource location.')
+param applicationInsightsLocation string = ''
+
 @metadata({
   azd: {
     type: 'principalId'
@@ -26,6 +29,10 @@ param userPrincipalId string = deployer().objectId
 
 param mailFolderPath string = 'Inbox'
 param calendarId string = 'Calendar'
+param sharedMailboxAddress string = ''
+param sharedMailboxFolderId string = 'Inbox'
+@description('Disable source triggers while preparing deployment before mailbox/calendar selection and consent.')
+param enableTriggers bool = true
 
 metadata name = 'Azure Functions Office 365 Polling Connector Trigger (.NET)'
 metadata description = 'Connector Namespace Poll delivery using managed identity, without a callback URL.'
@@ -56,31 +63,16 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   }
 }
 
-module funcUserAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: 'function-identity'
-  scope: rg
-  params: {
-    name: 'id-${resourceToken}'
-    location: location
-    tags: tags
-  }
-}
-
 module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   name: 'appinsights'
   scope: rg
   params: {
     name: 'appi-${resourceToken}'
-    location: location
+    location: empty(applicationInsightsLocation) ? location : applicationInsightsLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
     roleAssignments: [
-      {
-        roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
       {
         roleDefinitionIdOrName: monitoringMetricsPublisherRoleId
         principalId: userPrincipalId
@@ -112,21 +104,6 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.32.0' = {
     roleAssignments: [
       {
         roleDefinitionIdOrName: storageBlobDataOwner
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageQueueDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageTableDataContributor
-        principalId: funcUserAssignedIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-      }
-      {
-        roleDefinitionIdOrName: storageBlobDataOwner
         principalId: userPrincipalId
         principalType: 'User'
       }
@@ -156,7 +133,7 @@ module functionAppPlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
   }
 }
 
-module connectorNamespace './connectorNamespace.bicep' = {
+module connectorNamespace './connector-namespace.bicep' = {
   name: 'connector-namespace'
   scope: rg
   params: {
@@ -164,7 +141,6 @@ module connectorNamespace './connectorNamespace.bicep' = {
     location: connectorNamespaceLocation
     tags: tags
     connectionName: 'cnsc-${resourceToken}'
-    functionAppPrincipalId: funcUserAssignedIdentity.outputs.principalId
     userPrincipalId: userPrincipalId
   }
 }
@@ -177,20 +153,21 @@ module pollTriggers './poll-triggers.bicep' = {
     connectionName: connectorNamespace.outputs.connectionName
     mailFolderPath: mailFolderPath
     calendarId: calendarId
+    sharedMailboxAddress: sharedMailboxAddress
+    sharedMailboxFolderId: sharedMailboxFolderId
+    enableTriggers: enableTriggers
   }
 }
 
 var allAppSettings = union(
   {
     AzureWebJobsStorage__credential: 'managedidentity'
-    AzureWebJobsStorage__clientId: funcUserAssignedIdentity.outputs.clientId
     AzureWebJobsStorage__accountName: storageAccount.outputs.name
-    APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'ClientId=${funcUserAssignedIdentity.outputs.clientId};Authorization=AAD'
+    APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
     APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
-    AZURE_CLIENT_ID: funcUserAssignedIdentity.outputs.clientId
     ConnectorNamespace__credential: 'managedidentity'
-    ConnectorNamespace__clientId: funcUserAssignedIdentity.outputs.clientId
     ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
+    'AzureWebJobs.OnSharedMailboxNewEmail.Disabled': string(empty(sharedMailboxAddress))
   },
   pollTriggers.outputs.triggerConfigSettings
 )
@@ -206,7 +183,7 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
     serverFarmResourceId: functionAppPlan.outputs.resourceId
     httpsOnly: true
     managedIdentities: {
-      userAssignedResourceIds: [funcUserAssignedIdentity.outputs.resourceId]
+      systemAssigned: true
     }
     functionAppConfig: {
       deployment: {
@@ -214,14 +191,14 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
           type: 'blobContainer'
           value: '${storageAccount.outputs.primaryBlobEndpoint}${deploymentStorageContainerName}'
           authentication: {
-            type: 'UserAssignedIdentity'
-            userAssignedIdentityResourceId: funcUserAssignedIdentity.outputs.resourceId
+            type: 'SystemAssignedIdentity'
           }
         }
       }
       scaleAndConcurrency: {
         instanceMemoryMB: 2048
         maximumInstanceCount: 100
+        alwaysReady: []
       }
       runtime: {
         name: 'dotnet-isolated'
@@ -241,9 +218,24 @@ module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
+// Grant access after the app creates its identity, without cycling through app settings.
+module functionAccess './function-access.bicep' = {
+  name: 'function-access'
+  scope: rg
+  params: {
+    functionAppPrincipalId: functionApp.outputs.systemAssignedMIPrincipalId!
+    storageAccountName: storageAccount.outputs.name
+    appInsightsName: monitoring.outputs.name
+    connectorNamespaceName: connectorNamespace.outputs.name
+    connectorConnectionName: connectorNamespace.outputs.connectionName
+  }
+}
+
 output resourceGroupName string = rg.name
 output functionAppName string = functionApp.outputs.name
 output connectorNamespaceName string = connectorNamespace.outputs.name
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
 output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
 output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
+output office365SharedMailboxAddress string = sharedMailboxAddress
+output office365TriggerState string = enableTriggers ? 'Enabled' : 'Disabled'

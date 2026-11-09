@@ -1,42 +1,27 @@
 # Office 365 Outlook Polling Triggers (.NET)
 
-Azure Functions sample using the same connector trigger as webhook delivery, with
-`DeliveryMode = Poll`. The function host connects outbound to a Connector Namespace
-to receive and acknowledge events. No public callback, function system key, or
-development tunnel is needed.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. All handlers use typed payloads and log only the trigger name and item count.
 
-This folder is a standalone sample. Copy its entire contents into a new repository
-to build, run, and deploy it without any files from the parent repository.
-
-| Function | Connector operation | Default source parameters |
+| Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnNewEmail` | `OnNewEmailV3` | Inbox; high importance |
-| `OnFlaggedEmail` | `OnFlaggedEmailV4` | Inbox |
-| `OnNewMentionMeEmail` | `OnNewMentionMeEmailV3` | Inbox |
-| `OnNewCalendarEvent` | `CalendarGetOnNewItemsV3` | Calendar |
-| `OnUpcomingEvent` | `OnUpcomingEventsV3` | Calendar |
-
-Each function receives a typed Office 365 payload and uses a Blob output binding
-to write its JSON to a separate, randomly named blob in `connector-messages`,
-matching the webhook sample's output. This sample does not enable batched invocation.
-
-> [!CAUTION]
-> **Personal data.** Email/calendar payloads are written to Blob Storage for demonstration.
-> Restrict access to the sample resources and run `azd down --purge` when finished.
-> Delivery is at least once: a retry can create another blob for the same event.
-> Production applications should use idempotent processing. This sample binds
-> directly to the payload and does not expose the Poll delivery `MessageId`.
+| `OnNewEmail` | [`OnNewEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-(v3)) | New email |
+| `OnFlaggedEmail` | [`OnFlaggedEmailV4`](https://learn.microsoft.com/connectors/office365/#when-an-email-is-flagged-(v4)-(preview)) | Flagged email (preview) |
+| `OnNewMentionMeEmail` | [`OnNewMentionMeEmailV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-mentioning-me-arrives-(v3)) | Email mentioning me |
+| `OnNewCalendarEvent` | [`CalendarGetOnNewItemsV3`](https://learn.microsoft.com/connectors/office365/#when-a-new-event-is-created-(v3)) | New event |
+| `OnCalendarUpdatedItems` | [`CalendarGetOnUpdatedItemsV3`](https://learn.microsoft.com/connectors/office365/#when-an-event-is-modified-(v3)) | Modified event |
+| `OnUpcomingEvent` | [`OnUpcomingEventsV3`](https://learn.microsoft.com/connectors/office365/#when-an-upcoming-event-is-starting-soon-(v3)) | Upcoming event |
+| `OnSharedMailboxNewEmail` | [`SharedMailboxOnNewEmailV2`](https://learn.microsoft.com/connectors/office365/#when-a-new-email-arrives-in-a-shared-mailbox-(v2)) | Shared mailbox email (opt-in) |
+| Not included | [`CalendarGetOnChangedItemsV3`](https://learn.microsoft.com/connectors/office365/#when-an-event-is-added,-updated-or-deleted-(v3)) | Event added, updated or deleted; preview subscription fails with missing `TABLE` |
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- [PowerShell 7](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) on all platforms for the post-deploy hook
-- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) for local runtime storage and Blob output
-- An Office 365 mailbox and permission to authorize its connector connection
-- The [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later, signed in with permission to read and write trigger configurations in the Connector Namespace; polling state updates use `az rest`
+- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash with `jq` 1.7 or later (standard distribution, preserving large JSON number literals) and standard file tools (`mktemp`, `link`, `mv`, `rm`, and `tr`) for the alternative script, including Git Bash on Windows; the hook needs write access to this sample and its scripts folder for private temporary JSON files
+- An Office 365 mailbox and permission to authorize the connection
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli), still required for trigger listing, connection status, and OAuth consent:
 
   ```bash
   curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
@@ -48,127 +33,87 @@ matching the webhook sample's output. This sample does not enable batched invoca
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
   ```
 
-The folder's `NuGet.config` supplies the public Azure Functions package feed for
-the preview connector packages; no parent-level NuGet configuration or local
-extension checkout is needed.
-
 ## Deploy to Azure
 
-Run from this folder (`office365App/polling` in the sample collection):
-
 ```bash
+cd office365App/polling
 az login
 azd auth login
 azd env new office365-polling
+azd env set OFFICE365_MAIL_FOLDER Inbox
+azd env set OFFICE365_CALENDAR_ID '<actual connector calendar ID>'
 azd up
 ```
 
-Use a different environment name from any webhook deployment. To change the source
-folder or calendar before provisioning:
+Use the actual connector calendar ID, not the placeholder `Calendar`. Complete the OAuth sign-in opened by `azd up` with the mailbox account to monitor. Use a different azd environment from webhook.
 
-```bash
-azd env set OFFICE365_MAIL_FOLDER Inbox
-azd env set OFFICE365_CALENDAR_ID Calendar
-```
+## Optional configuration
 
-Use the folder/calendar identifiers accepted by the Office 365 connector for your
-mailbox. Trigger definitions and additional filters are in `infra/poll-triggers.bicep`.
-The Connector Namespace defaults to `westcentralus`; override its region with
-`azd env set CONNECTOR_NAMESPACE_LOCATION <supported-region>`.
+Set environment values before `azd up`. Six personal triggers are configured by default.
 
-Bicep provisions a resource group, Flex Consumption .NET 10 Function App, managed
-identity, storage account, Application Insights/Log Analytics, Connector Namespace,
-Office 365 connection, and five enabled `deliveryMode: 'Poll'` trigger configurations.
-It grants connection access separately to the namespace identity, Function App
-identity, and developer identity.
-
-The post-deploy hook opens the OAuth consent flow for the mailbox and creates an
-ignored `local.settings.json` if one does not already exist. It preserves existing
-local settings. To re-run consent/setup:
-
-```bash
-azd hooks run postdeploy
-```
-
-## Run locally
-
-There is no local emulator for the Connector Namespace or Office 365 connection.
-Local development uses real Azure resources plus Azurite for Functions storage.
-
-You can use resources from `azd up`, or provision them without deploying function code:
-
-```bash
-az login
-azd auth login
-azd env new office365-polling-local
-azd provision
-pwsh -File ./infra/scripts/postdeploy.ps1
-```
-
-The script creates `local.settings.json` with the deployed endpoint and all five
-trigger-config names. To intentionally replace existing local settings:
-
-```bash
-pwsh -File ./infra/scripts/postdeploy.ps1 -ForceLocalSettings
-```
-
-Start Azurite separately, then run from this folder:
-
-```bash
-dotnet build
-func start
-```
-
-The signed-in developer identity is used locally. Do not copy Azure's
-`ConnectorNamespace__credential=managedidentity` or `__clientId` settings into local
-settings. Bicep grants the provisioning developer access to the Office 365 connection;
-a different developer needs their own connection-level access policy.
-
-Do not run local and deployed listeners against the same trigger configuration
-when expecting every event locally: they are competing consumers. Use a separate
-environment provisioned without function code for isolated local testing.
-
-### Existing namespace
-
-Alternatively, copy `local.settings.example.json` to ignored `local.settings.json`
-and supply your existing authorized connection's Poll settings. Each binding uses:
-
-```csharp
-[ConnectorTrigger(
-    DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
-    Connection = "ConnectorNamespace",
-    TriggerConfigName = "%OnNewEmailTriggerConfigName%")]
-```
-
-`Connection` is a configuration prefix, not the Office 365 connection resource name.
-Derive `ConnectorNamespace__pollingEndpoint` from the service-generated
-`pollingEndpoints.receiveUri`:
-
-| Receive URI | Setting |
+| Setting / option | Purpose |
 | --- | --- |
-| `https://<host>/api/triggerconfigs/<name>/receive` | `https://<host>` |
-| `https://<host>/api/connectorGateways/<id>/triggerconfigs/<name>/receive` | `https://<host>/api/connectorGateways/<id>` |
+| `OFFICE365_SHARED_MAILBOX_ADDRESS=<address>` | Shared mailbox email; full mailbox access required |
+| `OFFICE365_SHARED_MAILBOX_FOLDER_ID=Inbox` | Folder to monitor in the shared mailbox |
+| `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
+| `APPLICATION_INSIGHTS_LOCATION=eastus2` | Telemetry region override if the host region lacks Application Insights |
+| `OFFICE365_ENABLE_TRIGGERS=false` | Prepare disabled sources without waiting for consent; set `true` and reprovision to activate |
+| Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
+| `pwsh ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` / `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
+| `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs |
 
-Do not include an operation path or query string. Set each `*TriggerConfigName`
-separately and grant both the namespace and developer identities access to the
-connection. Never commit real endpoints, credentials, or local settings.
+Clear the address and rerun `azd up` to disable the shared-mailbox listener and any existing shared-mailbox Poll trigger configuration; an absent configuration is left absent.
 
-## Verify and clean up
+Set the address again and rerun `azd up` to create or re-enable the same deterministic configuration through Bicep. No manual namespace cleanup is needed for normal selection changes.
 
-After connection consent, send a high-importance email to the monitored Inbox,
-flag an email, send an email mentioning the mailbox user, or create a calendar
-event. An upcoming event fires when it enters the connector's look-ahead window.
-Allow time for the connector to detect the source change.
+Disabling preserves the configuration and does not delete an upstream source subscription. Regenerate local settings to apply the selection locally.
 
-Check function logs for the corresponding trigger, then inspect
-the `connector-messages` Blob container: in Azurite for local runs, or the deployed
-storage account for Azure runs. No email content is written to application logs.
+The hook disables deselected Poll triggers through ARM REST, preserving their delivery mode and writable properties. The current CLI extension's `trigger update` omits `deliveryMode`, so it is not used for Poll state changes.
 
-Run `azd down --purge` from this folder to delete this environment's Azure resources.
+Hooks preserve existing local settings unless the force option is selected, and reject directories and links at the settings path.
 
-## References
+## Local development
 
-- [Connector extension Poll samples](https://github.com/Azure/azure-functions-connector-extension/tree/main/test/poll)
-- [SharePoint-to-Cosmos Poll sample](https://github.com/manvkaur/functions-connectors-net-sharepoint-cosmos)
-- [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)
-- [Office 365 connector reference](https://learn.microsoft.com/connectors/office365/)
+If the Function App is already deployed, stop it before running locally to avoid competing listeners.
+
+1. Prepare `local.settings.json`.
+
+   Use the file generated during successful `azd up`. Only if it is missing, rerun:
+
+   ```bash
+   azd hooks run postdeploy
+   ```
+
+2. Sign in with your developer account for local credentials.
+
+   ```bash
+   az login
+   ```
+
+3. Start Azurite in a separate terminal.
+
+   ```bash
+   azurite
+   ```
+
+4. Build and start the local Functions host.
+
+   ```bash
+   dotnet build
+   func start
+   ```
+
+Do not copy cloud managed-identity settings locally. Functions host/deployment storage is required. Never commit local settings.
+
+Worker telemetry uses the `ConnectorNamespace` identity settings: the Function App's system-assigned managed identity in Azure, or standard developer credentials when identity settings are absent locally.
+
+## Verify
+
+Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events and check worker logs for `Received <FunctionName> trigger (<Count> items)`; build/deployment success alone is not real-event verification. Delivery is at least once and source detection may be delayed.
+
+Run `azd down --purge` when finished to remove deployed resources. Licensing is provided by the repository's [root LICENSE](../../LICENSE).
+
+## More
+
+- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Office 365 Outlook connector reference](https://learn.microsoft.com/connectors/office365/)
