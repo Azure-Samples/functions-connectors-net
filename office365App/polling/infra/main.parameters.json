@@ -19,6 +19,18 @@
     },
     "calendarId": {
       "value": "${OFFICE365_CALENDAR_ID=Calendar}"
+    },
+    "sharedMailboxAddress": {
+      "value": "${OFFICE365_SHARED_MAILBOX_ADDRESS=}"
+    },
+    "sharedMailboxFolderId": {
+      "value": "${OFFICE365_SHARED_MAILBOX_FOLDER_ID=Inbox}"
+    },
+    "applicationInsightsLocation": {
+      "value": "${APPLICATION_INSIGHTS_LOCATION=}"
+    },
+    "enableTriggers": {
+      "value": "${OFFICE365_ENABLE_TRIGGERS=true}"
     }
   }
 }

@@ -1,13 +1,8 @@
 # SharePoint Online Connector Samples (.NET)
 
-Choose how the Connector Namespace delivers events to Azure Functions:
-
 | Sample | Delivery | Local development |
 | --- | --- | --- |
-| [Polling](polling/) | Function host receives events by polling the namespace | Outbound connection only; no tunnel required |
-| [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS tunnel required for real events |
+| [Polling](polling/README.md) | Function host polls the namespace | Outbound connection; no tunnel |
+| [Webhook](webhook/README.md) | Namespace calls the function's HTTPS callback | Public HTTPS tunnel |
 
-Both samples include ten non-deprecated triggers with typed SDK payloads and
-logging of trigger names and item counts only. Build and deploy from the selected
-folder using different azd environment names. See each README for trigger
-documentation and setup.
+Both samples demonstrate ten SharePoint triggers with typed SDK payloads, logging only trigger names and item counts. Use the child README for prerequisites, deployment, and local setup; deploy each sample with a different `azd` environment name.

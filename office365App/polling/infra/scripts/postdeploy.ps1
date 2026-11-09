@@ -1,6 +1,10 @@
-param([switch] $ForceLocalSettings)
+param(
+    [switch] $ForceLocalSettings,
+    [switch] $ConsentLinkOnly
+)
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'local-settings.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw "Install the connector-namespace Azure CLI extension before running this script."
@@ -31,25 +35,70 @@ $localValues = @{
     ConnectorNamespace__pollingEndpoint = $outputs.connectorPollingEndpoint
 }
 foreach ($functionName in @(
-    'OnNewEmail', 'OnFlaggedEmail', 'OnNewMentionMeEmail', 'OnNewCalendarEvent', 'OnUpcomingEvent')) {
+    'OnNewEmail', 'OnFlaggedEmail', 'OnNewMentionMeEmail', 'OnNewCalendarEvent', 'OnUpcomingEvent',
+    'OnCalendarUpdatedItems', 'OnSharedMailboxNewEmail')) {
     $setting = "${functionName}TriggerConfigName"
     if ([string]::IsNullOrWhiteSpace($triggerSettings.$setting)) {
         throw "Missing trigger configuration setting $setting."
     }
     $localValues[$setting] = $triggerSettings.$setting
 }
+$localValues['AzureWebJobs.OnSharedMailboxNewEmail.Disabled'] =
+    ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)).ToString().ToLowerInvariant()
 
-$localSettingsPath = Join-Path $PSScriptRoot '../../local.settings.json'
-if ((Test-Path -LiteralPath $localSettingsPath) -and -not $ForceLocalSettings) {
-    Write-Host 'Existing local.settings.json preserved. Use -ForceLocalSettings to regenerate it.'
-}
-else {
-    $localSettings = @{ IsEncrypted = $false; Values = $localValues }
-    [IO.File]::WriteAllText(
-        $localSettingsPath,
-        ($localSettings | ConvertTo-Json -Depth 4),
-        [Text.UTF8Encoding]::new($false))
-    Write-Host 'Created ignored local.settings.json using developer credentials and Azurite.'
+Write-LocalSettings $localValues -Force:$ForceLocalSettings
+
+if ([string]::IsNullOrWhiteSpace($outputs.office365SharedMailboxAddress)) {
+    $triggerName = $triggerSettings.OnSharedMailboxNewEmailTriggerConfigName
+    $existingTriggers = az connector-namespace trigger list `
+        -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
+        --query '[].{name:name,id:id}' -o json
+    if ($LASTEXITCODE -ne 0) { throw 'Could not list existing Office 365 trigger configurations.' }
+    $existing = (($existingTriggers -join "`n") | ConvertFrom-Json) | Where-Object name -EQ $triggerName
+    if ($existing) {
+        if ($existing.id -notlike '/subscriptions/*' -or
+            -not $existing.id.EndsWith("/triggerConfigs/$triggerName", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Invalid resource ID for trigger $triggerName."
+        }
+        $url = "https://management.azure.com$($existing.id)?api-version=2026-05-01-preview"
+        $readFile = Join-Path $PSScriptRoot ".trigger-read-$([guid]::NewGuid().ToString('N')).json"
+        $readFiles = [Collections.Generic.List[string]]::new()
+        $readFailure = $null
+        try {
+            Write-PrivateJsonFile $readFile @{} $readFiles
+            az rest --method get --url $url --output-file $readFile -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not read trigger $triggerName." }
+            $resource = [System.Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($readFile, [Text.Encoding]::UTF8))
+        } catch {
+            $readFailure = $_
+            throw
+        } finally {
+            Remove-OwnedStaging $readFiles $readFailure
+        }
+        $properties = $resource['properties']
+        if ($properties['deliveryMode'].ToString() -ne 'Poll') {
+            throw "Expected Poll delivery mode for trigger $triggerName."
+        }
+        $null = $properties.Remove('provisioningState')
+        $null = $properties.Remove('pollingEndpoints')
+        $properties['state'] = [System.Text.Json.Nodes.JsonNode]::Parse('"Disabled"')
+        $null = $resource.Remove('properties')
+        $body = [System.Text.Json.Nodes.JsonObject]::new()
+        $body.Add('properties', $properties)
+        $bodyFile = Join-Path $PSScriptRoot ".trigger-update-$([guid]::NewGuid().ToString('N')).json"
+        $ownedFiles = [Collections.Generic.List[string]]::new()
+        $failure = $null
+        try {
+            Write-PrivateJsonFile $bodyFile $body $ownedFiles
+            az rest --method put --url $url --body "@$bodyFile" -o none
+            if ($LASTEXITCODE -ne 0) { throw "Could not disable trigger $triggerName." }
+        } catch {
+            $failure = $_
+            throw
+        } finally {
+            Remove-OwnedStaging $ownedFiles $failure
+        }
+    }
 }
 
 function Get-ConnectionStatus {
@@ -72,14 +121,14 @@ for ($attempt = 1; $attempt -le 5; $attempt++) {
     $consentLink = az connector-namespace connection list-consent-links `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
         --connection-name $outputs.connectorNamespaceConnectionName `
-        --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
         --query 'value[0].link' -o tsv 2>$null
 
     if (-not $consentLink -or $consentLink -eq 'null') {
         $consentLink = az connector-namespace connection list-consent-links `
             -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
             --connection-name $outputs.connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://portal.azure.com'}]" `
+            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
             --query 'link' -o tsv 2>$null
     }
     if ($consentLink -and $consentLink -ne 'null') { break }
@@ -91,6 +140,7 @@ if (-not $consentLink -or $consentLink -eq 'null') {
 }
 
 Write-Host "Consent URL: $consentLink"
+if ($ConsentLinkOnly -or $outputs.office365TriggerState -eq 'Disabled') { return }
 try {
     Start-Process $consentLink | Out-Null
 } catch {
@@ -101,7 +151,7 @@ $deadline = (Get-Date).AddMinutes(5)
 do {
     Start-Sleep -Seconds 3
     if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'Office 365 connection authorized. All five Poll trigger configurations are provisioned.'
+        Write-Host 'Office 365 connection authorized. Poll trigger configurations are provisioned (shared mailbox is opt-in).'
         return
     }
 } while ((Get-Date) -lt $deadline)
