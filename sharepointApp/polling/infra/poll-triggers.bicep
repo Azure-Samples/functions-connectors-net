@@ -1,5 +1,8 @@
 param namespaceName string
 param connectionName string
+param functionAppName string
+param functionAppResourceGroup string
+param functionAppSubscriptionId string = subscription().subscriptionId
 @minLength(1)
 param triggers array
 
@@ -18,6 +21,13 @@ resource triggerConfigs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-
       }
       deliveryMode: 'Poll'
       operationName: trigger.operationName
+      metadata: {
+        destinationType: 'functionApp'
+        functionAppName: functionAppName
+        functionAppResourceGroup: functionAppResourceGroup
+        functionAppSubscriptionId: functionAppSubscriptionId
+        functionName: trigger.functionName
+      }
       parameters: trigger.parameters
       state: 'Enabled'
       type: 'NotSpecified'

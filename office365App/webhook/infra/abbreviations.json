@@ -60,7 +60,6 @@
     "logicIntegrationAccounts": "ia-",
     "logicWorkflows": "logic-",
     "machineLearningServicesWorkspaces": "mlw-",
-    "managedIdentityUserAssignedIdentities": "id-",
     "managementManagementGroups": "mg-",
     "migrateAssessmentProjects": "migr-",
     "networkApplicationGateways": "agw-",

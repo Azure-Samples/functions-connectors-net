@@ -1,11 +1,9 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_notif_files=()
-cleanup_notif_files() { for f in "${_notif_files[@]}"; do rm -f "$f"; done; }
-trap cleanup_notif_files EXIT
+source "$SCRIPT_DIR/local-settings.sh"
 
 # Colors
 GREEN='\033[0;32m'
@@ -31,26 +29,27 @@ outputs=$(azd env get-values --output json)
 
 for name in resourceGroupName connectorNamespaceName connectorNamespaceConnectionName \
   functionAppName functionAppDefaultHostname AZURE_SUBSCRIPTION_ID sharepointSiteUrl sharepointLibraryName; do
-  if ! echo "$outputs" | jq -e --arg name "$name" \
+  if ! echo "$outputs" | connector_jq -e --arg name "$name" \
     '.[$name] | if type == "string" then test("\\S") and . != "null" else false end' >/dev/null; then
     echo "ERROR: Missing or invalid azd output ${name}. Run azd provision first." >&2
     exit 1
   fi
 done
 
-resourceGroupName=$(echo "$outputs" | jq -r '.resourceGroupName')
-connectorNamespaceName=$(echo "$outputs" | jq -r '.connectorNamespaceName')
-connectorNamespaceConnectionName=$(echo "$outputs" | jq -r '.connectorNamespaceConnectionName')
-functionAppName=$(echo "$outputs" | jq -r '.functionAppName')
-functionAppDefaultHostname=$(echo "$outputs" | jq -r '.functionAppDefaultHostname')
-subscriptionId=$(echo "$outputs" | jq -r '.AZURE_SUBSCRIPTION_ID')
-sharepointSiteUrl=$(echo "$outputs" | jq -r '.sharepointSiteUrl')
-sharepointLibraryName=$(echo "$outputs" | jq -r '.sharepointLibraryName')
-triggerDefinitions=$(echo "$outputs" | jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
+resourceGroupName=$(echo "$outputs" | connector_jq -r '.resourceGroupName')
+connectorNamespaceName=$(echo "$outputs" | connector_jq -r '.connectorNamespaceName')
+connectorNamespaceConnectionName=$(echo "$outputs" | connector_jq -r '.connectorNamespaceConnectionName')
+functionAppName=$(echo "$outputs" | connector_jq -r '.functionAppName')
+functionAppDefaultHostname=$(echo "$outputs" | connector_jq -r '.functionAppDefaultHostname')
+subscriptionId=$(echo "$outputs" | connector_jq -r '.AZURE_SUBSCRIPTION_ID')
+sharepointSiteUrl=$(echo "$outputs" | connector_jq -r '.sharepointSiteUrl')
+sharepointLibraryName=$(echo "$outputs" | connector_jq -r '.sharepointLibraryName')
+triggerDefinitions=$(echo "$outputs" | connector_jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
 existingNames=$(az connector-namespace trigger list -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" --query '[].name' -o json)
 
 echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
 connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
+connectorExtensionKey="${connectorExtensionKey%$'\r'}"
 if [[ -z "${connectorExtensionKey}" ]]; then
   echo -e "${RED}ERROR: could not fetch connector_extension system key from ${functionAppName}.${NC}"
   exit 1
@@ -60,14 +59,34 @@ echo -e "${YELLOW}Creating Connector Namespace trigger configs...${NC}"
 echo -e "${CYAN}  SharePoint site: ${sharepointSiteUrl}${NC}"
 echo -e "${CYAN}  Library: ${sharepointLibraryName}${NC}"
 
+temp_dir=''
+cleanup_callback() {
+  result=$?
+  trap - EXIT
+  if [[ -n "$temp_dir" ]]; then
+    cleanup_failed=false
+    rm -f -- "$temp_dir/notification.json" || cleanup_failed=true
+    rm -f -- "$temp_dir/parameters.json" || cleanup_failed=true
+    rmdir -- "$temp_dir" || cleanup_failed=true
+    if [[ "$cleanup_failed" == true ]]; then
+      echo 'Could not clean owned callback staging files.' >&2
+      [[ "$result" -ne 0 ]] || result=1
+    fi
+  fi
+  exit "$result"
+}
+trap cleanup_callback EXIT
+candidate_dir=$(mktemp -d "${TMPDIR:-/tmp}/sharepoint-callback.XXXXXXXX") ||
+  { echo 'Could not create callback staging directory.' >&2; exit 1; }
+temp_dir="$candidate_dir"
 while IFS= read -r triggerSpec
 do
-  functionName=$(echo "$triggerSpec" | jq -r '.functionName')
-  operationName=$(echo "$triggerSpec" | jq -r '.operationName')
-  description=$(echo "$triggerSpec" | jq -r '.description')
+  functionName=$(echo "$triggerSpec" | connector_jq -r '.functionName')
+  operationName=$(echo "$triggerSpec" | connector_jq -r '.operationName')
+  description=$(echo "$triggerSpec" | connector_jq -r '.description')
   triggerName="${connectorNamespaceConnectionName}-$(echo "${functionName}" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$(echo "$triggerSpec" | jq -r '.enabled')" != "true" ]]; then
-    if echo "$existingNames" | jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
+  if [[ "$(echo "$triggerSpec" | connector_jq -r '.enabled')" != "true" ]]; then
+    if echo "$existingNames" | connector_jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
       az connector-namespace trigger update \
         -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
         -n "${triggerName}" --state Disabled -o none
@@ -76,41 +95,30 @@ do
     continue
   fi
   callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
-  if ! notifFile=$(mktemp); then
-    echo "ERROR: Could not create temporary notification details file." >&2
-    exit 1
-  fi
-  _notif_files+=("$notifFile")
-  if ! paramsFile=$(mktemp); then
-    echo "ERROR: Could not create temporary trigger parameters file." >&2
-    exit 1
-  fi
-  _notif_files+=("$paramsFile")
-  jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
+  notifFile="$temp_dir/notification.json"
+  paramsFile="$temp_dir/parameters.json"
+  connector_jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
     '{callbackUrl:$url,authentication:{type:"QueryString",name:"code",value:$key}}' > "$notifFile"
-  echo "$triggerSpec" | jq '.parameters' > "$paramsFile"
+  echo "$triggerSpec" | connector_jq '.parameters' > "$paramsFile"
 
   echo -e "${CYAN}  Creating trigger: ${functionName} -> ${operationName}${NC}"
 
-  if echo "$existingNames" | jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then
-    az connector-namespace trigger delete \
-      -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
-      -n "${triggerName}" --yes -o none
-  fi
-
-  az connector-namespace trigger create \
+  verb=create
+  if echo "$existingNames" | connector_jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then verb=update; fi
+  az connector-namespace trigger "$verb" \
     -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
     -n "${triggerName}" \
     --connection-details "{connectionName:${connectorNamespaceConnectionName},connectorName:sharepointonline}" \
     --operation-name "${operationName}" \
+    --state Enabled \
     --parameters "@${paramsFile}" \
     --notification-details "@${notifFile}" \
     --description "${description}" \
     --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${subscriptionId},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
-    -o none
+    -o none 2>/dev/null || { echo "Could not configure trigger $functionName." >&2; exit 1; }
 
   rm -f "$notifFile" "$paramsFile"
-done < <(echo "$triggerDefinitions" | jq -c '.[]')
+done < <(echo "$triggerDefinitions" | connector_jq -c '.[]')
 
 echo -e "${GREEN}✅ All trigger configs created.${NC}"
 echo ""
@@ -120,6 +128,7 @@ currentStatus=$(az connector-namespace connection show \
   -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
   -n "${connectorNamespaceConnectionName}" \
   --query "properties.overallStatus" -o tsv 2>/dev/null || true)
+currentStatus="${currentStatus%$'\r'}"
 
 if [[ "${currentStatus}" == "Connected" ]]; then
   echo -e "${GREEN}Connection is already authorized.${NC}"
@@ -133,6 +142,7 @@ else
       --connection-name "${connectorNamespaceConnectionName}" \
       --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
       --query "value[0].link" -o tsv 2>/dev/null || true)
+    consentLink="${consentLink%$'\r'}"
 
     if [[ -z "${consentLink}" || "${consentLink}" == "null" ]]; then
       consentLink=$(az connector-namespace connection list-consent-links \
@@ -140,6 +150,7 @@ else
         --connection-name "${connectorNamespaceConnectionName}" \
         --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" \
         --query "link" -o tsv 2>/dev/null || true)
+      consentLink="${consentLink%$'\r'}"
     fi
 
     if [[ -n "${consentLink}" && "${consentLink}" != "null" ]]; then
@@ -177,6 +188,7 @@ else
       -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
       -n "${connectorNamespaceConnectionName}" \
       --query "properties.overallStatus" -o tsv 2>/dev/null || true)
+    currentStatus="${currentStatus%$'\r'}"
 
     if [[ "${currentStatus}" != "${lastPrintedStatus}" ]]; then
       echo -e "${CYAN}Connection status: ${currentStatus}${NC}"
