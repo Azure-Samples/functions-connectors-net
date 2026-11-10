@@ -4,17 +4,20 @@
 
 ## Samples
 
-| Folder | Connector | Triggers |
-| ------ | --------- | -------- |
-| [azureblobApp](azureblobApp/) ([webhook](azureblobApp/webhook/), [polling](azureblobApp/polling/)) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) | `OnUpdatedFile` |
-| [dataverseApp](dataverseApp/) ([webhook](dataverseApp/webhook/), [polling](dataverseApp/polling/)) | [Microsoft Dataverse](https://learn.microsoft.com/connectors/commondataservice/) | Row changes; optional action-performed events |
-| [genericApp](genericApp/) | Any connector | Generic untyped triggers — receives raw JSON `string` payloads without SDK model dependency |
-| [office365App](office365App/) ([polling](office365App/polling/), [webhook](office365App/webhook/)) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) | `onNewEmail`, `onFlaggedEmail`, `onNewMentionMeEmail`, `onNewCalendarEvent`, `onUpcomingEvent` |
-| [onedriveApp](onedriveApp/) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) | `onNewFile`, `onUpdatedFile` |
-| [sharepointApp](sharepointApp/) ([polling](sharepointApp/polling/), [webhook](sharepointApp/webhook/)) | [SharePoint Online](https://learn.microsoft.com/connectors/sharepointonline/) | File and list-item changes, forms, Syntex, and recurring digests |
-| [teamsApp](teamsApp/) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) | `onNewChannelMessage`, `onNewChannelMessageMentioningMe`, `onGroupMembershipAdd`, `onGroupMembershipRemoval` |
+| Guide | Connector |
+| --- | --- |
+| [Office 365](office365App/README.md) | [Office 365 Outlook](https://learn.microsoft.com/connectors/office365/) |
+| [SharePoint](sharepointApp/README.md) | [SharePoint Online](https://learn.microsoft.com/connectors/sharepointonline/) |
+| [OneDrive](onedriveApp/README.md) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) |
+| [Teams](teamsApp/README.md) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) |
+| [Dataverse](dataverseApp/README.md) | [Microsoft Dataverse (Common Data Service)](https://learn.microsoft.com/connectors/commondataservice/) |
+| Planner | [Planner](https://learn.microsoft.com/connectors/planner/) |
+| Salesforce | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) |
+| Azure DevOps | [Azure DevOps (VSTS)](https://learn.microsoft.com/connectors/visualstudioteamservices/) |
+| [Azure Blob](azureblobApp/README.md) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) |
+| [Generic](genericApp/README.md) | [Any connector](https://learn.microsoft.com/connectors/), using raw string payloads |
 
-Each sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.
+Guides without links are work in progress. Each available sample is a self-contained Azure Functions app with its own `azure.yaml`, `infra/`, and source code. Navigate into a sample folder and run `azd up` to deploy.
 
 ## More triggers and operations
 
