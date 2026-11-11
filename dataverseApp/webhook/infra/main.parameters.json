@@ -29,6 +29,9 @@
     "dataverseEntitySetName": {
       "value": "${DATAVERSE_ENTITY_SET_NAME=accounts}"
     },
+    "dataverseRowScope": {
+      "value": "${DATAVERSE_ROW_SCOPE=}"
+    },
     "enableActionTrigger": {
       "value": "${DATAVERSE_ENABLE_ACTION_TRIGGER=false}"
     },

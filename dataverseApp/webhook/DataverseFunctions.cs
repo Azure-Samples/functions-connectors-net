@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
-using Azure.Connectors.Sdk.Commondataservice.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
 using Microsoft.Extensions.Logging;
@@ -12,24 +11,23 @@ namespace DataverseApp;
 public class DataverseFunctions(ILogger<DataverseFunctions> logger)
 {
     [Function("OnDataverseRowAdded")]
-    public void OnDataverseRowAdded([ConnectorTrigger] CommondataserviceOnNewItemsTriggerPayload payload)
+    public void OnDataverseRowAdded([ConnectorTrigger] JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowAdded trigger");
     }
 
     [Function("OnDataverseRowModified")]
-    public void OnDataverseRowModified([ConnectorTrigger] CommondataserviceOnUpdatedItemsTriggerPayload payload)
+    public void OnDataverseRowModified([ConnectorTrigger] JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowModified trigger");
     }
 
     [Function("OnDataverseRowDeleted")]
-    public void OnDataverseRowDeleted([ConnectorTrigger] CommondataserviceOnDeletedItemsTriggerPayload payload)
+    public void OnDataverseRowDeleted([ConnectorTrigger] JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowDeleted trigger");
     }
 
-    // Explicit raw-JSON exceptions: the SDK has no models for these current operations.
     [Function("OnDataverseRowChanged")]
     public void OnDataverseRowChanged([ConnectorTrigger] JsonElement payload)
     {

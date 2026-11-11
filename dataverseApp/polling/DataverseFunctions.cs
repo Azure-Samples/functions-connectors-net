@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
-using Azure.Connectors.Sdk.Commondataservice.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
 using Microsoft.Extensions.Logging;
@@ -17,7 +16,7 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%OnDataverseRowAddedTriggerConfigName%")]
-        CommondataserviceOnNewItemsTriggerPayload payload)
+        JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowAdded trigger");
     }
@@ -28,7 +27,7 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%OnDataverseRowModifiedTriggerConfigName%")]
-        CommondataserviceOnUpdatedItemsTriggerPayload payload)
+        JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowModified trigger");
     }
@@ -39,12 +38,11 @@ public class DataverseFunctions(ILogger<DataverseFunctions> logger)
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%OnDataverseRowDeletedTriggerConfigName%")]
-        CommondataserviceOnDeletedItemsTriggerPayload payload)
+        JsonElement payload)
     {
         logger.LogInformation("Received OnDataverseRowDeleted trigger");
     }
 
-    // Explicit raw-JSON exceptions: the SDK has no models for these current operations.
     [Function("OnDataverseRowChanged")]
     public void OnDataverseRowChanged(
         [ConnectorTrigger(
