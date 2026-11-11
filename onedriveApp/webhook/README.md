@@ -36,7 +36,7 @@ azd env new onedrive-webhook
 azd up
 ```
 
-Complete OAuth in the browser opened by the hook, wait for **Connected**, and select the folder to monitor. Non-interactive runs require `ONEDRIVE_FOLDER_ID` set to a connector folder ID, not a name/path; use `root` explicitly for root. Selection errors do not fall back to root.
+Complete OAuth in the browser opened by the hook, wait for **Connected**, and select the folder to monitor. Choosing the top-level folder saves the drive root's connector-returned ID. Non-interactive runs require `ONEDRIVE_FOLDER_ID` set to a connector folder ID, not a name/path; the literal `root` is rejected because the connector fails trigger evaluation with `Invalid fileId`. Selection errors do not fall back to root.
 
 ## Optional configuration
 

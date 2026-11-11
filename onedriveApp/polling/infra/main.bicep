@@ -25,8 +25,8 @@ param telemetryLocation string = 'eastus2'
 param userPrincipalId string = deployer().objectId
 
 @minLength(1)
-@description('OneDrive connector folder identifier, not a display path.')
-param folderId string = 'root'
+@description('Connector-returned OneDrive folder ID, not a display path or the literal root.')
+param folderId string
 
 metadata name = 'Azure Functions OneDrive Polling Connector Trigger (.NET)'
 metadata description = 'Connector Namespace Poll delivery using managed identity, without a callback URL.'

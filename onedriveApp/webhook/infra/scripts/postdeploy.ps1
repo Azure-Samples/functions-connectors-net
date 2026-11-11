@@ -79,6 +79,33 @@ function Select-FromList {
     }
 }
 
+function Assert-OneDriveFolderId {
+    param([string] $FolderId)
+    if ($FolderId -ieq 'root') {
+        throw "Literal 'root' is not a valid OneDrive trigger folder ID (the connector returns 'Invalid fileId'). Unset ONEDRIVE_FOLDER_ID and select the root folder interactively, or set a connector-returned folder ID."
+    }
+}
+
+# The connector rejects the literal 'root' as a trigger folderId, so resolve the drive root's real ID.
+function Get-OneDriveRootFolderId {
+    $requestFile = Join-Path ([IO.Path]::GetTempPath()) "onedrive-root-$([guid]::NewGuid()).json"
+    try {
+        '{"method":"GET","path":"/datasets/default/GetFileByPath","queries":{"path":"/"}}' |
+            Set-Content -LiteralPath $requestFile -Encoding utf8NoBOM
+        $rootId = az connector-namespace connection invoke `
+            --subscription $subscriptionId -g $resourceGroupName --namespace $connectorNamespaceName `
+            --connection-name $onedriveConnectionName `
+            --request "@$requestFile" `
+            --query "response.body.Id" -o tsv 2>$null
+    } finally {
+        Remove-Item -LiteralPath $requestFile -ErrorAction SilentlyContinue
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($rootId) -or $rootId -ieq 'root') {
+        throw 'Could not resolve the OneDrive root folder ID from the connection.'
+    }
+    return $rootId.Trim()
+}
+
 function Select-OneDriveFolderInteractive {
     param([string] $CurrentSavedId)
 
@@ -128,8 +155,7 @@ function Select-OneDriveFolderInteractive {
         }
 
         $choices = @()
-        $pickId = if ($current.id -eq 'root') { 'root' } else { $current.id }
-        $choices += [pscustomobject]@{ display = "[OK] Use this folder ($($current.path))"; action = 'pick'; targetId = $pickId; target = $null }
+        $choices += [pscustomobject]@{ display = "[OK] Use this folder ($($current.path))"; action = 'pick'; targetId = $current.id; target = $null }
         if ($CurrentSavedId -and $stack.Count -eq 1) {
             $choices += [pscustomobject]@{ display = "(keep current saved: $CurrentSavedId)"; action = 'keep'; targetId = $CurrentSavedId; target = $null }
         }
@@ -152,13 +178,18 @@ function Select-OneDriveFolderInteractive {
 
         $picked = Select-FromList -Title 'Choose an action:' -Items $choices -LabelProperty 'display'
         switch ($picked.action) {
-            'pick' { return $picked.targetId }
+            'pick' {
+                if ($picked.targetId -eq 'root') { return Get-OneDriveRootFolderId }
+                return $picked.targetId
+            }
             'keep' { return $picked.targetId }
             'up' { [void] $stack.Pop() }
             'down' { $stack.Push($picked.target) }
             'manual' {
                 $manual = Read-Host 'OneDrive folder id'
-                if (-not [string]::IsNullOrWhiteSpace($manual)) {
+                if ($manual -and $manual.Trim() -ieq 'root') {
+                    Write-Host "Literal 'root' is not a valid trigger folder ID; choose 'Use this folder' at the top level instead." -ForegroundColor Yellow
+                } elseif (-not [string]::IsNullOrWhiteSpace($manual)) {
                     return $manual.Trim()
                 }
             }
@@ -274,6 +305,7 @@ if (-not $onedriveFolderId) {
 if ($onedriveFolderId -isnot [string] -or [string]::IsNullOrWhiteSpace($onedriveFolderId)) {
     throw 'OneDrive folderId must be a nonempty string.'
 }
+Assert-OneDriveFolderId $onedriveFolderId
 azd env set ONEDRIVE_FOLDER_ID $onedriveFolderId | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw 'Could not save ONEDRIVE_FOLDER_ID in the selected azd environment. Trigger registration has not started.'
