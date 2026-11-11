@@ -27,7 +27,7 @@ Properties-only events use typed SDK models. The SDK has no payload models for t
 
 ## Deploy to Azure
 
-Run from this folder, using a different environment name from the webhook sample. Use the **connector folder ID**, not a name/path; set `root` explicitly to monitor the root folder. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
+Run from this folder, using a different environment name from the webhook sample. Use the **connector folder ID**, not a name/path or the literal `root` (the connector fails trigger evaluation with `Invalid fileId`); for the root folder, use the root's connector-returned ID. Provisioning stops if `ONEDRIVE_FOLDER_ID` is unset or `root`. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
 
 ```powershell
 az login
@@ -45,7 +45,7 @@ Set environment values with `azd env set <setting> <value>` before `azd up`.
 
 | Setting / action | Use |
 | --- | --- |
-| `ONEDRIVE_FOLDER_ID` | Connector folder ID; defaults to `root` if omitted |
+| `ONEDRIVE_FOLDER_ID` | Required connector-returned folder ID; no default |
 | `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; default `westcentralus` |
 | `TELEMETRY_LOCATION` | Application Insights/Log Analytics region; default `eastus2` because Application Insights is unavailable in `westcentralus` |
 | Bash hook | In `azure.yaml`, set `shell: sh` and `run: bash ./infra/scripts/postdeploy.sh`; requires `jq` |
