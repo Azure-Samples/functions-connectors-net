@@ -38,12 +38,21 @@ connectorNamespaceName=$(read_output connectorNamespaceName)
 connectionName=$(read_output connectorNamespaceConnectionName)
 pollingEndpoint=$(read_output connectorPollingEndpoint)
 triggerConfigName=$(read_output onUpdatedFileTriggerConfigName)
+subscriptionId=$(read_output AZURE_SUBSCRIPTION_ID)
 
 localSettings=$(connector_jq -n --arg endpoint "$pollingEndpoint" --arg trigger "$triggerConfigName" \
     '{IsEncrypted:false,Values:{AzureWebJobsStorage:"UseDevelopmentStorage=true",
       FUNCTIONS_WORKER_RUNTIME:"dotnet-isolated",ConnectorNamespace__pollingEndpoint:$endpoint,
       OnUpdatedFileTriggerConfigName:$trigger}}')
 write_local_settings "$localSettings" "$forceLocalSettings"
+
+connectionUrl="https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/connections/$connectionName?api-version=2026-05-01-preview"
+authSet=$(az rest --method get --url "$connectionUrl" --query properties.parameterValueSet.name -o tsv) ||
+    { echo 'Could not read the Azure Blob connection authentication type.' >&2; exit 1; }
+if [[ "${authSet%$'\r'}" != managedIdentityAuth ]]; then
+    echo 'Azure Blob connection is not configured for managedIdentityAuth. Reprovision to create the MI-specific connection; an existing OAuth connection cannot be validated as managed identity.' >&2
+    exit 1
+fi
 
 get_connection_status() {
     local status
@@ -56,51 +65,16 @@ get_connection_status() {
     printf '%s' "${status%$'\r'}"
 }
 
-status=$(get_connection_status)
-if [[ "$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')" == connected ]]; then
-    echo "Azure Blob connection is already authorized."
-    exit 0
-fi
-
-echo "Authorize Azure Blob with the developer account granted access to the monitored storage account."
-consentParameters="[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
-link=""
-for attempt in 1 2 3 4 5; do
-    if ! link=$(az connector-namespace connection list-consent-links \
-        -g "$resourceGroupName" --namespace "$connectorNamespaceName" --connection-name "$connectionName" \
-        --parameters "$consentParameters" --query 'value[0].link' -o tsv 2>/dev/null); then
-        link=""
-    fi
-    link="${link%$'\r'}"
-    if [[ -z "$link" || "$link" == null ]]; then
-        if ! link=$(az connector-namespace connection list-consent-links \
-            -g "$resourceGroupName" --namespace "$connectorNamespaceName" --connection-name "$connectionName" \
-            --parameters "$consentParameters" --query link -o tsv 2>/dev/null); then
-            link=""
-        fi
-    fi
-    link="${link%$'\r'}"
-    [[ -n "$link" && "$link" != null ]] && break
-    link=""
-    if [[ "$attempt" -lt 5 ]]; then sleep 5; fi
-done
-if [[ -z "$link" ]]; then
-    echo "ERROR: Could not obtain an Azure Blob consent link." >&2
-    exit 1
-fi
-
-echo "Consent URL: $link"
-xdg-open "$link" 2>/dev/null || open "$link" 2>/dev/null || \
-    echo "Could not open the browser. Open the printed consent URL manually."
-
+echo "Checking Azure Blob managed-identity connection readiness (no user consent required)."
 deadline=$((SECONDS + 300))
-while [[ "$SECONDS" -lt "$deadline" ]]; do
-    sleep 3
+while true; do
     status=$(get_connection_status)
-    if [[ "$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')" == connected ]]; then
-        echo "Azure Blob connection authorized. The Poll trigger configuration is provisioned."
+    if [[ "$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')" =~ ^(ready|connected)$ ]]; then
+        echo "Azure Blob managed-identity connection is $status. The Poll trigger configuration is provisioned."
         exit 0
     fi
+    [[ "$SECONDS" -lt "$deadline" ]] || break
+    sleep 5
 done
-echo "ERROR: Timed out waiting for the Azure Blob connection to become Connected." >&2
+echo "ERROR: Timed out waiting for the Azure Blob managed-identity connection to become Ready or Connected. Verify the namespace connection access policy and namespace Storage Blob Data Reader access on the monitored storage account. Allow RBAC propagation, then rerun the hook." >&2
 exit 1
