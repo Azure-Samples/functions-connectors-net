@@ -1,5 +1,4 @@
-// Connector Namespace + Azure Blob connection using Entra ID (OAuth).
-// Requires interactive consent during post-deploy to authenticate.
+// The namespace's system-assigned identity authenticates to Azure Blob Storage.
 
 param name string
 param location string
@@ -21,10 +20,28 @@ resource azureblobConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   properties: {
     connectorName: 'azureblob'
     parameterValueSet: {
-      name: 'tokenBasedAuth'
+      name: 'managedIdentityAuth'
+      values: {}
     }
   }
 }
+
+resource namespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
+  parent: azureblobConnection
+  name: 'namespace-mi'
+  properties: {
+    principal: {
+      type: 'ActiveDirectory'
+      identity: {
+        objectId: connectorNamespace.identity.principalId
+        tenantId: tenant().tenantId
+      }
+    }
+  }
+}
+
+@description('Object ID of the namespace identity used to access source blobs.')
+output principalId string = connectorNamespace.identity.principalId
 
 @description('The resource ID of the Connector Namespace.')
 output resourceId string = connectorNamespace.id
