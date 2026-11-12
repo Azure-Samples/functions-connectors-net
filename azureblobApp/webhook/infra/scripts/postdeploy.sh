@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Post-deployment configuration for the azureblobApp.
 #
-# The Azure Blob connection uses Entra ID (OAuth) authentication.
-# This script authorizes the connection via interactive consent,
-# then configures the trigger pointing at the function's connector webhook URL.
+# The Azure Blob connection uses the namespace's managed identity.
+# This script waits for connection readiness, then configures the webhook trigger.
 
 set -euo pipefail
 umask 077
@@ -89,9 +88,17 @@ if connector_jq -e --arg name "$triggerName" 'index($name) != null' <<<"$existin
     verb=update
 fi
 
-# --- Authorize the Azure Blob connection (OAuth consent) --------------------
+# --- Wait for the managed-identity connection -------------------------------
 echo ""
-echo "Authorizing Azure Blob Storage connection..."
+echo "Checking Azure Blob managed-identity connection readiness (no user consent required)..."
+
+connectionUrl="https://management.azure.com/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/connections/$connectorNamespaceConnectionName?api-version=2026-05-01-preview"
+authSet=$(az rest --method get --url "$connectionUrl" --query properties.parameterValueSet.name -o tsv) ||
+    { echo 'Could not read the Azure Blob connection authentication type.' >&2; exit 1; }
+if [[ "${authSet%$'\r'}" != managedIdentityAuth ]]; then
+    echo 'Azure Blob connection is not configured for managedIdentityAuth. Reprovision to create the MI-specific connection; an existing OAuth connection cannot be validated as managed identity.' >&2
+    exit 1
+fi
 
 get_connection_status() {
     local status
@@ -105,65 +112,23 @@ get_connection_status() {
     printf '%s' "${status%$'\r'}"
 }
 
-currentStatus=$(get_connection_status)
-
-if [ "$(echo "$currentStatus" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
-    echo "   already Connected; skipping consent flow"
-else
-    consentParams="[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
-    link=""
-    for attempt in 1 2 3 4 5; do
-        link=$(az connector-namespace connection list-consent-links \
-            -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-            --connection-name "$connectorNamespaceConnectionName" \
-            --parameters "$consentParams" \
-            --query "value[0].link" -o tsv 2>/dev/null || true)
-        link="${link%$'\r'}"
-
-        if [ -z "$link" ] || [ "$link" = "null" ]; then
-            link=$(az connector-namespace connection list-consent-links \
-                -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
-                --connection-name "$connectorNamespaceConnectionName" \
-                --parameters "$consentParams" \
-                --query "link" -o tsv 2>/dev/null || true)
-            link="${link%$'\r'}"
-        fi
-
-        [ -n "$link" ] && [ "$link" != "null" ] && break
-        link=""
-        if [ "$attempt" -lt 5 ]; then
-            echo "   list-consent-links attempt ${attempt} failed; retrying in 5s..."
-            sleep 5
-        fi
-    done
-
-    if [ -z "$link" ]; then
-        echo "ERROR: could not obtain consent link after retries."
-        exit 1
+deadline=$((SECONDS + 300))
+connected=false
+while true; do
+    status=$(get_connection_status)
+    if [[ "$(printf '%s' "$status" | tr '[:upper:]' '[:lower:]')" =~ ^(ready|connected)$ ]]; then
+        connected=true
+        break
     fi
+    [[ "$SECONDS" -lt "$deadline" ]] || break
+    sleep 5
+done
 
-    echo "   opening browser for OAuth consent..."
-    echo "   (if no tab opens, paste this URL manually: $link)"
-    xdg-open "$link" 2>/dev/null || open "$link" 2>/dev/null || echo "   (could not open browser — please open the URL above manually)"
-
-    deadline=$((SECONDS + 300))
-    authorized=false
-    while [ $SECONDS -lt $deadline ]; do
-        sleep 5
-        status=$(get_connection_status)
-        echo "   status: ${status:-unknown}"
-        if [ "$(echo "$status" | tr '[:upper:]' '[:lower:]')" = "connected" ]; then
-            authorized=true
-            break
-        fi
-    done
-
-    if [ "$authorized" != "true" ]; then
-        echo "ERROR: Connection did not reach 'Connected' status within 5 minutes."
-        exit 1
-    fi
-    echo "   Connection authenticated"
+if [ "$connected" != "true" ]; then
+    echo "ERROR: Timed out waiting for the Azure Blob managed-identity connection to become Ready or Connected. Verify the namespace connection access policy and namespace Storage Blob Data Reader access on the monitored storage account. Allow RBAC propagation, then rerun the hook." >&2
+    exit 1
 fi
+echo "   Managed-identity connection is $status"
 
 # --- Container path for the trigger ----------------------------------------
 containerName="${monitoredContainerName:-connector-input}"

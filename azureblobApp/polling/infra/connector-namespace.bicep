@@ -20,7 +20,22 @@ resource azureblobConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   properties: {
     connectorName: 'azureblob'
     parameterValueSet: {
-      name: 'tokenBasedAuth'
+      name: 'managedIdentityAuth'
+      values: {}
+    }
+  }
+}
+
+resource namespaceAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = {
+  parent: azureblobConnection
+  name: 'namespace-mi'
+  properties: {
+    principal: {
+      type: 'ActiveDirectory'
+      identity: {
+        objectId: connectorNamespace.identity.principalId
+        tenantId: tenantId
+      }
     }
   }
 }
@@ -41,3 +56,4 @@ resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPol
 
 output name string = connectorNamespace.name
 output connectionName string = azureblobConnection.name
+output principalId string = connectorNamespace.identity.principalId

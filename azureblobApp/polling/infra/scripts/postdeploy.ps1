@@ -14,7 +14,7 @@ $outputs = ($raw -join "`n") | ConvertFrom-Json
 
 foreach ($name in @(
     'resourceGroupName', 'connectorNamespaceName', 'connectorNamespaceConnectionName',
-    'connectorPollingEndpoint', 'onUpdatedFileTriggerConfigName')) {
+    'connectorPollingEndpoint', 'onUpdatedFileTriggerConfigName', 'AZURE_SUBSCRIPTION_ID')) {
     if ([string]::IsNullOrWhiteSpace([string]$outputs.$name)) {
         throw "Missing azd output $name. Run azd provision first."
     }
@@ -27,6 +27,13 @@ Write-LocalSettings @{
     OnUpdatedFileTriggerConfigName = $outputs.onUpdatedFileTriggerConfigName
 } -ForceLocalSettings:$ForceLocalSettings
 
+$connectionUrl = "https://management.azure.com/subscriptions/$($outputs.AZURE_SUBSCRIPTION_ID)/resourceGroups/$($outputs.resourceGroupName)/providers/Microsoft.Web/connectorGateways/$($outputs.connectorNamespaceName)/connections/$($outputs.connectorNamespaceConnectionName)?api-version=2026-05-01-preview"
+$authSet = az rest --method get --url $connectionUrl --query 'properties.parameterValueSet.name' -o tsv
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection authentication type.' }
+if ($authSet -ne 'managedIdentityAuth') {
+    throw 'Azure Blob connection is not configured for managedIdentityAuth. Reprovision to create the MI-specific connection; an existing OAuth connection cannot be validated as managed identity.'
+}
+
 function Get-ConnectionStatus {
     $status = az connector-namespace connection show `
         -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
@@ -36,50 +43,15 @@ function Get-ConnectionStatus {
     return $status
 }
 
-if ((Get-ConnectionStatus) -eq 'Connected') {
-    Write-Host 'Azure Blob connection is already authorized.'
-    return
-}
-
-Write-Host 'Authorize Azure Blob with the developer account granted access to the monitored storage account.'
-$consentLink = $null
-for ($attempt = 1; $attempt -le 5; $attempt++) {
-    $consentLink = az connector-namespace connection list-consent-links `
-        -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
-        --connection-name $outputs.connectorNamespaceConnectionName `
-        --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
-        --query 'value[0].link' -o tsv 2>$null
-
-    if (-not $consentLink -or $consentLink -eq 'null') {
-        $consentLink = az connector-namespace connection list-consent-links `
-            -g $outputs.resourceGroupName --namespace $outputs.connectorNamespaceName `
-            --connection-name $outputs.connectorNamespaceConnectionName `
-            --parameters "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]" `
-            --query 'link' -o tsv 2>$null
-    }
-    if ($LASTEXITCODE -eq 0 -and $consentLink -and $consentLink -ne 'null') { break }
-    $consentLink = $null
-    if ($attempt -lt 5) { Start-Sleep -Seconds 5 }
-}
-
-if (-not $consentLink -or $consentLink -eq 'null') {
-    throw 'Could not obtain an Azure Blob consent link.'
-}
-
-Write-Host "Consent URL: $consentLink"
-try {
-    Start-Process $consentLink | Out-Null
-} catch {
-    Write-Warning "Could not open the browser: $_. Open the consent URL manually."
-}
-
+Write-Host 'Checking Azure Blob managed-identity connection readiness (no user consent required).'
 $deadline = (Get-Date).AddMinutes(5)
 do {
-    Start-Sleep -Seconds 3
-    if ((Get-ConnectionStatus) -eq 'Connected') {
-        Write-Host 'Azure Blob connection authorized. The Poll trigger configuration is provisioned.'
+    $status = Get-ConnectionStatus
+    if ($status -in @('Ready', 'Connected')) {
+        Write-Host "Azure Blob managed-identity connection is $status. The Poll trigger configuration is provisioned."
         return
     }
+    Start-Sleep -Seconds 5
 } while ((Get-Date) -lt $deadline)
 
-throw 'Timed out waiting for the Azure Blob connection to become Connected.'
+throw 'Timed out waiting for the Azure Blob managed-identity connection to become Ready or Connected. Verify the namespace connection access policy and namespace Storage Blob Data Reader access on the monitored storage account. Allow RBAC propagation, then rerun the hook.'
