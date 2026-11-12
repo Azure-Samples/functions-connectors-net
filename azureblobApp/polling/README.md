@@ -38,13 +38,13 @@ azd up
 
 Use a different environment from webhook.
 
-The source connection uses the **Connector Namespace's system-assigned managed identity**, not a user's OAuth login. Deployment selects `managedIdentityAuth`, grants the namespace **Storage Blob Data Reader** on the monitored storage account, and adds a connection access policy for that identity. No browser consent is required.
+Blob access uses the **Connector Namespace's system-assigned managed identity**. Deployment selects `managedIdentityAuth`, grants the namespace **Storage Blob Data Reader** on the monitored storage account, and adds a connection access policy for that identity.
 
 The Function App uses its own managed identity to receive events from the namespace. The `AZURE_PRINCIPAL_ID` developer retains **Storage Blob Data Contributor** on the source account for test uploads and a connection access policy for local polling. `az login` / `azd auth login` are still needed for deployment and local developer credentials; they do not authorize the source connection.
 
 The postdeploy hook verifies `managedIdentityAuth` and waits up to five minutes for **Ready** (the managed-identity status) or **Connected**. Storage RBAC may take longer to propagate; connection readiness alone does not prove source access. If polling reports authorization errors, verify the namespace identity's source role and connection access policy, allow propagation, and rerun the hook.
 
-Reprovisioning an existing environment creates a separate connection with a `-mi` suffix and switches the sample trigger to it. An existing OAuth connection retains its authentication mode even when its deployment requests managed identity, so it is preserved rather than reused or deleted. Rerunning the hook alone does not migrate authentication.
+Reprovisioning an existing environment creates a separate connection with a `-mi` suffix and switches the sample trigger to it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
 
 ## Optional configuration
 
