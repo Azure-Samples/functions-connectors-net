@@ -10,5 +10,5 @@ hooks:
   postdeploy:
     shell: pwsh
     run: ./infra/scripts/postdeploy.ps1
-    interactive: true
+    interactive: false
     continueOnError: false

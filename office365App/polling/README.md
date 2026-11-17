@@ -111,7 +111,7 @@ Worker telemetry uses the `ConnectorNamespace` identity settings: the Function A
 
 Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Generate mail/calendar events and check worker logs for `Received <FunctionName> trigger (<Count> items)`; build/deployment success alone is not real-event verification. Delivery is at least once and source detection may be delayed.
 
-Run `azd down --purge` when finished to remove deployed resources. Licensing is provided by the repository's [root LICENSE](../../LICENSE).
+Run `azd down --purge` when finished to remove deployed resources.
 
 ## More
 

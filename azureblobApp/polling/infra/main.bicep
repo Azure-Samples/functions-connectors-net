@@ -2,7 +2,7 @@ targetScope = 'subscription'
 
 @minLength(1)
 @maxLength(64)
-@description('Environment name. Use a different name from the webhook sample.')
+@description('Environment name. Use a unique name per deployment.')
 param environmentName string
 
 @metadata({
@@ -138,6 +138,11 @@ module monitoredStorageAccount 'br/public:avm/res/storage/storage-account:0.32.0
         principalId: userPrincipalId
         principalType: 'User'
       }
+      {
+        roleDefinitionIdOrName: '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+        principalId: connectorNamespace.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
     ]
   }
 }
@@ -161,7 +166,8 @@ module connectorNamespace './connector-namespace.bicep' = {
     name: 'cns-${resourceToken}'
     location: connectorNamespaceLocation
     tags: tags
-    connectionName: 'cnsc-${resourceToken}'
+    // Existing OAuth connections retain their authentication mode on redeployment.
+    connectionName: 'cnsc-${resourceToken}-mi'
     userPrincipalId: userPrincipalId
   }
 }

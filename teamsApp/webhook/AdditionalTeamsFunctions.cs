@@ -4,6 +4,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
 using Microsoft.Extensions.Logging;
+using Azure.Connectors.Sdk.Teams.Models;
 
 namespace TeamsApp;
 
@@ -17,44 +18,44 @@ public class AdditionalTeamsFunctions
     }
 
     [Function("WebhookChatMessageTrigger")]
-    public void OnNewChatMessage([ConnectorTrigger] string payload)
+    public void OnNewChatMessage([ConnectorTrigger] TeamsOnWebhookChatMessageTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookChatMessageTrigger event");
+        _logger.LogInformation("Received WebhookChatMessageTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookNewMessageTrigger")]
-    public void OnNewChatOrChannelMessage([ConnectorTrigger] string payload)
+    public void OnNewChatOrChannelMessage([ConnectorTrigger] TeamsOnWebhookNewMessageTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookNewMessageTrigger event");
+        _logger.LogInformation("Received WebhookNewMessageTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookAtMentionTrigger")]
-    public void OnMention([ConnectorTrigger] string payload)
+    public void OnMention([ConnectorTrigger] TeamsOnWebhookAtMentionTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookAtMentionTrigger event");
+        _logger.LogInformation("Received WebhookAtMentionTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookKeywordTrigger")]
-    public void OnKeywords([ConnectorTrigger] string payload)
+    public void OnKeywords([ConnectorTrigger] TeamsOnWebhookKeywordTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookKeywordTrigger event");
+        _logger.LogInformation("Received WebhookKeywordTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookMessageReactionTrigger")]
-    public void OnReaction([ConnectorTrigger] string payload)
+    public void OnReaction([ConnectorTrigger] TeamsOnWebhookMessageReactionTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookMessageReactionTrigger event");
+        _logger.LogInformation("Received WebhookMessageReactionTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("RecordingTrigger")]
-    public void OnRecordingAvailable([ConnectorTrigger] string payload)
+    public void OnRecordingAvailable([ConnectorTrigger] TeamsOnRecordingTriggerPayload payload)
     {
-        _logger.LogInformation("Received RecordingTrigger event");
+        _logger.LogInformation("Received RecordingTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("TranscriptTrigger")]
-    public void OnTranscriptAvailable([ConnectorTrigger] string payload)
+    public void OnTranscriptAvailable([ConnectorTrigger] TeamsOnTranscriptTriggerPayload payload)
     {
-        _logger.LogInformation("Received TranscriptTrigger event");
+        _logger.LogInformation("Received TranscriptTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

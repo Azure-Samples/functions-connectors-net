@@ -12,7 +12,7 @@ hooks:
     run: |
       $folderId = "$env:ONEDRIVE_FOLDER_ID".Trim()
       if (-not $folderId -or $folderId -ieq 'root') {
-        throw "Set ONEDRIVE_FOLDER_ID to a connector-returned folder ID with 'azd env set'. The literal 'root' is rejected by the connector at runtime ('Invalid fileId'). See README: Folder ID setup."
+        throw "Set ONEDRIVE_FOLDER_ID to a connector-returned folder ID with 'azd env set'. The literal 'root' is rejected by the connector at runtime ('Invalid fileId'). Run ./infra/scripts/resolve-folder-id.ps1 to select one (README: Folder ID setup)."
       }
     continueOnError: false
   postdeploy:

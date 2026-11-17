@@ -12,7 +12,7 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
 - PowerShell 7.3 (.NET 7) or later for the default hook, or Bash with jq 1.6+ for the alternative script
-- Azure permissions to deploy resources and role assignments and authorize the source connection
+- Azure permissions to deploy resources and role assignments
 - For local execution: Functions Core Tools v4 supporting .NET 10 and Azurite.
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
@@ -28,19 +28,20 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
+Run from this folder, using a unique environment name:
+
 ```bash
-cd azureblobApp/polling
 az login
 azd auth login
 azd env new azureblob-polling
 azd up
 ```
 
-Use a different environment from webhook.
+The source connection uses the **Connector Namespace's system-assigned managed identity**; no OAuth consent is required. Deployment grants it **Storage Blob Data Reader** on the monitored account and a connection access policy. The Function App uses its own identity for polling; `AZURE_PRINCIPAL_ID` gets **Storage Blob Data Contributor** for test uploads and connection access for local polling.
 
-Complete OAuth consent with an account granted **Storage Blob Data Contributor** on the source account. Deployment grants this to the `AZURE_PRINCIPAL_ID` developer; grant access separately if consenting as another user. Allow role propagation.
+The postdeploy hook checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**. Readiness does not prove source access: if source polling reports authorization errors, verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation.
 
-Already **Connected** connections skip consent.
+Reprovisioning an existing environment creates a separate `-mi` connection and switches the trigger to it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
 
 ## Optional configuration
 
@@ -51,7 +52,7 @@ Set environment options with `azd env set <name> <value>` before provisioning.
 | `BLOB_CONTAINER_NAME` | Source container; defaults to `connector-input` |
 | `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
 | `APPLICATIONINSIGHTS_LOCATION` | Telemetry region override, for example `eastus2`, when the Functions region lacks Application Insights |
-| `azd hooks run postdeploy` | Rerun setup or consent |
+| `azd hooks run postdeploy` | Regenerate missing local settings and check connection readiness |
 | `bash ./infra/scripts/postdeploy.sh` | Run the Bash alternative |
 | `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings with Bash |
 | `pwsh -File ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` | Regenerate local settings with PowerShell |
@@ -66,7 +67,7 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `azd hooks run postdeploy` in the selected environment. From `azureblobApp/polling`, sign in for local developer credentials:
+   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `azd hooks run postdeploy` in the selected environment. Sign in for local developer credentials:
 
    ```bash
    az login
@@ -85,11 +86,11 @@ If the Function App is already deployed, stop it before running locally to avoid
    func start
    ```
 
-Local settings use developer credentials. Do not copy cloud managed-identity settings locally. Source access uses OAuth.
+Local settings use developer credentials to access the namespace. Do not copy cloud managed-identity settings locally. The source connection continues to use the namespace's managed identity, including when the function runs locally.
 
 ## Verify
 
-Check the connection is **Connected** and `azureblob-onupdatedfile` is **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Upload or modify a blob **after consent**, using the `monitoredStorageAccountName` and `monitoredContainerName` deployment outputs:
+Check the `-mi` connection uses **Managed Identity** and is **Ready** or **Connected**, and `azureblob-onupdatedfile` is **Enabled** in [Connector Namespaces](https://connectors.azure.com/). After provisioning and RBAC propagation, upload or modify a blob using the `monitoredStorageAccountName` and `monitoredContainerName` deployment outputs:
 
 ```bash
 az storage blob upload --auth-mode login --account-name <monitoredStorageAccountName> --container-name <monitoredContainerName> --name sample.txt --file <local-file> --overwrite
