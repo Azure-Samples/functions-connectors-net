@@ -12,7 +12,7 @@
 | [Teams](teamsApp/README.md) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) |
 | [Dataverse](dataverseApp/README.md) | [Microsoft Dataverse (Common Data Service)](https://learn.microsoft.com/connectors/commondataservice/) |
 | [Planner](PlannerApp/README.md) | [Planner](https://learn.microsoft.com/connectors/planner/) |
-| Salesforce | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) |
+| [Salesforce](SalesforceApp/README.md) | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) |
 | [Azure DevOps](AzureDevOpsApp/README.md) | [Azure DevOps (VSTS)](https://learn.microsoft.com/connectors/visualstudioteamservices/) |
 | [Azure Blob](azureblobApp/README.md) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) |
 | [Generic](genericApp/README.md) | [Any connector](https://learn.microsoft.com/connectors/), using raw string payloads |
