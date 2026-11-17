@@ -2,138 +2,158 @@
 
 Azure Functions sample using the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is needed.
 
-Handlers log only the trigger name.
-
 | Function | Connector operation | Description |
 | --- | --- | --- |
-| `OnDataverseRowChanged` | [`SubscribeWebhookTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-a-row-is-added,-modified-or-deleted) | Row added, modified or deleted (default) |
-| `OnDataverseActionPerformed` | [`BusinessEventsTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-an-action-is-performed) | Selected action performed (opt-in) |
-| `OnDataverseRowAdded` | `SubscribeOnNewItems` | When a row is added (opt-in) |
-| `OnDataverseRowModified` | `SubscribeOnUpdatedItems` | When a row is modified (opt-in) |
-| `OnDataverseRowDeleted` | `SubscribeOnDeletedItems` | When a row is deleted (opt-in) |
+| `OnDataverseRowChanged` | [`SubscribeWebhookTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-a-row-is-added,-modified-or-deleted) | Combined row added, modified or deleted |
+| `OnDataverseActionPerformed` | [`BusinessEventsTrigger`](https://learn.microsoft.com/connectors/commondataservice/#when-an-action-is-performed) | Selected action performed |
+| `OnDataverseRowAdded` | `SubscribeOnNewItems` | When a row is added |
+| `OnDataverseRowModified` | `SubscribeOnUpdatedItems` | When a row is modified |
+| `OnDataverseRowDeleted` | `SubscribeOnDeletedItems` | When a row is deleted |
 
-These are the five operations displayed in the Connector Namespace portal. All five handlers use raw `JsonElement`; parse fields for your selected table or action without logging sensitive row values. Row schemas are resolved dynamically for the selected table.
+These are the five operations displayed in the Connector Namespace portal.
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7.3 or later for deployment hooks, including the optional Bash wrapper
+- For deployment hooks: PowerShell 7.3 or later on Windows; Bash and [jq](https://jqlang.org/download/) on macOS/Linux (PowerShell is not required)
 - An Azure subscription with permission to create resources and role assignments
 - A Dataverse organization and an account permitted to register organization-scoped subscriptions
-- For local execution: Functions Core Tools v4 supporting .NET 10 and Azurite
+- For local execution: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local#install-the-azure-functions-core-tools) and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite#install-azurite)
 - The [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
 
 ```powershell
 irm https://aka.ms/connector-namespace-cli-install-ps | iex
 ```
 
+From Bash on macOS or Linux:
+
+```bash
+curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
+```
+
 ## Deploy to Azure
 
-```powershell
+```cmd
 cd dataverseApp\polling
 az login
 azd auth login
 azd env new dataverse-polling
-azd env set DATAVERSE_ENVIRONMENT_URL https://contoso.crm.dynamics.com
 azd up
 ```
 
 Authorize the Dataverse connection in the browser when prompted. Use a different azd environment name for each polling and webhook deployment.
 
-## Optional configuration
+The postdeploy hook runs the PowerShell implementation on Windows and the native Bash implementation on macOS/Linux.
 
-Set values with `azd env set <name> <value>` before `azd up`.
+## Choose and configure triggers
 
-| Setting | Purpose |
-| --- | --- |
-| `DATAVERSE_TABLE_NAME` | Combined-row logical table name; default `account` |
-| `DATAVERSE_ENABLE_SEPARATE_ROW_TRIGGERS=true` | Enable all three separate row operations; default `false` |
-| `DATAVERSE_ENTITY_SET_NAME=<table-selector>` | Separate `table` selector (`Name` from `GetTables`); default `accounts`, verify for your environment |
-| `DATAVERSE_ROW_SCOPE=<scope-selector>` | Required when separate row triggers are enabled; exact string from `GetScopeFilters(dataset, table)`, no default |
-| `AZURE_LOCATION` | Function region; prompted if unset |
-| `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; default `westcentralus` |
-| `TELEMETRY_LOCATION` | Optional monitoring region override |
-| `DATAVERSE_ENABLE_ACTION_TRIGGER=true` | Action-performed; requires all four identifiers below |
+Triggers need source inputs such as an environment, table, scope, or action. After browser authorization, the postdeploy hook asks which of the five triggers to configure, then collects their required inputs. Choose at least one trigger.
 
-For action-performed, supply all four actual event-selector identifiers:
+**Choose the combined row-change trigger OR the separate added/modified/deleted triggers you need.** Configuring both against the same source produces overlapping events: the same change can invoke both handlers.
 
-| Setting | Identifier |
-| --- | --- |
-| `DATAVERSE_EVENT_CATALOG=<catalog>` | Catalog identifier |
-| `DATAVERSE_EVENT_CATEGORY=<category>` | Category identifier |
-| `DATAVERSE_EVENT_TABLE=<logical-table>` | Table identifier accepted by the event selector |
-| `DATAVERSE_EVENT_ACTION=<SDK-message>` | Action's `sdkmessagename` |
+For example (available choices depend on your account and connector metadata):
 
-For separate row subscriptions, select the environment (`dataset`), then the table returned by `GetTables`, then a scope returned by `GetScopeFilters` for that same environment/table in the portal's trigger form. Copy the exact selector values into the settings above; do not assume the combined operation's numeric scope `4` is valid for `SubscribeOn*`. The combined operation continues to use `organization`, logical `entityname`, message `7`, and scope `4`.
+```text
+OnDataverseRowAdded (SubscribeOnNewItems)
+Configure this trigger?
+  [1] Configure
+  [2] Skip
+Enter number ...: 1
 
-Connector Namespace manages the source callback; the sample supplies only `dataset`, `table`, and `scope`, not a callback body. Poll delivery needs no public callback. The modified-row operation's optional column filters are not configured by this sample.
+Environment
+  [1] Contoso development
+Enter number ...: 1
 
-Separate row events overlap the combined subscription. Set an optional trigger's flag to `false` and rerun `azd up` to disable and retain its namespace configuration.
+Table
+  [1] Accounts
+  [2] Contacts
+Enter number ...: 1
+```
+If no usable choices are available, the prompt asks for the exact connector identifier:
 
-Set the flag back to `true` and rerun `azd up` to re-enable the same configuration. An optional configuration that was never created needs no cleanup.
+```text
+No usable options returned for Table. Enter its connector identifier manually, or leave blank to skip.
+Table (Enter to skip this trigger): accounts
+```
 
-The postdeploy hook checks action selectors and its cleanup journal before creating or re-enabling the action configuration. Changed selectors or a missing configuration with a pending cleanup marker are rejected before an action write.
+**Pressing Enter at any prompt skips that entire trigger**, not just that field. Choosing `Skip` does the same. If the trigger has never been configured, skipping it creates nothing. If you configured it on an earlier run and skip it now, the hook disables its Connector Namespace configuration and corresponding function, but does not delete either or disable the entire Function App. Choose at least one trigger; skipping all stops without changing trigger configurations or function settings.
 
-Separate row configurations are created by the postdeploy hook, not Bicep, so the hook can inspect existing bindings before writing. It refuses to overwrite, disable, or adopt same-named legacy `GetOn*_V2` configurations or different selectors/destinations. Use a fresh azd environment, or have an authorized administrator inspect and explicitly clean up the exact old source registrations and namespace configurations before switching. There is no automatic in-place migration. Unchanged optional Poll configurations retain their selectors when their state changes.
+### Rerun or correct a selection
 
-Use a dedicated namespace for this sample, not one containing unrelated registrations.
+Selections are saved in the selected azd environment as `DATAVERSE_POLLING_TRIGGER_INPUTS`. Ordinary `azd up` or `azd hooks run postdeploy` reuses them.
+
+If you chose the wrong environment, table, or action, run either command from this folder to choose your triggers again and regenerate `local.settings.json`. Your new answers change the real trigger configuration resources in your Azure Connector Namespace. The corresponding Azure function settings are also updated.
+
+```powershell
+pwsh -File ./infra/scripts/postdeploy.ps1 -Reconfigure -ForceLocalSettings
+```
+
+```bash
+bash ./infra/scripts/postdeploy.sh --reconfigure --force-local-settings
+```
+
+These commands replace `local.settings.json`, so save any custom values first.
+
+## Verify and test
+
+1. In [Connector Namespaces](https://connectors.azure.com/), check the connection is **Connected** and selected trigger configurations are **Enabled**. Check for source-registration errors or pending initialization before testing; Enabled alone does not prove event delivery.
+
+2. Keep the deployed Function App running for Azure testing. In the Azure portal, open the Function App's **Overview**, find the corresponding connector-trigger function in the functions list, and click **Invocations and more** in its **Monitor** column. After each test below, check for a successful invocation of that function.
+
+3. In [Power Apps](https://make.powerapps.com/), select the Dataverse environment and table you configured. Create a clearly named test row, filling in required fields. Save it, change a field and save again, then delete it when testing is complete. Use a row within your chosen scope, such as one you own for user-scoped triggers. Do not modify business rows.
+
+   | Test operation | Expected function invocation for selected triggers |
+   | --- | --- |
+   | Create a row | `OnDataverseRowChanged` or `OnDataverseRowAdded` |
+   | Modify and save the row | `OnDataverseRowChanged` or `OnDataverseRowModified` |
+   | Delete the row | `OnDataverseRowChanged` or `OnDataverseRowDeleted` |
+
+   Only expect invocations for triggers you selected. If both combined and separate triggers cover that row, both can run for the event. Wait for each expected invocation before the next operation, especially before deletion: Dataverse callbacks are asynchronous, and deleting too early can cancel pending update/action processing. Invocation records can take time to appear; refresh the invocation list as needed.
+
+4. If you selected action-performed, execute the exact configured action using an authorized Dataverse client or application on your test row, where applicable. Creating or editing a row does not necessarily execute that action. Check **Invocations and more** for a successful `OnDataverseActionPerformed` invocation before deleting the row; a successful action response alone does not prove event delivery.
 
 ## Local development
 
-Stop the deployed Function App before running locally to avoid competing listeners.
+Local testing still uses **real Azure and Dataverse resources**: the Connector Namespace, authorized Dataverse connection, and enabled Poll trigger configurations must already exist. Completing [Deploy to Azure](#deploy-to-azure), including its postdeploy prompts, creates the Azure resources and configures your selected triggers. Azurite only emulates local Functions storage; it does not simulate Dataverse events or replace the namespace.
 
-1. Prepare `local.settings.json` from `azd up` in `dataverseApp\polling`.
+Stop the deployed Function App before running locally to avoid competing listeners. Restart it after stopping the local host when you want Azure processing to resume.
 
-   Existing files are preserved. If missing, run `azd hooks run postdeploy`; after changing trigger selection, regenerate with `pwsh .\infra\scripts\postdeploy.ps1 -ForceLocalSettings`.
+1. A successful `azd up` creates `local.settings.json` in `dataverseApp\polling` if it does not already exist. If the file is missing, outdated, or you chose the wrong triggers, use the commands in [Rerun or correct a selection](#rerun-or-correct-a-selection) to choose your triggers again and regenerate it.
 
 2. Sign in as the provisioned developer principal:
 
-   ```powershell
+   ```cmd
    az login
    ```
 
 3. Start Azurite in a separate terminal:
 
-   ```powershell
+   ```cmd
    azurite
    ```
 
 4. Start the local host:
 
-   ```powershell
+   ```cmd
    dotnet build
    func start
    ```
 
-Local access uses developer credentials, not the deployed managed identity. The optional `postdeploy.sh` wrapper also requires PowerShell.
+The locally running Functions host uses your developer credentials from `az login` to authenticate to the Connector Namespace and poll events. The deployed Azure Function App uses its managed identity instead.
 
-## Verify
-
-In [Connector Namespaces](https://connectors.azure.com/), check the connection is **Connected** and selected configurations are **Enabled** with Poll delivery.
-
-Initialization can be asynchronous: inspect source errors or pending status, then rerun `azd hooks run postdeploy` after initialization. Latest execution status is not delivery proof; do not recreate an action just to clear an earlier failure.
-
-Create a new, clearly named sample-owned row, modify it, then delete it. Look for `Received OnDataverseRowChanged trigger` for each event and the corresponding separate handler logs if enabled. Observe each expected invocation before moving to the next step, especially before deleting the row: Dataverse processes callbacks asynchronously, and deleting the fixture too early can cancel pending update/action callback-expansion jobs.
-
-Verify action-performed only with an authorized action on your own fixture. Wait for `Received OnDataverseActionPerformed trigger` before deleting that fixture; HTTP success from the action alone does not establish event delivery. Do not modify business rows.
+With the host running, follow [Verify and test](#verify-and-test) to generate real Dataverse events and check the local terminal for the expected logs. Starting `func start` alone does not generate an event.
 
 ## Cleanup
-
-Ordinary opt-out disables and retains optional configurations, including action-performed. It does not require manual source cleanup.
-
-### Action subscription cleanup
-
-Permanent teardown or changing action selectors is different: removing a namespace configuration does not prove its Dataverse source callback is inactive or deleted.
-
-Before replacing an action subscription, have an authorized administrator verify exact-owned source cleanup using supported source evidence. Preserve its cleanup marker until confirmed, including after a failed first creation; a readable callback row alone does not establish whether it is active.
-
-### Azure resources
 
 Remove this environment's Azure resources from this folder:
 
 ```powershell
+azd down --purge
+```
+
+```bash
 azd down --purge
 ```
 
