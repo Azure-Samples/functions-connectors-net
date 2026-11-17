@@ -132,5 +132,5 @@ azd down --purge
 
 ## More
 
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
 - [SharePoint Online connector reference](https://learn.microsoft.com/connectors/sharepointonline/)
