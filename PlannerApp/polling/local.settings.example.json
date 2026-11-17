@@ -1,0 +1,12 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "ConnectorNamespace__pollingEndpoint": "<connector namespace polling endpoint>",
+    "OnNewTaskTriggerConfigName": "planner-onnewtask",
+    "OnCompleteTaskTriggerConfigName": "planner-oncompletetask",
+    "OnTaskAssignedToMeTriggerConfigName": "planner-ontaskassignedtome",
+    "AzureWebJobs.OnTaskAssignedToMe.Disabled": "true"
+  }
+}
