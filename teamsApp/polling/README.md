@@ -1,6 +1,6 @@
 # Microsoft Teams Polling Triggers (.NET)
 
-Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. Typed handlers log only `Received <FunctionName> trigger ({Count} items)`; raw handlers log the event name only.
+Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. All handlers use typed payloads and log the event name and item count.
 
 | Function | Connector operation | Description |
 | --- | --- | --- |
@@ -8,15 +8,15 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 | `OnNewChannelMessageMentioningMe` | [`OnNewChannelMessageMentioningMe`](https://learn.microsoft.com/connectors/teams/#when-i-am-mentioned-in-a-channel-message) | Channel message mentioning the connection user |
 | `OnGroupMembershipAdd` | [`OnGroupMembershipAdd`](https://learn.microsoft.com/connectors/teams/#when-a-new-team-member-is-added) | Team member added |
 | `OnGroupMembershipRemoval` | [`OnGroupMembershipRemoval`](https://learn.microsoft.com/connectors/teams/#when-a-new-team-member-is-removed) | Team member removed |
-| `WebhookChatMessageTrigger` | [`WebhookChatMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-chat-message-is-added) | New chat message (opt-in, raw JSON) |
-| `WebhookNewMessageTrigger` | [`WebhookNewMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-message-is-added-to-a-chat-or-channel) | New chat/channel message (opt-in, raw JSON) |
-| `WebhookAtMentionTrigger` | [`WebhookAtMentionTrigger`](https://learn.microsoft.com/connectors/teams/#when-i'm-@mentioned) | @mention (opt-in, raw JSON) |
-| `WebhookKeywordTrigger` | [`WebhookKeywordTrigger`](https://learn.microsoft.com/connectors/teams/#when-keywords-are-mentioned) | Keyword mention (opt-in, raw JSON) |
-| `WebhookMessageReactionTrigger` | [`WebhookMessageReactionTrigger`](https://learn.microsoft.com/connectors/teams/#when-someone-reacted-to-a-message-in-chat) | Message reaction (opt-in, raw JSON) |
-| `RecordingTrigger` | [`RecordingTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-recording-is-available) | Recording available (opt-in, raw JSON) |
-| `TranscriptTrigger` | [`TranscriptTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-transcript-is-available) | Transcript available (opt-in, raw JSON) |
+| `WebhookChatMessageTrigger` | [`WebhookChatMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-chat-message-is-added) | New chat message (opt-in) |
+| `WebhookNewMessageTrigger` | [`WebhookNewMessageTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-new-message-is-added-to-a-chat-or-channel) | New chat/channel message (opt-in) |
+| `WebhookAtMentionTrigger` | [`WebhookAtMentionTrigger`](https://learn.microsoft.com/connectors/teams/#when-i'm-@mentioned) | @mention (opt-in) |
+| `WebhookKeywordTrigger` | [`WebhookKeywordTrigger`](https://learn.microsoft.com/connectors/teams/#when-keywords-are-mentioned) | Keyword mention (opt-in) |
+| `WebhookMessageReactionTrigger` | [`WebhookMessageReactionTrigger`](https://learn.microsoft.com/connectors/teams/#when-someone-reacted-to-a-message-in-chat) | Message reaction (opt-in) |
+| `RecordingTrigger` | [`RecordingTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-recording-is-available) | Recording available (opt-in) |
+| `TranscriptTrigger` | [`TranscriptTrigger`](https://learn.microsoft.com/connectors/teams/#when-a-transcript-is-available) | Transcript available (opt-in) |
 
-SDK 0.15.0-preview.1 provides typed callback wrappers only for the first four events. The seven approved `string` bindings are explicit exceptions: no parsing, inferred counts or input/action-response models substitute for missing callback wrappers. See the [pinned SDK source](https://github.com/Azure/Connectors-NET-SDK/blob/b2ff0f84b9a52b616eba0fcf82264949f5c99afa/src/Azure.Connectors.Sdk/Generated/TeamsExtensions.cs). `Webhook` operation-name prefixes describe source subscriptions, not Functions delivery.
+`WebhookNewMessageTrigger`, `WebhookAtMentionTrigger`, and `WebhookKeywordTrigger` use dynamic schemas, with item fields exposed through `AdditionalProperties`. See [webhook callback schemas](https://github.com/Azure/Connectors-NET-SDK/blob/main/docs/triggers.md#webhook-callback-schemas). `Webhook` operation-name prefixes describe source subscriptions, not Functions delivery.
 
 ## Prerequisites
 

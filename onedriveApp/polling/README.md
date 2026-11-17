@@ -27,13 +27,23 @@ Properties-only events use typed SDK models. The SDK has no payload models for t
 
 ## Deploy to Azure
 
-Run from this folder, using a different environment name from the webhook sample. Use the **connector folder ID**, not a name/path or the literal `root` (the connector fails trigger evaluation with `Invalid fileId`); for the root folder, use the root's connector-returned ID. Provisioning stops if `ONEDRIVE_FOLDER_ID` is unset or `root`. See [Folder ID setup](#folder-id-setup) if you need to resolve it.
+Run from this folder, using a unique environment name. Use the **connector folder ID**, not a name/path or the literal `root` (the connector fails trigger evaluation with `Invalid fileId`); for the root folder, use the root's connector-returned ID. Provisioning stops if `ONEDRIVE_FOLDER_ID` is unset or `root`.
 
 ```powershell
 az login
 azd auth login
 azd env new onedrive-polling
+```
+
+Set `ONEDRIVE_FOLDER_ID` directly:
+
+```powershell
 azd env set ONEDRIVE_FOLDER_ID <connector-folder-id>
+```
+
+Or use [Folder ID setup](#folder-id-setup) to select and save it. Then deploy:
+
+```powershell
 azd up
 ```
 
@@ -54,22 +64,15 @@ Set environment values with `azd env set <setting> <value>` before `azd up`.
 
 ### Folder ID setup
 
-Resolve the ID through an authorized connection before provisioning. If you have none:
-
-1. Deploy the [webhook sample](../webhook/README.md) in a separate environment and complete OAuth/folder selection.
-2. From the webhook folder, read the selected folder ID:
-
-   ```powershell
-   azd env get-value ONEDRIVE_FOLDER_ID
-   ```
-
-3. Use that ID in the polling deployment commands above.
-
-When no longer needed, remove the selected bootstrap environment from the webhook folder:
+Resolve the ID through an authorized OneDrive for Business connection before provisioning. From this folder, after `azd env new`:
 
 ```powershell
-azd down --purge
+./infra/scripts/resolve-folder-id.ps1 -ResourceGroup <resource-group>
 ```
+
+The script creates a temporary Connector Namespace and connection in `<resource-group>`, prompts for OAuth, lets you browse to a folder, and saves `ONEDRIVE_FOLDER_ID` in the azd environment. It deletes the temporary namespace unless `-KeepBootstrap` is set. If the resource group does not exist, the script creates it but does not delete it.
+
+To reuse an existing connection instead, pass `-ResourceGroup`, `-ConnectorNamespace`, and `-ConnectionName`. After this environment is provisioned, run the script with no arguments to select a folder using its connection, then run `azd provision`.
 
 ## Local development
 

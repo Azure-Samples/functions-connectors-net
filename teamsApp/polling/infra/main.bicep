@@ -2,7 +2,7 @@ targetScope = 'subscription'
 
 @minLength(1)
 @maxLength(64)
-@description('Environment name. Use a different name from the webhook sample.')
+@description('Environment name. Use a unique name per deployment.')
 param environmentName string
 
 @metadata({

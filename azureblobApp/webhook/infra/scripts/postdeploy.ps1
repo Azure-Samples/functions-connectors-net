@@ -1,10 +1,8 @@
 #requires -Version 7.3
 # Post-deployment configuration for the azureblobApp.
 #
-# The Azure Blob connection uses Entra ID (OAuth) authentication.
-# This script authorizes the connection via interactive consent,
-# then configures the trigger pointing to the function's
-# connector webhook URL.
+# The Azure Blob connection uses the namespace's managed identity.
+# This script waits for connection readiness, then configures the webhook trigger.
 
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow
 $ErrorActionPreference = 'Stop'
@@ -59,75 +57,36 @@ if ($triggerName -in $existing) {
     $verb = 'update'
 }
 
-# --- Authorize the Azure Blob connection (OAuth consent) --------------------
+# --- Wait for the managed-identity connection -------------------------------
 Write-Host ""
-Write-Host "Authorizing Azure Blob Storage connection..." -ForegroundColor Yellow
+Write-Host "Checking Azure Blob managed-identity connection readiness (no user consent required)..." -ForegroundColor Yellow
 
-$currentStatus = az connector-namespace connection show `
-    -g $resourceGroupName --namespace $connectorNamespaceName `
-    -n $connectorNamespaceConnectionName `
-    --query "properties.overallStatus" -o tsv 2>$null
-if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection status.' }
-
-if ($currentStatus -and $currentStatus.ToLower() -eq 'connected') {
-    Write-Host "   already Connected; skipping consent flow" -ForegroundColor Green
-} else {
-    $consentParameters = "[{parameterName:token,redirectUrl:'https://connectors.azure.com'}]"
-    $link = $null
-
-    for ($i = 0; $i -lt 5; $i++) {
-        $link = az connector-namespace connection list-consent-links `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            --connection-name $connectorNamespaceConnectionName `
-            --parameters $consentParameters `
-            --query "value[0].link" -o tsv 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $link -or $link -eq 'null') {
-            $link = az connector-namespace connection list-consent-links `
-                -g $resourceGroupName --namespace $connectorNamespaceName `
-                --connection-name $connectorNamespaceConnectionName `
-                --parameters $consentParameters `
-                --query "link" -o tsv 2>$null
-        }
-        if ($LASTEXITCODE -eq 0 -and $link -and $link -ne 'null') { break }
-        $link = $null
-
-        if ($i -lt 4) {
-            Write-Host "   list-consent-links attempt $($i + 1) failed; retrying in 5s..." -ForegroundColor Yellow
-            Start-Sleep -Seconds 5
-        }
-    }
-
-    if (-not $link) {
-        Write-Host "ERROR: could not obtain consent link after retries." -ForegroundColor Red
-        exit 1
-    }
-
-    Write-Host "   opening browser for OAuth consent..." -ForegroundColor Cyan
-    Write-Host "   (if no tab opens, paste this URL manually: $link)" -ForegroundColor Cyan
-    try { Start-Process $link | Out-Null } catch { Write-Warning "Could not open the browser: $_. Open the printed consent URL manually." }
-
-    $deadline = (Get-Date).AddMinutes(5)
-    $authorized = $false
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 5
-        $status = az connector-namespace connection show `
-            -g $resourceGroupName --namespace $connectorNamespaceName `
-            -n $connectorNamespaceConnectionName `
-            --query "properties.overallStatus" -o tsv 2>$null
-        if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection status.' }
-        Write-Host "   status: $status"
-        if ($status -and $status.ToLower() -eq 'connected') {
-            $authorized = $true
-            break
-        }
-    }
-
-    if (-not $authorized) {
-        Write-Host "ERROR: Connection did not reach 'Connected' status within 5 minutes." -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "   Connection authenticated" -ForegroundColor Green
+$connectionUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Web/connectorGateways/$connectorNamespaceName/connections/$($connectorNamespaceConnectionName)?api-version=2026-05-01-preview"
+$authSet = az rest --method get --url $connectionUrl --query 'properties.parameterValueSet.name' -o tsv
+if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection authentication type.' }
+if ($authSet -ne 'managedIdentityAuth') {
+    throw 'Azure Blob connection is not configured for managedIdentityAuth. Reprovision to create the MI-specific connection; an existing OAuth connection cannot be validated as managed identity.'
 }
+
+$deadline = (Get-Date).AddMinutes(5)
+$connected = $false
+do {
+    $status = az connector-namespace connection show `
+        -g $resourceGroupName --namespace $connectorNamespaceName `
+        -n $connectorNamespaceConnectionName `
+        --query "properties.overallStatus" -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read the Azure Blob connection status.' }
+    if ($status -in @('Ready', 'Connected')) {
+        $connected = $true
+        break
+    }
+    Start-Sleep -Seconds 5
+} while ((Get-Date) -lt $deadline)
+
+if (-not $connected) {
+    throw 'Timed out waiting for the Azure Blob managed-identity connection to become Ready or Connected. Verify the namespace connection access policy and namespace Storage Blob Data Reader access on the monitored storage account. Allow RBAC propagation, then rerun the hook.'
+}
+Write-Host "   Managed-identity connection is $status" -ForegroundColor Green
 
 # --- Container path for the trigger ----------------------------------------
 $containerName  = $outputs.monitoredContainerName

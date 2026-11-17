@@ -44,7 +44,8 @@ var storageAccountName = '${abbrs.storageStorageAccounts}${resourceToken}'
 var logAnalyticsName = '${abbrs.operationalInsightsWorkspaces}${resourceToken}'
 var appInsightsName = '${abbrs.insightsComponents}${resourceToken}'
 var connectorNamespaceName = '${abbrs.connectorNamespaces}${resourceToken}'
-var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}'
+// Existing OAuth connections retain their authentication mode on redeployment.
+var connectorNamespaceConnectionName = '${abbrs.connectorNamespacesConnections}${resourceToken}-mi'
 var monitoredStorageAccountName = '${abbrs.storageStorageAccounts}mon${take(resourceToken, 20)}'
 
 var deploymentStorageContainerName = 'app-package-${take(functionAppName, 32)}-${take(toLower(uniqueString(functionAppName, environmentName)), 7)}'
@@ -166,11 +167,16 @@ module monitoredStorageAccount 'br/public:avm/res/storage/storage-account:0.32.0
         principalId: userPrincipalId
         principalType: 'User'
       }
+      {
+        roleDefinitionIdOrName: '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+        principalId: connectorNamespace.outputs.principalId
+        principalType: 'ServicePrincipal'
+      }
     ]
   }
 }
 
-// Connector Namespace + azureblob connection (Entra ID OAuth).
+// Connector Namespace + Azure Blob connection using the namespace's managed identity.
 module connectorNamespace './connector-namespace.bicep' = {
   scope: rg
   name: connectorNamespaceName
