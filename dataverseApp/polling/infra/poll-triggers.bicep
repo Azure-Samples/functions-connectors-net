@@ -5,16 +5,9 @@ param functionAppName string
 param environmentUrl string
 param tableName string = 'account'
 param enableSeparateRowTriggers bool = false
-@minLength(1)
-param entitySetName string = 'accounts'
 param enableActionTrigger bool = false
 
 var organization = endsWith(environmentUrl, '/') ? substring(environmentUrl, 0, length(environmentUrl) - 1) : environmentUrl
-var separateTriggers = [
-  { functionName: 'OnDataverseRowAdded', operationName: 'GetOnNewItems_V2' }
-  { functionName: 'OnDataverseRowModified', operationName: 'GetOnUpdatedItems_V2' }
-  { functionName: 'OnDataverseRowDeleted', operationName: 'GetOnDeletedItems_V2' }
-]
 
 resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
   name: namespaceName
@@ -45,30 +38,6 @@ resource rowTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-p
     description: 'Current Dataverse added, modified, or deleted operation with Poll delivery.'
   }
 }
-
-resource separateRowTriggers 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in separateTriggers: if (enableSeparateRowTriggers) {
-  parent: connectorNamespace
-  name: 'dataverse-${toLower(trigger.functionName)}'
-  properties: {
-    connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
-    deliveryMode: 'Poll'
-    operationName: trigger.operationName
-    metadata: {
-      destinationType: 'functionApp'
-      functionAppName: functionAppName
-      functionAppResourceGroup: resourceGroup().name
-      functionAppSubscriptionId: subscription().subscriptionId
-      functionName: trigger.functionName
-    }
-    parameters: [
-      { name: 'dataset', value: organization }
-      { name: 'table', value: entitySetName }
-    ]
-    state: 'Enabled'
-    type: 'NotSpecified'
-    description: 'Opt-in separate row-added, row-modified or row-deleted Dataverse operation exposed by Connector Namespace.'
-  }
-}]
 
 var receiveUri = split(string(rowTrigger.properties.pollingEndpoints.receiveUri), '?')[0]
 var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
