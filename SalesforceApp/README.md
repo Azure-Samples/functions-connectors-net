@@ -9,7 +9,7 @@ Receive Salesforce record-created and record-modified events in two independent 
 
 See the [Salesforce connector reference](https://learn.microsoft.com/connectors/salesforce/#triggers) for trigger details. Required parameter: `table` (exact object API name returned by `GetTables`). Optional parameters: `$filter`, `$orderby`, `$select`; these are OData queries, not SOQL. The connector resolves its internal `connectionId` from the connection resource; it is not a trigger parameter. Avoid nullable sort fields. Keep `Id`, `CreatedDate` and `LastModifiedDate` readable; the connector documentation warns that updated-item tracking can include newly created records and needs the date fields. Modification detection does not detect attachment changes.
 
-The configured NuGet feed was checked on 2026-10-30: SDK `0.15.0-preview.1`, Connector `1.0.0`, Worker `2.52.0`, Worker SDK `2.1.0`, and Microsoft.Extensions.Azure `1.14.1`. Both handlers bind released SDK collections (`payload.Body.Value`) and log only the actual collection count and trigger name. Missing collections fail explicitly rather than inventing a zero count. Dynamic object fields remain in SDK `Item` models; no raw binding workaround is needed.
+Both apps use Azure.Connectors.Sdk `1.0.0`, Connector `1.0.0`, Worker `2.52.0`, Worker SDK `2.1.0`, and Microsoft.Extensions.Azure `1.14.1`. Both handlers bind released SDK collections (`payload.Body.Value`) and log only the actual collection count and trigger name. Missing collections fail explicitly rather than inventing a zero count. Dynamic object fields remain in SDK `Item` models; no raw binding workaround is needed.
 
 ## Salesforce account and testability
 
@@ -26,13 +26,13 @@ The consenting user needs **API Enabled**, read access to the chosen object and 
 | Live record-created/modified delivery in either mode | No: requires approved Azure subscription/region and Salesforce org/object, authorized connection and enabled trigger configs |
 | Native Salesforce CDC/Platform Events/outbound messages | Not implemented by these connector operations |
 
-No accessible Salesforce org was established during implementation: no org was supplied, no `sf` CLI was installed, and no Salesforce environment configuration names were present. A read-only inventory of all 24 accessible Connector Namespaces in the current Azure subscription found no Salesforce connections; other subscriptions and browser sessions were not inspected. A signed-in Azure CLI account is not evidence of a Salesforce connection. No Azure deployment, Salesforce consent, record creation/update, or org administration was performed.
+Live Salesforce delivery has not been validated. A signed-in Azure CLI account, Connected connection or Enabled trigger is not proof of source delivery: after explicit target approval, create and modify an owned record and verify actual handler receipts. No Azure deployment, Salesforce consent, record creation/update, or org administration was performed during this implementation.
 
 ## Azure identity
 
 Each standalone app has a system-assigned managed identity, used for Flex deployment storage, identity-based host storage and AAD-only Application Insights. Worker telemetry obtains its credential through DI `AzureComponentFactory` from the named `ConnectorNamespace` configuration: deployed `managedidentity` without client/resource selectors, standard developer fallback locally. The namespace retains its **own distinct** system identity. Post-app access policies and storage/monitoring roles use the actual app principal, independently of the namespace and Poll trigger modules. These Azure policies never replace Salesforce OAuth. The selected developer receives connection access and storage/monitoring roles for local development; its default principal type is `User`.
 
-Use separate azd environments for the two modes. Commands in each quickstart provision resources or change trigger delivery; run them only after explicit Azure and Salesforce target approval. License: repository root [LICENSE](../LICENSE).
+Use separate, uniquely named azd environments for the two modes. Commands in each quickstart provision resources or change trigger delivery; run them only after explicit Azure and Salesforce target approval.
 
 ## Offline checks
 
