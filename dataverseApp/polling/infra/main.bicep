@@ -10,39 +10,30 @@ param environmentName string
     type: 'location'
   }
 })
-@description('Location for all resources except the Connector Namespace.')
+@minLength(1)
+@description('Region for the Function App, storage account, and resource group.')
 param location string
 
-@description('Optional region for Application Insights and Log Analytics when unavailable in the Function region.')
-param telemetryLocation string = ''
-
-@description('Region for the Connector Namespace. Override via CONNECTOR_NAMESPACE_LOCATION if needed.')
-param connectorNamespaceLocation string = 'westcentralus'
-
+@metadata({
+  azd: {
+    type: 'location'
+  }
+})
 @minLength(1)
-@description('Dataverse org URL, e.g. https://contoso.crm.dynamics.com. Required to provision the Poll trigger.')
-param dataverseEnvironmentUrl string
+@description('Region for Application Insights and Log Analytics.')
+param telemetryLocation string
 
-@description('Dataverse logical table name for combined row changes, e.g. account (not the accounts entity set).')
-param dataverseTableName string = 'account'
-
-@description('Opt in to all three separate row-added, row-modified and row-deleted operations. Overlaps combined row events without adding always-ready instances.')
-param enableSeparateRowTriggers bool = false
+@metadata({
+  azd: {
+    type: 'location'
+  }
+})
 @minLength(1)
-@description('Table Name selector returned by GetTables for the selected environment; distinct from the combined logical table name.')
-param dataverseEntitySetName string = 'accounts'
-
-@description('Exact scope string returned by GetScopeFilters for the selected environment and table. Required when separate row triggers are enabled.')
-param dataverseRowScope string = ''
-
-param enableActionTrigger bool = false
-param eventCatalog string = ''
-param eventCategory string = ''
-param eventTable string = ''
-param eventAction string = ''
+@description('Region for the Connector Namespace.')
+param connectorNamespaceLocation string
 
 metadata name = 'Azure Functions Microsoft Dataverse Poll Delivery (.NET)'
-metadata description = 'Dataverse combined row changes, optional separate row operations and action-performed events with Poll delivery.'
+metadata description = 'Dataverse events with interactive postdeploy selection and Poll delivery.'
 
 @description('Id of the user identity to be used for testing and debugging. Granted access to the Dataverse connection so the same code can be debugged locally with `az login`.')
 @metadata({
@@ -55,7 +46,6 @@ param userPrincipalId string = deployer().objectId
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
-var effectiveTelemetryLocation = empty(telemetryLocation) ? location : telemetryLocation
 
 var functionAppName = '${abbrs.webSitesFunctions}${resourceToken}'
 var functionAppPlanName = '${abbrs.webServerFarms}${resourceToken}'
@@ -83,7 +73,7 @@ module logAnalytics 'br/public:avm/res/operational-insights/workspace:0.15.0' = 
   scope: rg
   params: {
     name: logAnalyticsName
-    location: effectiveTelemetryLocation
+    location: telemetryLocation
     tags: tags
     dataRetention: 30
   }
@@ -94,7 +84,7 @@ module monitoring 'br/public:avm/res/insights/component:0.7.1' = {
   scope: rg
   params: {
     name: appInsightsName
-    location: effectiveTelemetryLocation
+    location: telemetryLocation
     tags: tags
     workspaceResourceId: logAnalytics.outputs.resourceId
     disableLocalAuth: true
@@ -172,28 +162,24 @@ module connectorNamespace './connector-namespace.bicep' = {
   }
 }
 
-module pollTriggers './poll-triggers.bicep' = {
-  scope: rg
-  name: '${connectorNamespaceName}-poll-triggers'
-  params: {
-    functionAppName: functionAppName
-    namespaceName: connectorNamespace.outputs.name
-    connectionName: connectorNamespace.outputs.connectionName
-    environmentUrl: dataverseEnvironmentUrl
-    tableName: dataverseTableName
-    enableSeparateRowTriggers: enableSeparateRowTriggers
-    enableActionTrigger: enableActionTrigger
-  }
-}
-
-var allAppSettings = union({
+// Postdeploy creates selected Poll configurations, derives their endpoint, then enables listeners.
+var allAppSettings = {
   AzureWebJobsStorage__credential: 'managedidentity'
   AzureWebJobsStorage__accountName: storageAccount.outputs.name
   APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
   APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
   ConnectorNamespace__credential: 'managedidentity'
-  ConnectorNamespace__pollingEndpoint: pollTriggers.outputs.pollingEndpoint
-}, pollTriggers.outputs.triggerConfigSettings)
+  OnDataverseRowChangedTriggerConfigName: 'dataverse-ondataverserowchanged'
+  OnDataverseActionPerformedTriggerConfigName: 'dataverse-ondataverseactionperformed'
+  OnDataverseRowAddedTriggerConfigName: 'dataverse-ondataverserowadded'
+  OnDataverseRowModifiedTriggerConfigName: 'dataverse-ondataverserowmodified'
+  OnDataverseRowDeletedTriggerConfigName: 'dataverse-ondataverserowdeleted'
+  'AzureWebJobs.OnDataverseRowChanged.Disabled': 'true'
+  'AzureWebJobs.OnDataverseActionPerformed.Disabled': 'true'
+  'AzureWebJobs.OnDataverseRowAdded.Disabled': 'true'
+  'AzureWebJobs.OnDataverseRowModified.Disabled': 'true'
+  'AzureWebJobs.OnDataverseRowDeleted.Disabled': 'true'
+}
 
 module functionApp 'br/public:avm/res/web/site:0.22.0' = {
   scope: rg
@@ -281,20 +267,5 @@ output connectorNamespaceName string = connectorNamespace.outputs.name
 @description('The name of the Dataverse connection on the Connector Namespace.')
 output connectorNamespaceConnectionName string = connectorNamespace.outputs.connectionName
 
-@description('The name of the Azure Function that handles the Dataverse trigger.')
-output dataverseFunctionName string = 'OnDataverseRowChanged'
-
-@description('The Dataverse environment URL monitored by the trigger.')
-output dataverseEnvironmentUrl string = dataverseEnvironmentUrl
-
-@description('The Dataverse logical table name monitored by the trigger.')
-output dataverseTableName string = dataverseTableName
-output dataverseEntitySetName string = dataverseEntitySetName
-output dataverseRowScope string = dataverseRowScope
-
-output connectorPollingEndpoint string = pollTriggers.outputs.pollingEndpoint
-output triggerConfigSettings object = pollTriggers.outputs.triggerConfigSettings
-output eventCatalog string = eventCatalog
-output eventCategory string = eventCategory
-output eventTable string = eventTable
-output eventAction string = eventAction
+output connectorNamespaceResourceId string = connectorNamespace.outputs.resourceId
+output connectorNamespaceLocation string = connectorNamespaceLocation
