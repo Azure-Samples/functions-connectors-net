@@ -4,6 +4,7 @@ param([switch] $ForceLocalSettings)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'local-settings.ps1')
 . (Join-Path $PSScriptRoot 'action-cleanup.ps1')
+. (Join-Path $PSScriptRoot 'row-config.ps1')
 
 if (-not (az extension show --name connector-namespace --query name -o tsv 2>$null)) {
     throw 'Install the connector-namespace Azure CLI extension before running this script.'
@@ -44,16 +45,16 @@ foreach ($functionName in @(
 }
 $optionalTriggers = @(
     @{ functionName = 'OnDataverseActionPerformed'; operationName = 'BusinessEventsTrigger' }
-    @{ functionName = 'OnDataverseRowAdded'; operationName = 'GetOnNewItems_V2' }
-    @{ functionName = 'OnDataverseRowModified'; operationName = 'GetOnUpdatedItems_V2' }
-    @{ functionName = 'OnDataverseRowDeleted'; operationName = 'GetOnDeletedItems_V2' }
-)
+) + @(Get-DataverseSeparateRowTriggers)
 foreach ($trigger in $optionalTriggers) {
     $setting = "AzureWebJobs.$($trigger.functionName).Disabled"
     if ([string]$triggerSettings.$setting -notin @('true', 'false')) {
         throw "Missing or invalid $setting in triggerConfigSettings."
     }
     $localValues[$setting] = [string]$triggerSettings.$setting
+}
+$rowParameters = if ($localValues['AzureWebJobs.OnDataverseRowAdded.Disabled'] -eq 'false') {
+    @(Get-DataverseRowParameters $outputs)
 }
 $actionContext = Get-DataverseActionContext $outputs Poll
 $actionJournal = Get-DataverseActionJournal (Join-Path $PSScriptRoot '../..') $actionContext
@@ -90,6 +91,14 @@ foreach ($node in $inventoryDom['value'].AsArray()) {
     $configNodes[$node['name'].ToString()] = $node
 }
 $configs = $inventoryJson | ConvertFrom-Json -AsHashtable
+# Validate every separate row binding before any optional configuration is changed.
+foreach ($trigger in Get-DataverseSeparateRowTriggers) {
+    $name = $triggerSettings."$($trigger.functionName)TriggerConfigName"
+    if ($name -cne "dataverse-$($trigger.functionName.ToLowerInvariant())") { throw 'Unexpected Dataverse row configuration name.' }
+    $existing = @($configs.value | Where-Object name -EQ $name)
+    if ($existing.Count -gt 1) { throw "Ambiguous Dataverse configuration '$name'." }
+    if ($existing.Count -eq 1) { Assert-DataverseRowConfig $existing[0] $trigger $outputs Poll }
+}
 foreach ($trigger in $optionalTriggers) {
     $name = $triggerSettings."$($trigger.functionName)TriggerConfigName"
     $desiredState = if ($localValues["AzureWebJobs.$($trigger.functionName).Disabled"] -eq 'true') { 'Disabled' } else { 'Enabled' }
@@ -99,7 +108,6 @@ foreach ($trigger in $optionalTriggers) {
     $isAction = $trigger.operationName -eq 'BusinessEventsTrigger'
     if ($creating) {
         if ($desiredState -eq 'Disabled') { continue }
-        if (-not $isAction) { throw "Selected Dataverse configuration '$name' is missing. Run azd provision first." }
     }
     $config = if ($creating) { $null } else { $existing[0] }
     if (-not $creating) {
@@ -144,17 +152,8 @@ foreach ($trigger in $optionalTriggers) {
         }
         Protect-DataverseActionRegistration $actionContext $actionJournal $config $outputs -BeforeCreate:($desiredState -eq 'Enabled')
     } else {
-        if ([string]::IsNullOrWhiteSpace([string]$outputs.dataverseEntitySetName)) {
-            throw 'Missing dataverseEntitySetName output. Run azd provision before reconciling separate row configurations.'
-        }
-        if (@($properties.parameters).Count -ne 2) { throw "Unexpected Dataverse selectors for '$name'." }
-        $expected = @{ dataset = $outputs.dataverseEnvironmentUrl.TrimEnd('/'); table = $outputs.dataverseEntitySetName }
-        $selectors = @{}
-        foreach ($parameter in $properties.parameters) {
-            if ($selectors.ContainsKey($parameter.name)) { throw "Ambiguous Dataverse selector for '$name'." }
-            $selectors[$parameter.name] = $parameter.value
-        }
-        Assert-DataverseActionContext $expected $selectors
+        $desiredSelectors = [ordered]@{}
+        foreach ($parameter in $rowParameters) { $desiredSelectors[$parameter.name] = $parameter.value }
     }
     if (-not $creating -and $properties.state -ceq $desiredState) { continue }
     if ($creating) {
@@ -176,7 +175,7 @@ foreach ($trigger in $optionalTriggers) {
                 }
                 state = 'Enabled'
                 type = 'NotSpecified'
-                description = 'Current Dataverse action-performed operation with Poll delivery.'
+                description = 'Portal Dataverse subscription operation with Poll delivery.'
             }
         }
         $body = [System.Text.Json.Nodes.JsonNode]::Parse(($newBody | ConvertTo-Json -Depth 10), $null, $jsonOptions)

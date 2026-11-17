@@ -29,8 +29,11 @@ param dataverseTableName string = 'account'
 @description('Opt in to all three separate row-added, row-modified and row-deleted operations. Overlaps combined row events.')
 param enableSeparateRowTriggers bool = false
 @minLength(1)
-@description('Entity-set name for separate operations, e.g. accounts; distinct from the combined logical table name.')
+@description('Table Name selector returned by GetTables for the selected environment; distinct from the combined logical table name.')
 param dataverseEntitySetName string = 'accounts'
+
+@description('Exact scope string returned by GetScopeFilters for the selected environment and table. Required when separate row triggers are enabled.')
+param dataverseRowScope string = ''
 
 param enableActionTrigger bool = false
 param eventCatalog string = ''
@@ -265,6 +268,7 @@ output dataverseTableName string = dataverseTableName
 
 output enableSeparateRowTriggers bool = enableSeparateRowTriggers
 output dataverseEntitySetName string = dataverseEntitySetName
+output dataverseRowScope string = dataverseRowScope
 
 output enableActionTrigger bool = enableActionTrigger
 output eventCatalog string = eventCatalog

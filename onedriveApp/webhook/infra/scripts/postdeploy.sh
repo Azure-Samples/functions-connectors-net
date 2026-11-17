@@ -144,12 +144,30 @@ else
 fi
 
 # --- Select OneDrive folder -------------------------------------------------
+# The connector rejects the literal 'root' as a trigger folderId, so resolve the drive root's real ID.
+resolve_root_folder_id() {
+    local rootId
+    rootId=$(az connector-namespace connection invoke \
+        --subscription "$subscriptionId" -g "$resourceGroupName" --namespace "$connectorNamespaceName" \
+        --connection-name "$onedriveConnectionName" \
+        --request '{"method":"GET","path":"/datasets/default/GetFileByPath","queries":{"path":"/"}}' \
+        --query "response.body.Id" -o tsv 2>/dev/null) || rootId=""
+    rootId="${rootId%$'\r'}"
+    if [ -z "$rootId" ] || [ "$rootId" = null ] || [ "$(printf '%s' "$rootId" | tr '[:upper:]' '[:lower:]')" = root ]; then
+        echo 'ERROR: Could not resolve the OneDrive root folder ID from the connection.' >&2
+        return 1
+    fi
+    printf '%s\n' "$rootId"
+}
+
 onedriveFolderId="${ONEDRIVE_FOLDER_ID:-}"
 if [ -z "$onedriveFolderId" ]; then
     if [ -t 0 ]; then
         echo ""
-        read -rp "Enter OneDrive folder ID to monitor (or press Enter for 'root'): " onedriveFolderId
-        onedriveFolderId="${onedriveFolderId:-root}"
+        read -rp "Enter OneDrive folder ID to monitor (or press Enter for the root folder): " onedriveFolderId
+        if [ -z "$onedriveFolderId" ]; then
+            onedriveFolderId="$(resolve_root_folder_id)" || exit 1
+        fi
     else
         echo "ERROR: Set ONEDRIVE_FOLDER_ID explicitly with 'azd env set' before running non-interactively."
         exit 1
@@ -157,6 +175,10 @@ if [ -z "$onedriveFolderId" ]; then
 fi
 [[ "$onedriveFolderId" =~ [^[:space:]] ]] ||
     { echo 'OneDrive folderId must be a nonempty string.' >&2; exit 1; }
+if [ "$(printf '%s' "$onedriveFolderId" | tr '[:upper:]' '[:lower:]')" = root ]; then
+    echo "ERROR: Literal 'root' is not a valid OneDrive trigger folder ID (the connector returns 'Invalid fileId'). Unset ONEDRIVE_FOLDER_ID and press Enter at the prompt for the root folder, or set a connector-returned folder ID." >&2
+    exit 1
+fi
 echo "Using ONEDRIVE_FOLDER_ID=$onedriveFolderId"
 azd env set ONEDRIVE_FOLDER_ID "$onedriveFolderId" > /dev/null
 
