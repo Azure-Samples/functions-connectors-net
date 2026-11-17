@@ -1,6 +1,6 @@
 # Planner connector samples (.NET)
 
-Standalone [polling](polling/) and [webhook](webhook/) Azure Functions isolated apps. Both use `Azure.Connectors.Sdk` **0.15.0-preview.1** typed Planner collections and Connector extension **1.0.0**. Each successful handler logs exactly one receipt with its trigger name and actual task collection count.
+Standalone [polling](polling/) and [webhook](webhook/) Azure Functions isolated apps. Both use `Azure.Connectors.Sdk` **1.0.0** typed Planner collections and Connector extension **1.0.0**. Each successful handler logs exactly one receipt with its trigger name and actual task collection count.
 
 | Function | Current operation | Parameters | Event scope |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Planner's source triggers are **batch GET polling operations**. Connector Namesp
 | License | Account needs Planner enabled in an eligible Microsoft 365 subscription; a premium Planner license does not make premium plans supported | Current user's license not verified |
 | Plan/group | Connector and Graph Planner API support **basic plans only**. For this sample, use an existing Microsoft 365 group-owned plan and a connection user who is a group member with task access | No approved plan, group, or test account supplied |
 | Source OAuth | Sign in/consent with that Planner user; tenant consent and conditional-access policies must permit the connector | Not exercised |
-| Azure | Subscription permissions to deploy Flex Functions, Connector Namespace, and role assignments; supported regions | No new resources deployed |
+| Azure | Subscription permissions to deploy Flex Functions, Connector Namespace, and role assignments; supported regions | Isolated polling-configuration REST updates validated in both shells; test resources removed. Full app deployment not exercised |
 | Poll delivery | Function SAMI (or local developer) has a connection access policy to receive/acknowledge | Offline contracts only; no live receive/acknowledge |
 | Webhook delivery | Public HTTPS Functions connector endpoint and `connector_extension` system key; source polling still occurs | Offline contracts only; no live callbacks |
 
@@ -35,5 +35,3 @@ Manual Microsoft Graph discovery or task setup is a **separate source permission
 ## References
 
 [Planner connector operations, throttling, and basic-plan limitation](https://learn.microsoft.com/connectors/planner/) · [Planner licensing](https://learn.microsoft.com/office365/planner/planner-for-admins) · [Planner API and group authorization](https://learn.microsoft.com/graph/api/resources/planner-overview?view=graph-rest-1.0) · [Functions signature mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#planner-connector) · [Poll registration contract](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/poll-trigger-registration/SKILL.md) · [Webhook registration contract](https://github.com/Azure/azure-functions-connector-extension/blob/main/.github/skills/webhook-trigger-registration/SKILL.md)
-
-Uses the repository's [MIT license](../LICENSE).
