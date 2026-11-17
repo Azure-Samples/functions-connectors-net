@@ -7,8 +7,6 @@ Choose how the Connector Namespace delivers events to Azure Functions:
 | [Polling](polling/) | Function host receives events by polling the namespace | Outbound connection only; no tunnel required |
 | [Webhook](webhook/) | Namespace calls the function's HTTPS callback | Public HTTPS callback required for real events |
 
-Both samples log received events.
+Both samples log Dataverse row-change and action-performed events. See each sample's README for setup, supported triggers, and optional configuration.
 
-Combined row changes are enabled by default; separate added, modified and deleted events and action-performed events are opt-in.
-
-Polling opt-out disables and retains optional namespace configurations; opting back in re-enables them.
+[License](../LICENSE).

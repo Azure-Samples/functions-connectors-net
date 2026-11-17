@@ -18,7 +18,7 @@
       "value": "${AZURE_PRINCIPAL_ID}"
     },
     "folderId": {
-      "value": "${ONEDRIVE_FOLDER_ID=root}"
+      "value": "${ONEDRIVE_FOLDER_ID}"
     }
   }
 }
