@@ -19,6 +19,42 @@ if ! command -v jq &> /dev/null; then
   exit 1
 fi
 
+callbackBaseUrl=''
+connectorExtensionKey=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --callback-base-url|--connector-extension-key)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        echo "$1 requires a value." >&2
+        exit 2
+      fi
+      case "$1" in
+        --callback-base-url) callbackBaseUrl=$2 ;;
+        --connector-extension-key) connectorExtensionKey=$2 ;;
+      esac
+      shift 2
+      ;;
+    *)
+      echo "Usage: $0 [--callback-base-url HTTPS_URL [--connector-extension-key KEY]]" >&2
+      exit 2
+      ;;
+  esac
+done
+localCallback=false
+if [[ -n "$callbackBaseUrl" ]]; then
+  case "$callbackBaseUrl" in
+    [hH][tT][tT][pP][sS]://*) ;;
+    *) echo 'Local callbacks require a public HTTPS callback base URL.' >&2; exit 2 ;;
+  esac
+  localCallback=true
+  if [[ -z "$connectorExtensionKey" ]]; then
+    connectorExtensionKey=$(get_local_connector_extension_key "$SCRIPT_DIR/../..")
+  fi
+elif [[ -n "$connectorExtensionKey" ]]; then
+  echo '--callback-base-url is required when supplying --connector-extension-key.' >&2
+  exit 2
+fi
+
 if ! az extension show --name connector-namespace --query name -o tsv 2>/dev/null; then
   echo -e "${RED}ERROR: The 'connector-namespace' Azure CLI extension is required.${NC}"
   echo -e "${RED}Install: curl -fsSL https://aka.ms/connector-namespace-cli-install | sh${NC}"
@@ -28,13 +64,18 @@ fi
 outputs=$(azd env get-values --output json)
 
 for name in resourceGroupName connectorNamespaceName connectorNamespaceConnectionName \
-  functionAppName functionAppDefaultHostname AZURE_SUBSCRIPTION_ID sharepointSiteUrl sharepointLibraryName; do
+  functionAppName AZURE_SUBSCRIPTION_ID sharepointSiteUrl sharepointLibraryName; do
   if ! echo "$outputs" | connector_jq -e --arg name "$name" \
     '.[$name] | if type == "string" then test("\\S") and . != "null" else false end' >/dev/null; then
     echo "ERROR: Missing or invalid azd output ${name}. Run azd provision first." >&2
     exit 1
   fi
 done
+if [[ "$localCallback" == false ]] && ! echo "$outputs" | connector_jq -e \
+  '.functionAppDefaultHostname | if type == "string" then test("\\S") and . != "null" else false end' >/dev/null; then
+  echo 'ERROR: Missing or invalid azd output functionAppDefaultHostname. Run azd provision first.' >&2
+  exit 1
+fi
 
 resourceGroupName=$(echo "$outputs" | connector_jq -r '.resourceGroupName')
 connectorNamespaceName=$(echo "$outputs" | connector_jq -r '.connectorNamespaceName')
@@ -47,13 +88,17 @@ sharepointLibraryName=$(echo "$outputs" | connector_jq -r '.sharepointLibraryNam
 triggerDefinitions=$(echo "$outputs" | connector_jq -ce '.triggerDefinitions | if type == "string" then fromjson else . end | select(type == "array" and length == 10)')
 existingNames=$(az connector-namespace trigger list -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" --query '[].name' -o json)
 
-echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
-connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
-connectorExtensionKey="${connectorExtensionKey%$'\r'}"
-if [[ -z "${connectorExtensionKey}" ]]; then
-  echo -e "${RED}ERROR: could not fetch connector_extension system key from ${functionAppName}.${NC}"
-  exit 1
+if [[ "$localCallback" == false ]]; then
+  echo -e "${CYAN}Fetching connector extension key for ${functionAppName}...${NC}"
+  connectorExtensionKey=$(az functionapp keys list -g "${resourceGroupName}" -n "${functionAppName}" --query "systemKeys.connector_extension" -o tsv)
+  connectorExtensionKey="${connectorExtensionKey%$'\r'}"
+  if [[ -z "${connectorExtensionKey}" ]]; then
+    echo -e "${RED}ERROR: could not fetch connector_extension system key from ${functionAppName}.${NC}"
+    exit 1
+  fi
+  callbackBaseUrl="https://${functionAppDefaultHostname}"
 fi
+callbackBaseUrl="${callbackBaseUrl%/}"
 
 echo -e "${YELLOW}Creating Connector Namespace trigger configs...${NC}"
 echo -e "${CYAN}  SharePoint site: ${sharepointSiteUrl}${NC}"
@@ -94,7 +139,7 @@ do
     echo "  Skipping opt-in trigger: ${functionName}"
     continue
   fi
-  callbackUrl="https://${functionAppDefaultHostname}/runtime/webhooks/connector?functionName=${functionName}"
+  callbackUrl="${callbackBaseUrl}/runtime/webhooks/connector?functionName=${functionName}"
   notifFile="$temp_dir/notification.json"
   paramsFile="$temp_dir/parameters.json"
   connector_jq -n --arg url "$callbackUrl" --arg key "$connectorExtensionKey" \
@@ -105,6 +150,10 @@ do
 
   verb=create
   if echo "$existingNames" | connector_jq -e --arg name "$triggerName" 'index($name) != null' >/dev/null; then verb=update; fi
+  metadata="recurrenceFrequency:Minute,recurrenceInterval:'5'"
+  if [[ "$localCallback" == false ]]; then
+    metadata+=",destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${subscriptionId},functionName:${functionName}"
+  fi
   az connector-namespace trigger "$verb" \
     -g "${resourceGroupName}" --namespace "${connectorNamespaceName}" \
     -n "${triggerName}" \
@@ -114,7 +163,7 @@ do
     --parameters "@${paramsFile}" \
     --notification-details "@${notifFile}" \
     --description "${description}" \
-    --metadata "{destinationType:functionApp,functionAppName:${functionAppName},functionAppResourceGroup:${resourceGroupName},functionAppSubscriptionId:${subscriptionId},functionName:${functionName},recurrenceFrequency:Minute,recurrenceInterval:'5'}" \
+    --metadata "{$metadata}" \
     -o none 2>/dev/null || { echo "Could not configure trigger $functionName." >&2; exit 1; }
 
   rm -f "$notifFile" "$paramsFile"
