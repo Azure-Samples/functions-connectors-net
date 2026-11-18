@@ -43,7 +43,7 @@ The source connection uses the **Connector Namespace's system-assigned managed i
 
 Deployment creates the monitored storage account and container and prompts you to configure `OnUpdatedFile`. Select this trigger to enable it. The monitored account and container are selected automatically. The available trigger is listed in `infra/scripts/polling-config.json`.
 
-Setup checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**, without starting browser authentication. Readiness does not prove source access: verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation if source polling reports authorization errors. The source connection retains its `-mi` resource name.
+Setup checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**, without starting browser authentication. Readiness does not prove source access: verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation if source polling reports authorization errors.
 
 ## Optional configuration
 
@@ -90,7 +90,7 @@ Local settings use developer credentials to access the namespace. Do not copy cl
 
 ## Verify
 
-Check the `-mi` connection uses **Managed Identity** and is **Ready** or **Connected**, and `azureblob-onupdatedfile` is **Enabled** in [Connector Namespaces](https://connectors.azure.com/). After provisioning and RBAC propagation, upload or modify a blob using the `monitoredStorageAccountName` and `monitoredContainerName` deployment outputs:
+Check the Azure Blob connection uses **Managed Identity** and is **Ready** or **Connected**, and `azureblob-onupdatedfile` is **Enabled** in [Connector Namespaces](https://connectors.azure.com/). After provisioning and RBAC propagation, upload or modify a blob using the `monitoredStorageAccountName` and `monitoredContainerName` deployment outputs:
 
 ```cmd
 az storage blob upload --auth-mode login --account-name <monitoredStorageAccountName> --container-name <monitoredContainerName> --name sample.txt --file <local-file> --overwrite
