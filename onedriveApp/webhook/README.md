@@ -103,5 +103,5 @@ Moving a file within OneDrive does not create a new-file event.
 
 ## More
 
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#onedrive-for-business-connector)
+- [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#onedrive-for-business-connector)
 - [OneDrive for Business connector reference](https://learn.microsoft.com/connectors/onedriveforbusiness/)

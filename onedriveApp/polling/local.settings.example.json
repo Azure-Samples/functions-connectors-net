@@ -7,6 +7,10 @@
     "OnNewFileContentTriggerConfigName": "onedrive-onnewfilecontent",
     "OnUpdatedFileContentTriggerConfigName": "onedrive-onupdatedfilecontent",
     "OnNewFileTriggerConfigName": "onedrive-onnewfile",
-    "OnUpdatedFileTriggerConfigName": "onedrive-onupdatedfile"
+    "OnUpdatedFileTriggerConfigName": "onedrive-onupdatedfile",
+    "AzureWebJobs.OnNewFile.Disabled": "true",
+    "AzureWebJobs.OnUpdatedFile.Disabled": "true",
+    "AzureWebJobs.OnNewFileContent.Disabled": "true",
+    "AzureWebJobs.OnUpdatedFileContent.Disabled": "true"
   }
 }

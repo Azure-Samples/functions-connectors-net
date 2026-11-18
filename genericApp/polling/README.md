@@ -22,7 +22,7 @@ Grant the app principal Storage Blob Data Owner, Storage Queue Data Contributor,
 
 Publish from this folder:
 
-```shell
+```cmd
 az login
 func azure functionapp publish <function-app-name>
 ```
@@ -49,7 +49,7 @@ Local settings are not published. Use separate trigger configurations for separa
    Preserve the host/gateway; omit operation paths and queries. The same rule applies in Azure. `ConnectorNamespace` is a setting prefix, not a connection name.
 3. Omit managed-identity settings locally and sign in with your developer identity:
 
-   ```shell
+   ```cmd
    az login
    ```
 
@@ -59,7 +59,7 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 5. Build and start from this folder:
 
-   ```shell
+   ```cmd
    dotnet build
    func start
    ```

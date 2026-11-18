@@ -1,0 +1,16 @@
+.azure/
+local.settings.json
+.local-settings.*
+**/[Bb]in/
+**/[Oo]bj/
+publish/
+*.log
+__azurite_db*
+__blobstorage__/
+__queuestorage__/
+.azurite*/
+host-keys.json
+infra/*.json
+!infra/main.parameters.json
+!infra/poll-triggers.parameters.json
+!infra/function-app.parameters.json

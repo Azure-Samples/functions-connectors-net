@@ -1,0 +1,16 @@
+name: functions-connectors-net-azuredevops-webhook
+services:
+  function-app:
+    project: .
+    language: dotnet
+    host: function
+hooks:
+  postdeploy:
+    windows:
+      shell: pwsh
+      run: ./infra/scripts/postdeploy.ps1
+      continueOnError: false
+    posix:
+      shell: sh
+      run: bash ./infra/scripts/postdeploy.sh
+      continueOnError: false

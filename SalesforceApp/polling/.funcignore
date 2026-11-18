@@ -1,0 +1,8 @@
+.git*
+.azure
+infra
+README.md
+local.settings.json
+local.settings.example.json
+local.settings.*.tmp
+azure.yaml
