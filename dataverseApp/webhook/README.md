@@ -88,7 +88,7 @@ sdkmessagename (Enter to skip this trigger): GrantAccess
 
 **Pressing Enter at any prompt skips that entire trigger**, not just that field. Choosing `Skip` does the same. If the trigger has never been configured, skipping it creates nothing. If you configured it on an earlier run and skip it now, the hook disables its Connector Namespace configuration and corresponding function, but does not delete either or disable the entire Function App. The hook only modifies configurations belonging to this sample's deployed app, not another app's configurations. Choose at least one trigger; skipping all stops before any trigger or function settings are changed. Lookup failures stop setup rather than guessing values.
 
-The combined trigger uses all three row events (`message=7`) and organization scope (`scope=4`), like the TypeScript sample. Separate triggers use their own connector-provided scope choices. Optional modified-row column filters are not configured. Connector Namespace manages the Dataverse source callback. The hook separately configures delivery to the Function App and retrieves its `connector_extension` system key automatically.
+The combined trigger monitors rows being **added, modified, or deleted** in the selected table **across the Dataverse organization**, rather than only rows owned by the signed-in user. Separate triggers use their own connector-provided scope choices. Optional modified-row column filters are not configured. Connector Namespace manages the Dataverse source callback. The hook separately configures delivery to the Function App and retrieves its `connector_extension` system key automatically.
 
 ### Rerun or correct a selection
 
