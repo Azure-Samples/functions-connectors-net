@@ -21,7 +21,7 @@ Guides without links are work in progress. Each available sample is a self-conta
 
 ## More triggers and operations
 
-See the full [Operations to Azure Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) for all supported connector triggers and their .NET, Python, and TypeScript signatures.
+See the full [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) for all supported connector triggers and their .NET, Python, and TypeScript signatures.
 
 ## Prerequisites
 
