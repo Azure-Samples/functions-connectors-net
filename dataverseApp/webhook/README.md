@@ -196,8 +196,6 @@ Remove this environment's Azure resources from this folder:
 azd down --purge
 ```
 
-[License](../../LICENSE).
-
 ## More
 
 - [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)

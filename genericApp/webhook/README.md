@@ -72,8 +72,6 @@ Never expose an unauthenticated webhook or replace a shared deployed callback fo
 
 Cause a real source event for each configured operation. Expect the corresponding handler's trigger-name log and successful callback. Retries may duplicate events; production processing should be idempotent. Do not delete shared resources during cleanup.
 
-Use the [polling sample](../polling/README.md) for outbound delivery without a callback.
-
 ## More
 
 - [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)

@@ -27,7 +27,7 @@ Properties-only events use typed SDK models. The SDK has no payload models for t
 
 ## Deploy to Azure
 
-Run from this folder, using a different environment name from the polling sample:
+Run from this folder, using a unique environment name:
 
 ```powershell
 az login
@@ -80,8 +80,6 @@ Requires an authorized Azure connector connection. Worker telemetry uses the `Co
 **Security:** Core Tools v4 bypasses key authentication locally by default. Start with `func start --enableAuth` before exposing a public tunnel, and use the local host's `connector_extension` system key for the callback, not the Azure-deployed app's key.
 
 After testing locally, rerun `azd hooks run postdeploy` to restore Azure delivery, then close the tunnel.
-
-Use [polling](../polling/README.md) to avoid a tunnel.
 
 ## Verify
 

@@ -4,6 +4,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Connector;
 using Microsoft.Extensions.Logging;
+using Azure.Connectors.Sdk.Teams.Models;
 
 namespace TeamsApp;
 
@@ -22,9 +23,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%WebhookChatMessageTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnWebhookChatMessageTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookChatMessageTrigger event");
+        _logger.LogInformation("Received WebhookChatMessageTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookNewMessageTrigger")]
@@ -33,9 +34,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%WebhookNewMessageTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnWebhookNewMessageTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookNewMessageTrigger event");
+        _logger.LogInformation("Received WebhookNewMessageTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookAtMentionTrigger")]
@@ -44,9 +45,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%WebhookAtMentionTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnWebhookAtMentionTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookAtMentionTrigger event");
+        _logger.LogInformation("Received WebhookAtMentionTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookKeywordTrigger")]
@@ -55,9 +56,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%WebhookKeywordTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnWebhookKeywordTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookKeywordTrigger event");
+        _logger.LogInformation("Received WebhookKeywordTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("WebhookMessageReactionTrigger")]
@@ -66,9 +67,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%WebhookMessageReactionTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnWebhookMessageReactionTriggerPayload payload)
     {
-        _logger.LogInformation("Received WebhookMessageReactionTrigger event");
+        _logger.LogInformation("Received WebhookMessageReactionTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("RecordingTrigger")]
@@ -77,9 +78,9 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%RecordingTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnRecordingTriggerPayload payload)
     {
-        _logger.LogInformation("Received RecordingTrigger event");
+        _logger.LogInformation("Received RecordingTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 
     [Function("TranscriptTrigger")]
@@ -88,8 +89,8 @@ public class AdditionalTeamsFunctions
             DeliveryMode = ConnectorTriggerDeliveryMode.Poll,
             Connection = "ConnectorNamespace",
             TriggerConfigName = "%TranscriptTriggerTriggerConfigName%")]
-        string payload)
+        TeamsOnTranscriptTriggerPayload payload)
     {
-        _logger.LogInformation("Received TranscriptTrigger event");
+        _logger.LogInformation("Received TranscriptTrigger event ({Count} items)", payload.Body?.Value?.Count ?? 0);
     }
 }

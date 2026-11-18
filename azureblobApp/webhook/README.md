@@ -28,23 +28,20 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
+Run from this folder, using a unique environment name:
+
 ```bash
-cd azureblobApp/webhook
 az login
 azd auth login
 azd env new azureblob-webhook
 azd up
 ```
 
-Use a different environment from polling.
+The source connection uses the **Connector Namespace's system-assigned managed identity**; no OAuth consent is required. Deployment grants it **Storage Blob Data Reader** on the monitored account and a connection access policy. `AZURE_PRINCIPAL_ID` gets **Storage Blob Data Contributor** for test uploads. Webhook delivery uses the function's `connector_extension` system key, independently of source authentication.
 
-Blob access uses the **Connector Namespace's system-assigned managed identity**. Deployment selects `managedIdentityAuth`, grants the namespace **Storage Blob Data Reader** on the monitored storage account, and adds a connection access policy for that identity.
+The postdeploy hook checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**, then registers the callback. Readiness does not prove source access: if source polling reports authorization errors, verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation.
 
-The `AZURE_PRINCIPAL_ID` developer retains **Storage Blob Data Contributor** on the source account for test uploads. `az login` / `azd auth login` are still needed for deployment and local developer credentials; they do not authorize the source connection. Webhook delivery still uses the function's `connector_extension` system key, independently of source authentication.
-
-The postdeploy hook verifies `managedIdentityAuth` and waits up to five minutes for **Ready** (the managed-identity status) or **Connected**, then registers the callback. Storage RBAC may take longer to propagate; connection readiness alone does not prove source access. If polling reports authorization errors, verify the namespace identity's source role and connection access policy, allow propagation, and rerun the hook.
-
-Reprovisioning an existing environment creates a separate connection with a `-mi` suffix and registers the sample trigger against it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
+Reprovisioning an existing environment creates a separate `-mi` connection and registers the trigger against it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
 
 ## Optional configuration
 
@@ -87,7 +84,7 @@ To use Bash automatically, set `shell: sh` and `run: bash ./infra/scripts/postde
 
 4. Open a public HTTPS tunnel to the local host. Manually register its `/runtime/webhooks/connector?functionName=OnUpdatedFile` callback using the local host's `connector_extension` system key, not the deployed Azure app's key. See [trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md).
 
-The deployment hooks target Azure, not localhost. Use [polling](../polling/) to avoid tunnels.
+The deployment hooks target Azure, not localhost.
 
 **Security:** never share or commit callback keys. Source access uses the namespace's managed identity, including when the callback targets a local function.
 

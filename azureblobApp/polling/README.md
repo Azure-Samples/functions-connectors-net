@@ -28,23 +28,20 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
+Run from this folder, using a unique environment name:
+
 ```bash
-cd azureblobApp/polling
 az login
 azd auth login
 azd env new azureblob-polling
 azd up
 ```
 
-Use a different environment from webhook.
+The source connection uses the **Connector Namespace's system-assigned managed identity**; no OAuth consent is required. Deployment grants it **Storage Blob Data Reader** on the monitored account and a connection access policy. The Function App uses its own identity for polling; `AZURE_PRINCIPAL_ID` gets **Storage Blob Data Contributor** for test uploads and connection access for local polling.
 
-Blob access uses the **Connector Namespace's system-assigned managed identity**. Deployment selects `managedIdentityAuth`, grants the namespace **Storage Blob Data Reader** on the monitored storage account, and adds a connection access policy for that identity.
+The postdeploy hook checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**. Readiness does not prove source access: if source polling reports authorization errors, verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation.
 
-The Function App uses its own managed identity to receive events from the namespace. The `AZURE_PRINCIPAL_ID` developer retains **Storage Blob Data Contributor** on the source account for test uploads and a connection access policy for local polling. `az login` / `azd auth login` are still needed for deployment and local developer credentials; they do not authorize the source connection.
-
-The postdeploy hook verifies `managedIdentityAuth` and waits up to five minutes for **Ready** (the managed-identity status) or **Connected**. Storage RBAC may take longer to propagate; connection readiness alone does not prove source access. If polling reports authorization errors, verify the namespace identity's source role and connection access policy, allow propagation, and rerun the hook.
-
-Reprovisioning an existing environment creates a separate connection with a `-mi` suffix and switches the sample trigger to it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
+Reprovisioning an existing environment creates a separate `-mi` connection and switches the trigger to it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
 
 ## Optional configuration
 
@@ -70,7 +67,7 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `azd hooks run postdeploy` in the selected environment. From `azureblobApp/polling`, sign in for local developer credentials:
+   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `azd hooks run postdeploy` in the selected environment. Sign in for local developer credentials:
 
    ```bash
    az login
