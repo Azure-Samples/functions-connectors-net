@@ -1,0 +1,9 @@
+{
+  "connectorName": "salesforce",
+  "displayName": "Salesforce",
+  "authenticationType": "BasicAuthentication",
+  "triggers": [
+    { "functionName": "OnNewRecord", "operationName": "GetOnNewItems" },
+    { "functionName": "OnUpdatedRecord", "operationName": "GetOnUpdatedItems" }
+  ]
+}

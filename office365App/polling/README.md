@@ -16,12 +16,12 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.33.0+
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later, signed in with permission to read and write trigger configurations in the Connector Namespace; polling state updates use `az rest`
-- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash with `jq` 1.7 or later (standard distribution, preserving large JSON number literals) and standard file tools (`mktemp`, `link`, `mv`, `rm`, and `tr`) for the alternative script, including Git Bash on Windows; the hook needs write access to this sample and its scripts folder for private temporary JSON files
+- PowerShell 7 on Windows or `sh` on POSIX; a terminal and writable temporary directory for setup
 - An Office 365 mailbox and permission to authorize the connection
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and Azurite for local development
-- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli), still required for trigger listing, connection status, and OAuth consent:
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) version 1.0.0b33. The deployment scripts use it automatically for sign-in and source pickers:
 
   ```bash
   curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
@@ -35,42 +35,39 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
-```bash
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
+
+```cmd
 cd office365App/polling
 az login
 azd auth login
 azd env new office365-polling
-azd env set OFFICE365_MAIL_FOLDER Inbox
-azd env set OFFICE365_CALENDAR_ID '<actual connector calendar ID>'
 azd up
 ```
 
-Use the actual connector calendar ID, not the placeholder `Calendar`. Complete the OAuth sign-in opened by `azd up` with the mailbox account to monitor. Use a different azd environment from webhook.
+Complete OAuth with the mailbox account to monitor. Use a different azd environment from webhook.
+
+Choose at least one trigger and select the folders, calendars or mailboxes to monitor when prompted. Only selected triggers are enabled. Setup checks Azure's Connected status even if a sign-in window remains stale.
 
 ## Optional configuration
 
-Set environment values before `azd up`. Six personal triggers are configured by default.
+The catalog in `infra/scripts/polling-config.json` offers all seven handlers. `OnNewEmail` monitors Inbox. Other selected triggers collect their required folder, calendar, mailbox or subscription inputs interactively; choose actual connector calendar IDs rather than the placeholder `Calendar`. Shared-mailbox monitoring requires full access to the approved mailbox and is never enabled implicitly.
 
 | Setting / option | Purpose |
 | --- | --- |
-| `OFFICE365_SHARED_MAILBOX_ADDRESS=<address>` | Shared mailbox email; full mailbox access required |
-| `OFFICE365_SHARED_MAILBOX_FOLDER_ID=Inbox` | Folder to monitor in the shared mailbox |
 | `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
 | `APPLICATION_INSIGHTS_LOCATION=eastus2` | Telemetry region override if the host region lacks Application Insights |
-| `OFFICE365_ENABLE_TRIGGERS=false` | Prepare disabled sources without waiting for consent; set `true` and reprovision to activate |
-| Bash hook | In `azure.yaml`, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` |
-| `pwsh ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` / `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings; existing files are otherwise preserved |
-| `pwsh ./infra/scripts/postdeploy.ps1 -ConsentLinkOnly` / `bash ./infra/scripts/postdeploy.sh --consent-link-only` | Skip browser opening and authorization wait; normal setup still runs |
 
-Clear the address and rerun `azd up` to disable the shared-mailbox listener and any existing shared-mailbox Poll trigger configuration; an absent configuration is left absent.
+Selections are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose again:
 
-Set the address again and rerun `azd up` to create or re-enable the same deterministic configuration through Bicep. No manual namespace cleanup is needed for normal selection changes.
+```cmd
+azd env set POLLING_TRIGGER_INPUTS ""
+azd up
+```
 
-Disabling preserves the configuration and does not delete an upstream source subscription. Regenerate local settings to apply the selection locally.
+Skipping a previously selected owned configuration disables it while preserving other writable properties, and disables its app listener. Never-created skipped configurations stay absent. Reselecting re-enables the same named configuration. This does not tear down upstream subscriptions or remove queued events. Setup refuses configurations with missing or conflicting destination ownership metadata; use a fresh environment for older deployments without that metadata.
 
-The hook disables deselected Poll triggers through ARM REST, preserving their delivery mode and writable properties. The current CLI extension's `trigger update` omits `deliveryMode`, so it is not used for Poll state changes.
-
-Hooks preserve existing local settings unless the force option is selected, and reject directories and links at the settings path.
+If sign-in or trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available. Deployment creates ignored `local.settings.json` only if missing; existing files are preserved byte-for-byte. Manually reconcile their listener switches or deliberately archive the file before regenerating.
 
 ## Local development
 
@@ -80,25 +77,25 @@ If the Function App is already deployed, stop it before running locally to avoid
 
    Use the file generated during successful `azd up`. Only if it is missing, rerun:
 
-   ```bash
-   azd hooks run postdeploy
+   ```cmd
+   dotnet run --file ./infra/scripts/PollingSetup.cs -- finish
    ```
 
 2. Sign in with your developer account for local credentials.
 
-   ```bash
+   ```cmd
    az login
    ```
 
 3. Start Azurite in a separate terminal.
 
-   ```bash
+   ```cmd
    azurite
    ```
 
 4. Build and start the local Functions host.
 
-   ```bash
+   ```cmd
    dotnet build
    func start
    ```

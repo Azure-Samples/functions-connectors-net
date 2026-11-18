@@ -1,0 +1,15 @@
+{
+  "connectorName": "commondataservice",
+  "displayName": "Dataverse",
+  "triggers": [
+    {
+      "functionName": "OnDataverseRowChanged",
+      "operationName": "SubscribeWebhookTrigger",
+      "values": { "body": { "message": 7, "scope": 4 } }
+    },
+    { "functionName": "OnDataverseActionPerformed", "operationName": "BusinessEventsTrigger" },
+    { "functionName": "OnDataverseRowAdded", "operationName": "SubscribeOnNewItems" },
+    { "functionName": "OnDataverseRowModified", "operationName": "SubscribeOnUpdatedItems" },
+    { "functionName": "OnDataverseRowDeleted", "operationName": "SubscribeOnDeletedItems" }
+  ]
+}

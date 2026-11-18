@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Connector" Version="1.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="infra/**/*.cs" />
     <None Remove="infra/**;README.md;local.settings.example.json" />
     <None Update="host.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />

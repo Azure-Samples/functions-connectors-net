@@ -7,6 +7,8 @@
     "OnNewTaskTriggerConfigName": "planner-onnewtask",
     "OnCompleteTaskTriggerConfigName": "planner-oncompletetask",
     "OnTaskAssignedToMeTriggerConfigName": "planner-ontaskassignedtome",
+    "AzureWebJobs.OnNewTask.Disabled": "true",
+    "AzureWebJobs.OnCompleteTask.Disabled": "true",
     "AzureWebJobs.OnTaskAssignedToMe.Disabled": "true"
   }
 }

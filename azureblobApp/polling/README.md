@@ -9,9 +9,9 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.33.0+
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7.3 (.NET 7) or later for the default hook, or Bash with jq 1.6+ for the alternative script
+- PowerShell 7 on Windows, or `sh` on POSIX; a terminal and writable temporary directory for setup
 - Azure permissions to deploy resources and role assignments
 - For local execution: Functions Core Tools v4 supporting .NET 10 and Azurite.
 - [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
@@ -28,9 +28,11 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
+
 Run from this folder, using a unique environment name:
 
-```bash
+```cmd
 az login
 azd auth login
 azd env new azureblob-polling
@@ -39,9 +41,9 @@ azd up
 
 The source connection uses the **Connector Namespace's system-assigned managed identity**; no OAuth consent is required. Deployment grants it **Storage Blob Data Reader** on the monitored account and a connection access policy. The Function App uses its own identity for polling; `AZURE_PRINCIPAL_ID` gets **Storage Blob Data Contributor** for test uploads and connection access for local polling.
 
-The postdeploy hook checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**. Readiness does not prove source access: if source polling reports authorization errors, verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation.
+Deployment creates the monitored storage account and container and prompts you to configure `OnUpdatedFile`. Select this trigger to enable it. The monitored account and container are selected automatically. The available trigger is listed in `infra/scripts/polling-config.json`.
 
-Reprovisioning an existing environment creates a separate `-mi` connection and switches the trigger to it, preserving the previous connection. Rerunning the hook alone does not migrate authentication.
+Setup checks `managedIdentityAuth` and waits up to five minutes for **Ready** or **Connected**, without starting browser authentication. Readiness does not prove source access: verify the namespace identity's source role and connection access policy, and allow time for RBAC propagation if source polling reports authorization errors. The source connection retains its `-mi` resource name.
 
 ## Optional configuration
 
@@ -52,14 +54,12 @@ Set environment options with `azd env set <name> <value>` before provisioning.
 | `BLOB_CONTAINER_NAME` | Source container; defaults to `connector-input` |
 | `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; defaults to `westcentralus` |
 | `APPLICATIONINSIGHTS_LOCATION` | Telemetry region override, for example `eastus2`, when the Functions region lacks Application Insights |
-| `azd hooks run postdeploy` | Regenerate missing local settings and check connection readiness |
-| `bash ./infra/scripts/postdeploy.sh` | Run the Bash alternative |
-| `bash ./infra/scripts/postdeploy.sh --force-local-settings` | Regenerate local settings with Bash |
-| `pwsh -File ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` | Regenerate local settings with PowerShell |
 
-Existing local settings are preserved unless a force option is supplied. Settings must be regular files; directories and links are rejected. Force replacement stages the generated settings before replacing the original file. Run one settings writer at a time.
+Choices are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose again, run `azd env set POLLING_TRIGGER_INPUTS ""` and `azd up`. Skipped owned configurations and listeners are disabled; never-created skipped resources stay absent. Setup refuses configurations with missing or conflicting destination ownership metadata. For older deployments without that metadata, use a fresh sample environment rather than deleting or adopting resources automatically.
 
-Worker telemetry uses the `ConnectorNamespace` identity settings independently of the connector host: developer credentials locally, the Function App's system-assigned identity in Azure. To use Bash automatically, set `shell: sh` and `run: bash ./infra/scripts/postdeploy.sh` in `azure.yaml`.
+If trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available.
+
+Deployment creates ignored `local.settings.json` only if missing. Existing files are preserved byte-for-byte; reconcile their listener switches manually or deliberately archive the file before regenerating. Worker telemetry uses the `ConnectorNamespace` identity settings independently of the connector host: developer credentials locally, the Function App's system-assigned identity in Azure.
 
 ## Local development
 
@@ -67,21 +67,21 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `azd hooks run postdeploy` in the selected environment. Sign in for local developer credentials:
+   Use the file generated during successful `azd up`; existing files are preserved. If missing, run `dotnet run --file ./infra/scripts/PollingSetup.cs -- finish` in the selected environment. The example has a placeholder endpoint and disabled listener, so it is not runnable. Sign in for local developer credentials:
 
-   ```bash
+   ```cmd
    az login
    ```
 
 2. Start Azurite in a separate terminal:
 
-   ```bash
+   ```cmd
    azurite
    ```
 
 3. Build and start the local function host:
 
-   ```bash
+   ```cmd
    dotnet build
    func start
    ```
@@ -92,7 +92,7 @@ Local settings use developer credentials to access the namespace. Do not copy cl
 
 Check the `-mi` connection uses **Managed Identity** and is **Ready** or **Connected**, and `azureblob-onupdatedfile` is **Enabled** in [Connector Namespaces](https://connectors.azure.com/). After provisioning and RBAC propagation, upload or modify a blob using the `monitoredStorageAccountName` and `monitoredContainerName` deployment outputs:
 
-```bash
+```cmd
 az storage blob upload --auth-mode login --account-name <monitoredStorageAccountName> --container-name <monitoredContainerName> --name sample.txt --file <local-file> --overwrite
 ```
 

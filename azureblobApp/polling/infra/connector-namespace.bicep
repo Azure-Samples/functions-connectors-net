@@ -18,9 +18,9 @@ resource azureblobConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   parent: connectorNamespace
   name: connectionName
   properties: {
-    connectorName: 'azureblob'
+    connectorName: loadJsonContent('./scripts/polling-config.json').connectorName
     parameterValueSet: {
-      name: 'managedIdentityAuth'
+      name: loadJsonContent('./scripts/polling-config.json').authenticationType
       values: {}
     }
   }
@@ -55,5 +55,6 @@ resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPol
 }
 
 output name string = connectorNamespace.name
+output resourceId string = connectorNamespace.id
 output connectionName string = azureblobConnection.name
 output principalId string = connectorNamespace.identity.principalId

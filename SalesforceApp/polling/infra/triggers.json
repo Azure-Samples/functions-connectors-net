@@ -1,4 +1,0 @@
-[
-  { "functionName": "OnNewRecord", "operationName": "GetOnNewItems" },
-  { "functionName": "OnUpdatedRecord", "operationName": "GetOnUpdatedItems" }
-]

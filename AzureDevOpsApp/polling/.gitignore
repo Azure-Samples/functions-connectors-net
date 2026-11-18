@@ -12,3 +12,5 @@ __queuestorage__/
 host-keys.json
 infra/*.json
 !infra/main.parameters.json
+!infra/poll-triggers.parameters.json
+!infra/function-app.parameters.json

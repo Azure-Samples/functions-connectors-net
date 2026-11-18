@@ -1,51 +1,52 @@
-param token string
+param environmentName string
 param location string
-param tags object
-param planId string
-param storageName string
-param packageContainerUri string
-param insightsConnectionString string
-param pollingSettings object = {}
+param namespaceName string
+param connectionName string
+@minLength(1)
+param pollingEndpoint string
+param triggerSettings string
+@allowed(['true', 'false'])
+param functionAppExists string = 'false'
+@metadata({ azd: { type: 'principalId' } })
+param userPrincipalId string = deployer().objectId
 
-resource app 'Microsoft.Web/sites@2024-11-01' = {
-  name: 'func-${token}'
-  location: location
-  tags: union(tags, { 'azd-service-name': 'function-app' })
-  kind: 'functionapp,linux'
-  identity: { type: 'SystemAssigned' }
-  properties: {
-    serverFarmId: planId
-    httpsOnly: true
-    functionAppConfig: {
-      deployment: {
-        storage: {
-          type: 'blobContainer'
-          value: packageContainerUri
-          authentication: { type: 'SystemAssignedIdentity' }
-        }
-      }
-      runtime: { name: 'dotnet-isolated', version: '10.0' }
-      scaleAndConcurrency: {
-        instanceMemoryMB: 2048
-        maximumInstanceCount: 100
-        alwaysReady: []
-      }
-    }
-    siteConfig: {
-      minTlsVersion: '1.2'
-      appSettings: [for setting in items(union({
-        AzureWebJobsStorage__accountName: storageName
-        APPLICATIONINSIGHTS_CONNECTION_STRING: insightsConnectionString
-        APPLICATIONINSIGHTS_AUTHENTICATION_STRING: 'Authorization=AAD'
-        ConnectorNamespace__credential: 'managedidentity'
-      }, pollingSettings)): {
-        name: setting.key
-        value: setting.value
-      }]
-    }
+var token = toLower(uniqueString(subscription().id, environmentName, location))
+var tags = { 'azd-env-name': environmentName }
+var functionAppName = 'func-${token}'
+var currentSettings = functionAppExists == 'true'
+  ? list('${resourceId('Microsoft.Web/sites', functionAppName)}/config/appsettings', '2024-11-01').properties
+  : {}
+
+module resources './resources.bicep' = {
+  name: 'resources'
+  params: { token: token, location: location, tags: tags }
+}
+module app './site.bicep' = {
+  name: 'function-app'
+  params: {
+    token: token
+    location: location
+    tags: tags
+    planId: resources.outputs.planId
+    storageName: resources.outputs.storageName
+    packageContainerUri: resources.outputs.packageContainerUri
+    insightsConnectionString: resources.outputs.insightsConnectionString
+    existingAppSettings: currentSettings
+    pollingSettings: union(json(base64ToString(triggerSettings)), {
+      ConnectorNamespace__pollingEndpoint: pollingEndpoint
+    })
   }
 }
-
-output name string = app.name
-output hostname string = app.properties.defaultHostName
-output principalId string = app.identity.principalId
+module access './function-access.bicep' = {
+  name: 'post-app-access'
+  params: {
+    functionAppPrincipalId: app.outputs.principalId
+    userPrincipalId: userPrincipalId
+    namespaceName: namespaceName
+    connectionName: connectionName
+    storageName: resources.outputs.storageName
+    insightsName: resources.outputs.insightsName
+  }
+}
+output FUNCTION_APP_NAME string = app.outputs.name
+output connectorPollingEndpoint string = pollingEndpoint

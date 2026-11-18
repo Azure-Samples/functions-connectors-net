@@ -14,9 +14,9 @@ The plan-scoped operations use `groupId` and `id`, where `id` is the **plan ID**
 
 ## Prerequisites
 
-Use .NET 10 SDK, Azure CLI >= 2.75.0, `azd`, PowerShell >= 7.3 (.NET 7 or later for private staging streams), and the [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli). Poll state updates use core Azure CLI `az rest`; the extension remains required for trigger listing and connection/consent operations. The signed-in identity needs read/write access to the namespace's trigger configurations.
+Use .NET 10 SDK, Azure CLI >= 2.75.0, `azd` >= 1.33.0, and the [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) version 1.0.0b33. The deployment scripts use the extension automatically for sign-in and source pickers. The signed-in identity needs read/write access to trigger configurations and permission to invoke source pickers.
 
-Local execution also needs Functions Core Tools v4 and Azurite. Bash hooks support Bash 3.2 syntax and require `jq` 1.7+, `mktemp`, POSIX `link`, and permission to create private temporary files beside the scripts; on Windows, use Git Bash. To use Bash hooks, change `azure.yaml`'s postdeploy shell/run to `sh` / `./infra/scripts/postdeploy.sh`.
+Local execution also needs Functions Core Tools v4 and Azurite. Hooks use PowerShell 7 on Windows and `sh` on POSIX. Setup needs a terminal for choices and a writable temporary directory.
 
 Have an explicitly approved Azure target with permission to deploy Flex Functions, Connector Namespace, storage, monitoring, and role assignments. Use an existing Microsoft 365 group-owned basic plan, its group and plan IDs, and a group-member connection user with Planner enabled in an eligible Microsoft 365 subscription. Tenant consent and conditional-access policies must permit [Planner connector OAuth](https://learn.microsoft.com/connectors/planner/).
 
@@ -24,37 +24,50 @@ The Function's system-assigned identity authenticates storage, monitoring, and P
 
 ## Deploy
 
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
+
 Run from this directory, replacing `<unique-environment-name>` with a new name not used by another app:
 
-```powershell
+```cmd
 az login
 azd auth login
 azd env new "<unique-environment-name>"
-azd env set PLANNER_GROUP_ID "<approved-group-id>"
-azd env set PLANNER_PLAN_ID "<approved-basic-plan-id>"
 azd up
 ```
 
-Select the approved subscription/region when prompted. `CONNECTOR_NAMESPACE_LOCATION` defaults to `westcentralus`. Bicep creates or updates selected Poll trigger configurations in `Enabled` state and derives the polling endpoint from the service response; it does not guess namespace runtime URLs. Postdeploy creates ignored `local.settings.json` only when missing and prompts for Planner source OAuth consent. Existing settings are preserved byte-for-byte; review them manually when changing environments.
+Select the approved subscription/region when prompted. `CONNECTOR_NAMESPACE_LOCATION` defaults to `westcentralus`. Complete browser sign-in, choose at least one trigger, and select the group and plan to monitor when prompted. Only selected triggers are enabled.
+
+`infra/scripts/polling-config.json` defines the available triggers; source choices depend on your account. Setup checks Azure's Connected status even if the browser window does not update. Deployment verifies delivery configuration and creates ignored `local.settings.json` only if missing. Existing settings are preserved byte-for-byte; review them manually when changing environments or choices.
 
 ## Optional
 
-Assignment events cover the **connection user's tasks across plans**, not only `PLANNER_PLAN_ID`. With explicit scope approval, set `PLANNER_ENABLE_ASSIGNED_TO_ME` to `true` and rerun `azd up`. Returning it to `false` disables the Function and any existing assignment trigger during postdeploy. The hook reads that trigger's exact resource ID and disables it with a REST GET/PUT, preserving its Poll configuration. An absent deselected trigger is left absent; opting back in re-enables the same named configuration.
+Assignment events cover the **connection user's tasks across plans**, not only a selected plan. Configure `OnTaskAssignedToMe` only with explicit scope approval.
+
+Selections are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose again:
+
+```cmd
+azd env set POLLING_TRIGGER_INPUTS ""
+azd up
+```
+
+Skipping a previously selected trigger disables its existing owned configuration while preserving other writable properties, and disables its app listener. Never-created skipped triggers stay absent. Reselecting re-enables the same named configuration. Setup refuses to overwrite webhook or unowned configurations.
+
+If sign-in or trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available.
 
 ## Local
 
 For an already provisioned approved environment, regenerate missing settings without authorization or trigger changes:
 
-```powershell
+```cmd
 azd env select "<unique-environment-name>"
-pwsh ./infra/scripts/postdeploy.ps1 -LocalSettingsOnly
+dotnet run --file ./infra/scripts/PollingSetup.cs -- finish
 ```
 
-The Bash equivalent is `bash ./infra/scripts/postdeploy.sh --local-settings-only`. Generated settings contain only Azurite/runtime configuration, Poll endpoint, trigger names, and enabled/disabled switches. The example file documents that shape; do not copy deployed managed-identity selectors into local settings.
+The same command works on Windows and POSIX and verifies the selected resources without changing source selections. Generated settings contain only Azurite/runtime configuration, Poll endpoint, trigger names, and enabled/disabled switches. The example defaults every listener to disabled and has a placeholder endpoint; it is not a runnable deployment configuration. Do not copy deployed managed-identity selectors into local settings. Existing files are never overwritten; reconcile their listener switches manually or deliberately archive them before regenerating.
 
 **If the deployed app is running, stop it before local Poll testing** (`az functionapp stop -g <approved-resource-group> -n <approved-function-app>`). Cloud and local listeners otherwise compete for the same queue. Start Azurite separately, sign in with the developer identity granted connection access, then run:
 
-```powershell
+```cmd
 dotnet build
 func start
 ```

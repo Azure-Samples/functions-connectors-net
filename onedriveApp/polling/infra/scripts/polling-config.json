@@ -1,0 +1,10 @@
+{
+  "connectorName": "onedriveforbusiness",
+  "displayName": "OneDrive for Business",
+  "triggers": [
+    { "functionName": "OnNewFile", "operationName": "OnNewFilesV2" },
+    { "functionName": "OnUpdatedFile", "operationName": "OnUpdatedFilesV2" },
+    { "functionName": "OnNewFileContent", "operationName": "OnNewFileV2" },
+    { "functionName": "OnUpdatedFileContent", "operationName": "OnUpdatedFileV2" }
+  ]
+}

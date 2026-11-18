@@ -1,22 +1,55 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
-
 name: functions-connectors-net-onedrive-polling
+requiredVersions:
+  azd: ">= 1.33.0"
+infra:
+  layers:
+    - name: base
+      path: infra
+      module: main
+    - name: triggers
+      path: infra
+      module: poll-triggers
+      dependsOn: [base]
+      hooks:
+        preprovision:
+          windows:
+            shell: pwsh
+            run: dotnet run --file ./scripts/PollingSetup.cs -- prepare
+            interactive: true
+          posix:
+            shell: sh
+            run: dotnet run --file ./scripts/PollingSetup.cs -- prepare
+            interactive: true
+    - name: app
+      path: infra
+      module: function-app
+      dependsOn: [triggers]
+      hooks:
+        preprovision:
+          windows:
+            shell: pwsh
+            run: dotnet run --file ./scripts/PollingSetup.cs -- verify
+          posix:
+            shell: sh
+            run: dotnet run --file ./scripts/PollingSetup.cs -- verify
+workflows:
+  up:
+    - azd: package --all
+    - azd: provision base
+    - azd: provision triggers
+    - azd: provision app
+    - azd: deploy --all
 services:
   function-app:
-    host: function
     project: .
-    language: csharp
+    language: dotnet
+    host: function
 hooks:
-  preprovision:
-    shell: pwsh
-    run: |
-      $folderId = "$env:ONEDRIVE_FOLDER_ID".Trim()
-      if (-not $folderId -or $folderId -ieq 'root') {
-        throw "Set ONEDRIVE_FOLDER_ID to a connector-returned folder ID with 'azd env set'. The literal 'root' is rejected by the connector at runtime ('Invalid fileId'). Run ./infra/scripts/resolve-folder-id.ps1 to select one (README: Folder ID setup)."
-      }
-    continueOnError: false
-  postdeploy:
-    shell: pwsh
-    run: ./infra/scripts/postdeploy.ps1
-    interactive: true
-    continueOnError: false
+  predeploy:
+    windows:
+      shell: pwsh
+      run: dotnet run --file ./infra/scripts/PollingSetup.cs -- finish
+    posix:
+      shell: sh
+      run: dotnet run --file ./infra/scripts/PollingSetup.cs -- finish

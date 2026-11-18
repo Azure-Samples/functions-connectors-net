@@ -25,7 +25,7 @@ See the full [Operations to Azure Functions Signature Mapping](https://github.co
 
 ## Prerequisites
 
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) — 1.33.0+ for polling samples
 - [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
@@ -42,7 +42,15 @@ See the full [Operations to Azure Functions Signature Mapping](https://github.co
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
   ```
 
-- `jq` (for bash post-deploy scripts on macOS/Linux)
+- `jq` (for webhook Bash scripts on macOS/Linux; not needed by polling setup)
+
+## Polling setup
+
+The nine connector-specific polling samples use a C# setup helper run automatically by `azd up` with the .NET 10 SDK already required by the app. No separate helper installation is needed.
+
+During deployment, complete browser sign-in and choose the triggers and source inputs when prompted. Azure Blob uses managed identity and does not require source-service OAuth consent. The scripts call the connector CLI for you; the OAuth-based polling samples use extension version 1.0.0b33.
+
+Deployment also creates a missing `local.settings.json` and preserves any existing file. Each polling README includes a .NET recovery command for generating a missing file separately. Webhook samples retain their existing setup scripts and prerequisites.
 
 ## Related .NET samples
 

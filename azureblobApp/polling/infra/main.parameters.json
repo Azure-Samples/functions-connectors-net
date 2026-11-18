@@ -11,9 +11,6 @@
     "connectorNamespaceLocation": {
       "value": "${CONNECTOR_NAMESPACE_LOCATION=westcentralus}"
     },
-    "applicationInsightsLocation": {
-      "value": "${APPLICATIONINSIGHTS_LOCATION=}"
-    },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },

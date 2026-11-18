@@ -18,7 +18,7 @@ resource office365Connection 'Microsoft.Web/connectorGateways/connections@2026-0
   parent: connectorNamespace
   name: connectionName
   properties: {
-    connectorName: 'office365'
+    connectorName: loadJsonContent('./scripts/polling-config.json').connectorName
   }
 }
 
@@ -37,4 +37,5 @@ resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPol
 }
 
 output name string = connectorNamespace.name
+output resourceId string = connectorNamespace.id
 output connectionName string = office365Connection.name

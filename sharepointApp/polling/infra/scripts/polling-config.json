@@ -1,0 +1,16 @@
+{
+  "connectorName": "sharepointonline",
+  "displayName": "SharePoint",
+  "triggers": [
+    { "functionName": "OnChangedItem", "operationName": "GetOnChangedItems" },
+    { "functionName": "OnDeletedFile", "operationName": "GetOnDeletedFileItems", "optional": true },
+    { "functionName": "OnDeletedItem", "operationName": "GetOnDeletedItems", "optional": true },
+    { "functionName": "OnNewFile", "operationName": "GetOnNewFileItems" },
+    { "functionName": "OnNewItem", "operationName": "GetOnNewItems" },
+    { "functionName": "OnFormSubmitted", "operationName": "GetOnNewItemsFromForm", "optional": true },
+    { "functionName": "OnRecurringDigest", "operationName": "GetOnRecurrenceDigest", "optional": true },
+    { "functionName": "OnFileClassified", "operationName": "GetOnUpdatedFileClassifiedTimes", "optional": true },
+    { "functionName": "OnUpdatedFile", "operationName": "GetOnUpdatedFileItems" },
+    { "functionName": "OnUpdatedItem", "operationName": "GetOnUpdatedItems" }
+  ]
+}

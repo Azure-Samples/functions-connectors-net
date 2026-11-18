@@ -21,6 +21,10 @@
     "AzureWebJobs.WebhookKeywordTrigger.Disabled": "true",
     "AzureWebJobs.WebhookMessageReactionTrigger.Disabled": "true",
     "AzureWebJobs.RecordingTrigger.Disabled": "true",
-    "AzureWebJobs.TranscriptTrigger.Disabled": "true"
+    "AzureWebJobs.TranscriptTrigger.Disabled": "true",
+    "AzureWebJobs.OnNewChannelMessage.Disabled": "true",
+    "AzureWebJobs.OnNewChannelMessageMentioningMe.Disabled": "true",
+    "AzureWebJobs.OnGroupMembershipAdd.Disabled": "true",
+    "AzureWebJobs.OnGroupMembershipRemoval.Disabled": "true"
   }
 }

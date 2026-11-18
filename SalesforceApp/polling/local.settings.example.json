@@ -5,6 +5,8 @@
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
     "ConnectorNamespace__pollingEndpoint": "https://<connector-namespace-host>",
     "OnNewRecordTriggerConfigName": "salesforce-onnewrecord",
-    "OnUpdatedRecordTriggerConfigName": "salesforce-onupdatedrecord"
+    "OnUpdatedRecordTriggerConfigName": "salesforce-onupdatedrecord",
+    "AzureWebJobs.OnNewRecord.Disabled": "true",
+    "AzureWebJobs.OnUpdatedRecord.Disabled": "true"
   }
 }

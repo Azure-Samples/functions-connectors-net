@@ -18,12 +18,12 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.33.0+
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later, signed in with permission to read and write trigger configurations in the Connector Namespace; polling state updates use `az rest`
-- PowerShell 7.3 or later (.NET 7+) for the default hook, or Bash with `jq` 1.7 or later (standard distribution, preserving large JSON number literals) and standard file tools (`mktemp`, `link`, `mv`, `rm`, and `tr`) for the alternative script, including Git Bash on Windows; the hook needs write access to this sample and its scripts folder for private temporary JSON files
+- PowerShell 7 on Windows or `sh` on POSIX; a terminal and writable temporary directory for setup
 - For local runs: [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
 - A SharePoint site and library, and permission to authorize the connection
-- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli), still required for trigger listing, connection status, and OAuth consent:
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) version 1.0.0b33. The deployment scripts use it automatically for sign-in and source pickers:
 
   ```bash
   curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
@@ -37,57 +37,42 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
+
 1. Open `sharepointApp/polling`, sign in, and select a separate environment.
 
-   ```bash
+   ```cmd
    az login
    azd auth login
    azd env new sharepoint-polling
    ```
 
-2. Set the source and any optional configuration below, then deploy.
+2. Deploy and choose source inputs interactively.
 
-   ```bash
-   azd env set SHAREPOINT_SITE_URL https://contoso.sharepoint.com/sites/mysite
+   ```cmd
    azd up
    ```
 
-3. Complete SharePoint OAuth consent when the hook opens the browser; it returns to https://connectors.azure.com. The hook creates ignored `local.settings.json`, preserves an existing file, and waits up to five minutes for **Connected**.
+3. Complete SharePoint OAuth in the browser, then choose Configure/Skip for each function. Choose at least one. Setup checks Azure's Connected status even if a sign-in window remains stale. Connector metadata drives the site, list/library and folder pickers and any required form/digest inputs. An empty list picker offers manual entry of an exact connector identifier or skipping that trigger.
 
-Deployment provisions a Flex Consumption app, managed identity, runtime/deployment storage, monitoring, Connector Namespace, connection, and selected Poll triggers.
+Only selected triggers are enabled. The available triggers are listed in `infra/scripts/polling-config.json`.
 
 ## Optional configuration
 
-Set deployment options with `azd env set <setting> <value>` before `azd up`. Five create/update triggers are enabled by default.
+Set deployment options with `azd env set <setting> <value>` before `azd up`. Only explicitly selected triggers are enabled.
 
 | Setting | Default / purpose |
 | --- | --- |
 | `AZURE_LOCATION` | Selected by `azd`; use a region supporting Flex Consumption |
 | `CONNECTOR_NAMESPACE_LOCATION` | `westcentralus`; Connector Namespace region, independent of the app region |
-| `SHAREPOINT_LIBRARY_NAME` | `Documents`; library name or GUID |
-| `SHAREPOINT_FOLDER_PATH` | Empty; optional file/digest filter |
-| `SHAREPOINT_LIST_NAME` | Library if empty; item/form triggers monitor the whole list without the folder filter |
-| `SHAREPOINT_ENABLE_DELETION_TRIGGERS` | `false`; item/file deletion requires the connection user to be a site collection administrator |
-| `SHAREPOINT_ENABLE_SYNTEX_TRIGGER` | `false`; classification requires a licensed Syntex model applied to the library |
-| `SHAREPOINT_FORM_ID` | Empty; enables submissions from an existing supported form on the list/library |
-| `SHAREPOINT_DIGEST_SCHEDULE` | Empty; enables a digest of new/updated files, `*` for daily or `0` through `6` for a day of the week |
 
-| Hook option | Direct invocation from this folder |
-| --- | --- |
-| Rerun setup | `pwsh -File ./infra/scripts/postdeploy.ps1` or `bash ./infra/scripts/postdeploy.sh` |
-| Replace existing local settings | `pwsh -File ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` or `bash ./infra/scripts/postdeploy.sh --force-local-settings` |
+Deletion triggers require the connection user to be a site collection administrator. Classification requires a licensed Syntex model applied to the library. Form submissions require an existing supported form. Digest scheduling and form subscriptions are preview operations; provide the exact values accepted by connector metadata. Item/form subscriptions monitor the selected list, not a file-folder filter. Do not select operations whose source prerequisites you cannot satisfy.
 
-The default `azd` hook uses PowerShell; to use Bash, set `shell: sh` and `run: ./infra/scripts/postdeploy.sh` in `azure.yaml`. Neither script has a skip-consent option. An already **Connected** connection skips the consent browser and wait, but normal trigger setup and local-settings preparation still run.
+Selections are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose again, run `azd env set POLLING_TRIGGER_INPUTS ""` and `azd up`. Skipped owned configurations and listeners are disabled; absent skipped configurations stay absent. Reselecting enables the same deterministic configuration. Disabling does not tear down upstream subscriptions or remove queued events.
 
-To disable optional triggers, reset flags to `false` or clear the form ID/schedule and rerun `azd up`. Functions and existing trigger configurations follow that selection; absent deselected configurations remain absent.
+Setup refuses configurations with missing or conflicting destination ownership metadata. Use a fresh sample environment for older configurations without that metadata. If sign-in or trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available.
 
-Selecting an option again creates or re-enables its same deterministic configuration through Bicep. No manual namespace cleanup is needed for normal selection changes.
-
-Disabling preserves the configuration and does not delete an upstream source subscription. Regenerate local settings to apply it locally.
-
-The hook disables existing Poll triggers through ARM REST, preserving their delivery mode and writable properties. The current CLI extension's `trigger update` omits `deliveryMode`, so it is not used for Poll state changes; selected triggers are provisioned and enabled by Bicep.
-
-Hooks preserve existing local settings unless the force option is selected, and reject directories and links at the settings path.
+Deployment creates ignored `local.settings.json` only if missing. Existing files are preserved byte-for-byte; reconcile their listener switches manually or deliberately archive the file before regenerating.
 
 ## Run locally
 
@@ -95,24 +80,24 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the settings generated after successful `azd up`. Only if the file is missing, rerun the existing hook from this folder:
+   Use the settings generated after successful `azd up`. Only if the file is missing, run from this folder:
 
-   ```bash
-   azd hooks run postdeploy
+   ```cmd
+   dotnet run --file ./infra/scripts/PollingSetup.cs -- finish
    ```
 
-   The generated file uses Azurite, developer credentials, the actual polling endpoint, trigger names, and disabled-function flags. Do not add deployed managed-identity settings locally.
+   The generated file uses Azurite, developer credentials, the actual polling endpoint, trigger names, and disabled-function flags. Do not add deployed managed-identity settings locally. The example has disabled listeners and a placeholder endpoint, so it is not runnable.
 
 2. Sign in with an identity granted access to the connection and start Azurite in a separate terminal.
 
-   ```bash
+   ```cmd
    az login
    azurite
    ```
 
 3. Start the local function host from this folder.
 
-   ```bash
+   ```cmd
    func start
    ```
 
@@ -126,7 +111,7 @@ Delivery is at least once, so production handlers should be idempotent; this sam
 
 To remove the Azure resources from this folder:
 
-```bash
+```cmd
 azd down --purge
 ```
 

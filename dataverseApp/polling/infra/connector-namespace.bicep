@@ -1,5 +1,5 @@
 // Connector Namespace + Common Data Service / Dataverse (commondataservice) connection
-// using OAuth. Requires interactive consent during post-deploy to authenticate;
+// using OAuth. Requires interactive consent before provisioning triggers;
 // sign in with an account that has access to the target Dataverse environment.
 
 param name string
@@ -22,7 +22,7 @@ resource dataverseConnection 'Microsoft.Web/connectorGateways/connections@2026-0
   parent: connectorNamespace
   name: connectionName
   properties: {
-    connectorName: 'commondataservice'
+    connectorName: loadJsonContent('./scripts/polling-config.json').connectorName
   }
 }
 

@@ -1,0 +1,17 @@
+{
+  "connectorName": "office365",
+  "displayName": "Office 365",
+  "triggers": [
+    {
+      "functionName": "OnNewEmail",
+      "operationName": "OnNewEmailV3",
+      "parameters": [{ "name": "folderPath", "value": "Inbox" }]
+    },
+    { "functionName": "OnFlaggedEmail", "operationName": "OnFlaggedEmailV4" },
+    { "functionName": "OnNewMentionMeEmail", "operationName": "OnNewMentionMeEmailV3" },
+    { "functionName": "OnNewCalendarEvent", "operationName": "CalendarGetOnNewItemsV3" },
+    { "functionName": "OnCalendarUpdatedItems", "operationName": "CalendarGetOnUpdatedItemsV3" },
+    { "functionName": "OnUpcomingEvent", "operationName": "OnUpcomingEventsV3" },
+    { "functionName": "OnSharedMailboxNewEmail", "operationName": "SharedMailboxOnNewEmailV2", "optional": true }
+  ]
+}

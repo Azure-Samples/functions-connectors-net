@@ -3,6 +3,8 @@ param location string
 param tags object
 param connectionName string
 param userPrincipalId string
+param connectorName string
+param authenticationType string = ''
 
 resource namespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = {
   name: name
@@ -13,7 +15,11 @@ resource namespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' = {
 resource connection 'Microsoft.Web/connectorGateways/connections@2026-05-01-preview' = {
   parent: namespace
   name: connectionName
-  properties: { connectorName: 'planner' }
+  properties: union({
+    connectorName: connectorName
+  }, !empty(authenticationType) ? {
+    parameterValueSet: { name: authenticationType, values: {} }
+  } : {})
 }
 resource developerPolicy 'Microsoft.Web/connectorGateways/connections/accessPolicies@2026-05-01-preview' = if (!empty(userPrincipalId)) {
   parent: connection
@@ -26,4 +32,5 @@ resource developerPolicy 'Microsoft.Web/connectorGateways/connections/accessPoli
   }
 }
 output name string = namespace.name
+output resourceId string = namespace.id
 output connectionName string = connection.name

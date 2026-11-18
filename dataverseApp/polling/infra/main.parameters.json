@@ -8,11 +8,8 @@
     "location": {
       "value": "${AZURE_LOCATION}"
     },
-    "telemetryLocation": {
-      "value": "${TELEMETRY_LOCATION}"
-    },
     "connectorNamespaceLocation": {
-      "value": "${CONNECTOR_NAMESPACE_LOCATION}"
+      "value": "${CONNECTOR_NAMESPACE_LOCATION=westcentralus}"
     },
     "userPrincipalId": {
       "value": "${AZURE_PRINCIPAL_ID}"

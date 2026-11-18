@@ -13,11 +13,11 @@ Properties-only events use typed SDK models. The SDK has no payload models for t
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+, and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd).
-- PowerShell 7.3+ (.NET 7+, default hook), or Bash with `jq` and the `link` utility for the alternative hook.
+- [.NET 10 SDK](https://dotnet.microsoft.com/download), [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75+, and [Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.33.0+.
+- PowerShell 7 on Windows or `sh` on POSIX; a terminal and writable temporary directory for setup.
 - For local development: [Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite).
 - A OneDrive for Business account and permission to complete OAuth consent.
-- [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+- [Connector Namespace CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) version 1.0.0b33. The deployment scripts use it automatically for sign-in and source pickers:
 
   ```powershell
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
@@ -27,27 +27,20 @@ Properties-only events use typed SDK models. The SDK has no payload models for t
 
 ## Deploy to Azure
 
-Run from this folder, using a unique environment name. Use the **connector folder ID**, not a name/path or the literal `root` (the connector fails trigger evaluation with `Invalid fileId`); for the root folder, use the root's connector-returned ID. Provisioning stops if `ONEDRIVE_FOLDER_ID` is unset or `root`.
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
 
-```powershell
+Run from this folder, using a unique environment name:
+
+```cmd
 az login
 azd auth login
 azd env new onedrive-polling
-```
-
-Set `ONEDRIVE_FOLDER_ID` directly:
-
-```powershell
-azd env set ONEDRIVE_FOLDER_ID <connector-folder-id>
-```
-
-Or use [Folder ID setup](#folder-id-setup) to select and save it. Then deploy:
-
-```powershell
 azd up
 ```
 
-Complete OAuth in the browser opened by the hook and wait for **Connected**.
+Complete browser sign-in, choose at least one trigger, and browse to the folder to monitor when prompted. Only selected triggers are enabled. Setup confirms Azure reports Connected even if a sign-in window remains stale.
+
+The catalog is `infra/scripts/polling-config.json`. The folder browser shows connector-returned folders, supports nested browsing and parent navigation, and applies the selected real folder ID to selected triggers. It excludes the literal `root`, which fails trigger evaluation with `Invalid fileId`. No `ONEDRIVE_FOLDER_ID`, temporary bootstrap namespace or manual ID lookup is needed.
 
 ## Optional configuration
 
@@ -55,24 +48,12 @@ Set environment values with `azd env set <setting> <value>` before `azd up`.
 
 | Setting / action | Use |
 | --- | --- |
-| `ONEDRIVE_FOLDER_ID` | Required connector-returned folder ID; no default |
 | `CONNECTOR_NAMESPACE_LOCATION` | Namespace region; default `westcentralus` |
 | `TELEMETRY_LOCATION` | Application Insights/Log Analytics region; default `eastus2` because Application Insights is unavailable in `westcentralus` |
-| Bash hook | In `azure.yaml`, set `shell: sh` and `run: bash ./infra/scripts/postdeploy.sh`; requires `jq` |
-| Rerun setup | `azd hooks run postdeploy`, or `bash ./infra/scripts/postdeploy.sh` |
-| Regenerate local settings | Run the PowerShell script with `-ForceLocalSettings`, or Bash with `--force-local-settings`; otherwise existing settings are preserved |
 
-### Folder ID setup
+Selections are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose triggers or a folder again, run `azd env set POLLING_TRIGGER_INPUTS ""` and `azd up`. Skipped owned configurations and listeners are disabled; never-created skipped configurations stay absent. Setup refuses missing or conflicting destination ownership metadata; use a fresh environment for older deployments without it.
 
-Resolve the ID through an authorized OneDrive for Business connection before provisioning. From this folder, after `azd env new`:
-
-```powershell
-./infra/scripts/resolve-folder-id.ps1 -ResourceGroup <resource-group>
-```
-
-The script creates a temporary Connector Namespace and connection in `<resource-group>`, prompts for OAuth, lets you browse to a folder, and saves `ONEDRIVE_FOLDER_ID` in the azd environment. It deletes the temporary namespace unless `-KeepBootstrap` is set. If the resource group does not exist, the script creates it but does not delete it.
-
-To reuse an existing connection instead, pass `-ResourceGroup`, `-ConnectorNamespace`, and `-ConnectionName`. After this environment is provisioned, run the script with no arguments to select a folder using its connection, then run `azd provision`.
+If sign-in or trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available.
 
 ## Local development
 
@@ -84,21 +65,21 @@ If the Function App is already deployed, stop it before running locally to avoid
 
    Use the ignored file generated during `azd up`, containing the endpoint and four config names. Sign in as the authorized developer:
 
-   ```powershell
+   ```cmd
    az login
    ```
 
-   Only if the file is missing, run `azd hooks run postdeploy` from this folder's selected environment. Existing files are preserved; see Optional configuration to regenerate changed settings.
+   Only if the file is missing, run `dotnet run --file ./infra/scripts/PollingSetup.cs -- finish` from this folder's selected environment. Existing files are preserved byte-for-byte; manually reconcile their listener switches or deliberately archive them before regenerating. The example has disabled listeners and a placeholder endpoint, so it is not runnable.
 
 2. Start Azurite in a separate terminal:
 
-   ```powershell
+   ```cmd
    azurite
    ```
 
 3. Build and start the local host:
 
-   ```powershell
+   ```cmd
    dotnet build
    func start
    ```
@@ -107,7 +88,7 @@ Use developer credentials locally, not deployed managed-identity settings. Worke
 
 ## Verify
 
-Check the connection is **Connected** and all four triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Create a file smaller than 50 MB and then modify it in the monitored folder. Allow time for connector detection and telemetry ingestion. In the deployed Application Insights resource, open **Logs** and run this query to check all four function names across instances:
+Check the connection is **Connected** and selected triggers are **Enabled** in [Connector Namespaces](https://connectors.azure.com/). Create a file smaller than 50 MB and then modify it in the monitored folder. Expect receipts only from selected functions. Allow time for connector detection and telemetry ingestion. In the deployed Application Insights resource, open **Logs** and run this query:
 
 ```kusto
 traces
@@ -119,7 +100,7 @@ traces
 
 See [Application Insights queries](https://learn.microsoft.com/azure/azure-functions/analyze-telemetry-data). After verification, clean up from this sample's selected environment:
 
-```powershell
+```cmd
 azd down --purge
 ```
 

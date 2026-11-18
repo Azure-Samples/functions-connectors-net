@@ -17,6 +17,7 @@
     <PackageReference Include="Microsoft.Extensions.Azure" Version="1.14.1" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="infra/**/*.cs" />
     <None Remove="infra/**;README.md" />
     <None Update="host.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="local.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
