@@ -1,0 +1,17 @@
+{
+  "connectorName": "teams",
+  "displayName": "Teams",
+  "triggers": [
+    { "functionName": "OnNewChannelMessage", "operationName": "OnNewChannelMessage" },
+    { "functionName": "OnNewChannelMessageMentioningMe", "operationName": "OnNewChannelMessageMentioningMe" },
+    { "functionName": "OnGroupMembershipAdd", "operationName": "OnGroupMembershipAdd" },
+    { "functionName": "OnGroupMembershipRemoval", "operationName": "OnGroupMembershipRemoval" },
+    { "functionName": "WebhookAtMentionTrigger", "operationName": "WebhookAtMentionTrigger", "optional": true },
+    { "functionName": "WebhookMessageReactionTrigger", "operationName": "WebhookMessageReactionTrigger", "optional": true },
+    { "functionName": "TranscriptTrigger", "operationName": "TranscriptTrigger", "optional": true },
+    { "functionName": "RecordingTrigger", "operationName": "RecordingTrigger", "optional": true },
+    { "functionName": "WebhookChatMessageTrigger", "operationName": "WebhookChatMessageTrigger", "optional": true },
+    { "functionName": "WebhookKeywordTrigger", "operationName": "WebhookKeywordTrigger", "optional": true },
+    { "functionName": "WebhookNewMessageTrigger", "operationName": "WebhookNewMessageTrigger", "optional": true }
+  ]
+}

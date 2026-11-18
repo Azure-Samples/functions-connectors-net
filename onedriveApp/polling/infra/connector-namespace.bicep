@@ -18,7 +18,7 @@ resource onedriveConnection 'Microsoft.Web/connectorGateways/connections@2026-05
   parent: connectorNamespace
   name: connectionName
   properties: {
-    connectorName: 'onedriveforbusiness'
+    connectorName: loadJsonContent('./scripts/polling-config.json').connectorName
   }
 }
 
@@ -37,4 +37,5 @@ resource userAccessPolicy 'Microsoft.Web/connectorGateways/connections/accessPol
 }
 
 output name string = connectorNamespace.name
+output resourceId string = connectorNamespace.id
 output connectionName string = onedriveConnection.name

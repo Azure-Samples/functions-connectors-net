@@ -119,5 +119,5 @@ Run `azd down --purge` when finished.
 
 ## More
 
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
+- [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md)
 - [Office 365 Outlook connector reference](https://learn.microsoft.com/connectors/office365/)

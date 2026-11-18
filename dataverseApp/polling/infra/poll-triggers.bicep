@@ -1,59 +1,38 @@
 param namespaceName string
 param connectionName string
 param functionAppName string
-@minLength(1)
-param environmentUrl string
-param tableName string = 'account'
-param enableSeparateRowTriggers bool = false
-param enableActionTrigger bool = false
+param triggerPlan string
 
-var organization = endsWith(environmentUrl, '/') ? substring(environmentUrl, 0, length(environmentUrl) - 1) : environmentUrl
+var plan = json(base64ToString(triggerPlan))
+var connectorName = loadJsonContent('./scripts/polling-config.json').connectorName
+var endpointConfigName = plan.?endpointConfigName ?? ''
 
-resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
-  name: namespaceName
-}
-
-resource rowTrigger 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = {
-  parent: connectorNamespace
-  name: 'dataverse-ondataverserowchanged'
+resource gateway 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = { name: namespaceName }
+resource configs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in plan.selected: {
+  parent: gateway
+  name: trigger.name
   properties: {
-    connectionDetails: { connectionName: connectionName, connectorName: 'commondataservice' }
-    deliveryMode: 'Poll'
-    operationName: 'SubscribeWebhookTrigger'
+    connectionDetails: { connectionName: connectionName, connectorName: connectorName }
+    operationName: trigger.operationName
+    parameters: trigger.parameters
     metadata: {
       destinationType: 'functionApp'
       functionAppName: functionAppName
       functionAppResourceGroup: resourceGroup().name
       functionAppSubscriptionId: subscription().subscriptionId
-      functionName: 'OnDataverseRowChanged'
+      functionName: trigger.functionName
     }
-    parameters: [
-      { name: 'organization', value: organization }
-      { name: 'entityname', value: tableName }
-      { name: 'message', value: '7' }
-      { name: 'scope', value: '4' }
-    ]
+    deliveryMode: 'Poll'
     state: 'Enabled'
     type: 'NotSpecified'
-    description: 'Current Dataverse added, modified, or deleted operation with Poll delivery.'
+    description: '${connectorName} ${trigger.functionName} with Poll delivery.'
   }
+}]
+resource endpointConfig 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' existing = if (!empty(endpointConfigName)) {
+  parent: gateway
+  name: endpointConfigName
 }
-
-var receiveUri = split(string(rowTrigger.properties.pollingEndpoints.receiveUri), '?')[0]
-var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
-
-output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
-  ? substring(endpointBase, 0, max(0, length(endpointBase) - 4))
-  : endpointBase
-
-output triggerConfigSettings object = {
-  OnDataverseRowChangedTriggerConfigName: rowTrigger.name
-  OnDataverseActionPerformedTriggerConfigName: 'dataverse-ondataverseactionperformed'
-  'AzureWebJobs.OnDataverseActionPerformed.Disabled': string(!enableActionTrigger)
-  OnDataverseRowAddedTriggerConfigName: 'dataverse-ondataverserowadded'
-  OnDataverseRowModifiedTriggerConfigName: 'dataverse-ondataverserowmodified'
-  OnDataverseRowDeletedTriggerConfigName: 'dataverse-ondataverserowdeleted'
-  'AzureWebJobs.OnDataverseRowAdded.Disabled': string(!enableSeparateRowTriggers)
-  'AzureWebJobs.OnDataverseRowModified.Disabled': string(!enableSeparateRowTriggers)
-  'AzureWebJobs.OnDataverseRowDeleted.Disabled': string(!enableSeparateRowTriggers)
-}
+var receiveUri = empty(endpointConfigName) ? '' : split(string(endpointConfig!.properties.pollingEndpoints.receiveUri), '?')[0]
+var pathIndex = indexOf(toLower(receiveUri), '/triggerconfigs/')
+var base = pathIndex < 0 ? '' : substring(receiveUri, 0, pathIndex)
+output pollingEndpoint string = endsWith(toLower(base), '/api') ? substring(base, 0, max(0, length(base) - 4)) : base

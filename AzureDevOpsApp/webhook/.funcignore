@@ -1,0 +1,11 @@
+.git*
+.azure
+infra
+obj
+README.md
+local.settings.json
+.local-settings.*
+__azurite_db*
+__blobstorage__
+__queuestorage__
+.azurite*

@@ -1,39 +1,38 @@
 param namespaceName string
 param connectionName string
-param monitoredStorageAccountName string
-param monitoredContainerName string = 'connector-input'
+param functionAppName string
+param triggerPlan string
 
-resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
-  name: namespaceName
-}
+var plan = json(base64ToString(triggerPlan))
+var connectorName = loadJsonContent('./scripts/polling-config.json').connectorName
+var endpointConfigName = plan.?endpointConfigName ?? ''
 
-resource triggerConfig 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = {
-  parent: connectorNamespace
-  name: 'azureblob-onupdatedfile'
+resource gateway 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = { name: namespaceName }
+resource configs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in plan.selected: {
+  parent: gateway
+  name: trigger.name
   properties: {
-    connectionDetails: {
-      connectionName: connectionName
-      connectorName: 'azureblob'
+    connectionDetails: { connectionName: connectionName, connectorName: connectorName }
+    operationName: trigger.operationName
+    parameters: trigger.parameters
+    metadata: {
+      destinationType: 'functionApp'
+      functionAppName: functionAppName
+      functionAppResourceGroup: resourceGroup().name
+      functionAppSubscriptionId: subscription().subscriptionId
+      functionName: trigger.functionName
     }
     deliveryMode: 'Poll'
-    operationName: 'OnUpdatedFiles_V2'
-    parameters: [
-      { name: 'dataset', value: monitoredStorageAccountName }
-      // The connector expects base64 of the URL-encoded container path, not the plain container name.
-      { name: 'folderId', value: base64('%2f${monitoredContainerName}') }
-    ]
     state: 'Enabled'
     type: 'NotSpecified'
-    description: 'Azure Blob OnUpdatedFile with Poll delivery.'
+    description: '${connectorName} ${trigger.functionName} with Poll delivery.'
   }
+}]
+resource endpointConfig 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' existing = if (!empty(endpointConfigName)) {
+  parent: gateway
+  name: endpointConfigName
 }
-
-// Keep the service-generated authority and optional gateway path, without an operation or query.
-var receiveUri = split(string(triggerConfig.properties.pollingEndpoints.receiveUri), '?')[0]
-var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
-
-output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
-  ? substring(endpointBase, 0, max(0, length(endpointBase) - 4))
-  : endpointBase
-
-output triggerConfigName string = triggerConfig.name
+var receiveUri = empty(endpointConfigName) ? '' : split(string(endpointConfig!.properties.pollingEndpoints.receiveUri), '?')[0]
+var pathIndex = indexOf(toLower(receiveUri), '/triggerconfigs/')
+var base = pathIndex < 0 ? '' : substring(receiveUri, 0, pathIndex)
+output pollingEndpoint string = endsWith(toLower(base), '/api') ? substring(base, 0, max(0, length(base) - 4)) : base

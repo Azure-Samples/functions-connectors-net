@@ -1,0 +1,8 @@
+{
+  "connectorName": "azureblob",
+  "displayName": "Azure Blob",
+  "authenticationType": "managedIdentityAuth",
+  "triggers": [
+    { "functionName": "OnUpdatedFile", "operationName": "OnUpdatedFiles_V2" }
+  ]
+}

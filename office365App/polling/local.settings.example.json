@@ -11,6 +11,12 @@
     "OnUpcomingEventTriggerConfigName": "office365-onupcomingevent",
     "OnSharedMailboxNewEmailTriggerConfigName": "office365-onsharedmailboxnewemail",
     "OnCalendarUpdatedItemsTriggerConfigName": "office365-oncalendarupdateditems",
-    "AzureWebJobs.OnSharedMailboxNewEmail.Disabled": "true"
+    "AzureWebJobs.OnSharedMailboxNewEmail.Disabled": "true",
+    "AzureWebJobs.OnNewEmail.Disabled": "true",
+    "AzureWebJobs.OnFlaggedEmail.Disabled": "true",
+    "AzureWebJobs.OnNewMentionMeEmail.Disabled": "true",
+    "AzureWebJobs.OnNewCalendarEvent.Disabled": "true",
+    "AzureWebJobs.OnCalendarUpdatedItems.Disabled": "true",
+    "AzureWebJobs.OnUpcomingEvent.Disabled": "true"
   }
 }

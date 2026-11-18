@@ -7,13 +7,14 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'local-settings.ps1')
 $localCallback = -not [string]::IsNullOrWhiteSpace($CallbackBaseUrl)
 
-if ($CallbackBaseUrl -and (
-    -not $CallbackBaseUrl.StartsWith('https://', [System.StringComparison]::OrdinalIgnoreCase) -or
-    [string]::IsNullOrWhiteSpace($ConnectorExtensionKey))) {
-    throw 'Local callbacks require a public HTTPS CallbackBaseUrl and the local ConnectorExtensionKey.'
+if ($localCallback -and -not $CallbackBaseUrl.StartsWith('https://', [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Local callbacks require a public HTTPS CallbackBaseUrl.'
 }
-if ($ConnectorExtensionKey -and -not $CallbackBaseUrl) {
+if ($ConnectorExtensionKey -and -not $localCallback) {
     throw 'CallbackBaseUrl is required when supplying ConnectorExtensionKey.'
+}
+if ($localCallback -and [string]::IsNullOrWhiteSpace($ConnectorExtensionKey)) {
+    $ConnectorExtensionKey = Get-LocalConnectorExtensionKey (Join-Path $PSScriptRoot '../..')
 }
 
 Write-Host "Post-deployment configuration..." -ForegroundColor Yellow

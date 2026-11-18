@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION}"
+    },
+    "namespaceName": {
+      "value": "${connectorNamespaceName=}"
+    },
+    "connectionName": {
+      "value": "${connectorNamespaceConnectionName=}"
+    },
+    "pollingEndpoint": {
+      "value": "${pollingEndpoint=}"
+    },
+    "triggerSettings": {
+      "value": "${POLLING_TRIGGER_APP_SETTINGS=e30=}"
+    },
+    "functionAppExists": {
+      "value": "${POLLING_FUNCTION_APP_EXISTS=false}"
+    },
+    "userPrincipalId": {
+      "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "applicationInsightsLocation": {
+      "value": "${APPLICATION_INSIGHTS_LOCATION=}"
+    }
+  }
+}

@@ -1,45 +1,38 @@
 param namespaceName string
 param connectionName string
 param functionAppName string
-param functionAppResourceGroup string
-param functionAppSubscriptionId string = subscription().subscriptionId
-@minLength(1)
-param triggers array
+param triggerPlan string
 
-resource connectorNamespace 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = {
-  name: namespaceName
-}
+var plan = json(base64ToString(triggerPlan))
+var connectorName = loadJsonContent('./scripts/polling-config.json').connectorName
+var endpointConfigName = plan.?endpointConfigName ?? ''
 
-resource triggerConfigs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [
-  for trigger in triggers: {
-    parent: connectorNamespace
-    name: 'sharepoint-${toLower(trigger.functionName)}'
-    properties: {
-      connectionDetails: {
-        connectionName: connectionName
-        connectorName: 'sharepointonline'
-      }
-      deliveryMode: 'Poll'
-      operationName: trigger.operationName
-      metadata: {
-        destinationType: 'functionApp'
-        functionAppName: functionAppName
-        functionAppResourceGroup: functionAppResourceGroup
-        functionAppSubscriptionId: functionAppSubscriptionId
-        functionName: trigger.functionName
-      }
-      parameters: trigger.parameters
-      state: 'Enabled'
-      type: 'NotSpecified'
-      description: 'SharePoint Online ${trigger.functionName} with Poll delivery.'
+resource gateway 'Microsoft.Web/connectorGateways@2026-05-01-preview' existing = { name: namespaceName }
+resource configs 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' = [for trigger in plan.selected: {
+  parent: gateway
+  name: trigger.name
+  properties: {
+    connectionDetails: { connectionName: connectionName, connectorName: connectorName }
+    operationName: trigger.operationName
+    parameters: trigger.parameters
+    metadata: {
+      destinationType: 'functionApp'
+      functionAppName: functionAppName
+      functionAppResourceGroup: resourceGroup().name
+      functionAppSubscriptionId: subscription().subscriptionId
+      functionName: trigger.functionName
     }
+    deliveryMode: 'Poll'
+    state: 'Enabled'
+    type: 'NotSpecified'
+    description: '${connectorName} ${trigger.functionName} with Poll delivery.'
   }
-]
-
-// The extension accepts either a gateway path or a stable-DNS authority, without an operation or query.
-var receiveUri = split(string(triggerConfigs[0].properties.pollingEndpoints.receiveUri), '?')[0]
-var endpointBase = substring(receiveUri, 0, indexOf(toLower(receiveUri), '/triggerconfigs/'))
-
-output pollingEndpoint string = endsWith(toLower(endpointBase), '/api')
-  ? substring(endpointBase, 0, max(0, length(endpointBase) - 4))
-  : endpointBase
+}]
+resource endpointConfig 'Microsoft.Web/connectorGateways/triggerConfigs@2026-05-01-preview' existing = if (!empty(endpointConfigName)) {
+  parent: gateway
+  name: endpointConfigName
+}
+var receiveUri = empty(endpointConfigName) ? '' : split(string(endpointConfig!.properties.pollingEndpoints.receiveUri), '?')[0]
+var pathIndex = indexOf(toLower(receiveUri), '/triggerconfigs/')
+var base = pathIndex < 0 ? '' : substring(receiveUri, 0, pathIndex)
+output pollingEndpoint string = endsWith(toLower(base), '/api') ? substring(base, 0, max(0, length(base) - 4)) : base

@@ -21,12 +21,12 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) 1.33.0+
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) 2.75.0 or later
-- PowerShell 7.3+ (.NET 7+) for private staging files in the hook and Bash wrapper
+- PowerShell 7 on Windows or `sh` on POSIX; a terminal and writable temporary directory for setup
 - Azure Functions Core Tools v4 and Azurite for local development
 - A Teams account with team/channel access and permission to authorize the connection
-- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli):
+- [`connector-namespace` CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) version 1.0.0b33. The deployment scripts use it automatically for sign-in and source pickers:
 
   ```bash
   curl -fsSL https://aka.ms/connector-namespace-cli-install | sh
@@ -40,17 +40,17 @@ Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packag
 
 ## Deploy to Azure
 
-```bash
+`azd up` provisions the Azure resources, helps you set up triggers, and deploys the Function App.
+
+```cmd
 cd teamsApp/polling
 az login
 azd auth login
 azd env new teams-polling
-azd env set TEAMS_GROUP_ID "<team / Microsoft 365 group object ID>"
-azd env set TEAMS_CHANNEL_ID "<URL-decoded channel ID>"
 azd up
 ```
 
-Use IDs from a Teams channel link, not display names, and set both before provisioning. Complete OAuth when the hook opens your browser; connected accounts skip consent. Use a different environment name from Webhook.
+Use a different environment name from webhook. Complete browser sign-in, choose at least one trigger, and select the teams, channels or other sources to monitor when prompted. Only selected triggers are enabled. Setup checks Azure's Connected status even if a sign-in window remains stale.
 
 ## Optional configuration
 
@@ -58,17 +58,11 @@ Use IDs from a Teams channel link, not display names, and set both before provis
 | --- | --- |
 | `azd env set CONNECTOR_NAMESPACE_LOCATION <region>` | Namespace region; defaults to `westcentralus` |
 | `azd env set TELEMETRY_LOCATION <region>` | Telemetry region; defaults to `eastus2` because Application Insights is unavailable in `westcentralus` |
-| `infra/additional-triggers.json` | Select optional events below; unselected listeners stay disabled |
-| `azd hooks run postdeploy` | Rerun setup/consent without redeployment |
-| `bash ./infra/scripts/postdeploy.sh` | Alternative entry point; still requires PowerShell 7.3+. For the postdeploy azd hook, use `shell: sh` and this script's path as `run` |
-| `pwsh -File ./infra/scripts/postdeploy.ps1 -ForceLocalSettings` | Regenerate local settings after selection changes; existing settings are otherwise preserved. Bash accepts the same switch |
+| `infra/scripts/polling-config.json` | Catalog of all eleven functions and connector operations |
 
 ## Optional triggers
 
-Four events are configured by default. To add others, copy the example configuration, keep only the events you need, and fill in their required source parameters. Setup registers the selected events and enables the corresponding listeners; no separate manual listener flags are needed.
-
-1. Copy `infra/additional-triggers.example.json` to `infra/additional-triggers.json`.
-2. Keep only explicitly authorized events and replace placeholders using actual scopes/enums from the connector UI or exported configuration.
+All events are explicitly selected during setup; no broad chat or meeting subscription is enabled implicitly. The metadata collector asks for required source inputs, including dynamic request-body fields. Select only authorized scopes. Important source requirements remain:
 
 | Operation | Required source parameters |
 | --- | --- |
@@ -78,22 +72,18 @@ Four events are configured by default. To add others, copy the example configura
 | `WebhookMessageReactionTrigger` | `reactionKey`, `frequency`, `runningPolicy`, `threadType`, dynamic `requestBody` scope |
 | `RecordingTrigger`, `TranscriptTrigger` | `scopeType`, dynamic `body` scope; appropriate meeting licenses/policies |
 
-3. Preserve exact operation/parameter casing, JSON types and nested values. Never copy keys or tokens. Targeted events require `requestBody` even when marked optional in the catalog.
-4. Apply the selection:
+Use actual source identifiers, not placeholders or display names. Targeted events require `requestBody` even where metadata marks it optional; the service validates dynamic schemas, licensing and permissions.
 
-   ```bash
-   azd up
-   ```
+Selections are saved in the active azd environment's `POLLING_TRIGGER_INPUTS` and reused. These settings are not encrypted; keep `.azure` out of source control. To choose again:
 
-Hooks reject unsupported/duplicate names, missing/empty values and placeholders; the service validates dynamic schemas and permissions.
+```cmd
+azd env set POLLING_TRIGGER_INPUTS ""
+azd up
+```
 
-**Selection safety:** After changing the selection, run `azd up`: Bicep creates or updates selected configurations as Enabled, and postdeploy automatically disables existing deselected configurations at the seven deterministic sample-owned optional Poll IDs. Reselecting an event re-enables the same ID without deleting or recreating it.
+**Selection safety:** Bicep enables selected configurations. Setup disables skipped owned configurations while preserving their other writable properties and disables corresponding app listeners; absent skipped configurations stay absent. Unrelated configurations are not changed. Setup refuses configurations with missing or conflicting destination ownership metadata; use a fresh sample environment for older configurations without it. Reselecting enables the same deterministic ID. Disabling does not tear down upstream subscriptions or remove queued events. This behavior applies to polling only, not webhook registrations.
 
-Missing deselected configurations are skipped; the four default events and unrelated namespace configurations are not disabled. The hook rejects a conflicting delivery mode, operation or connection instead of changing it. Broad chats and meeting subscriptions are never enabled implicitly.
-
-This reconciles configuration state, not upstream subscription teardown or already queued events; no manual Connector Namespace cleanup is needed for ordinary selection changes. This behavior applies to polling only, not webhook registrations.
-
-Existing local settings remain preserved; regenerate them with `-ForceLocalSettings` or update only the selected, authorized optional listener flags.
+If sign-in or trigger setup fails, correct the issue and rerun `azd up`. Resources already provisioned remain available. Deployment creates ignored `local.settings.json` only if missing. Existing files are preserved byte-for-byte; reconcile their switches manually or deliberately archive the file before regenerating.
 
 ## Local development
 
@@ -101,24 +91,24 @@ If the Function App is already deployed, stop it before running locally to avoid
 
 1. Prepare `local.settings.json`.
 
-   Use the file generated by postdeploy after `azd up`. Sign in with an identity granted developer connection access:
+   Use the file generated during successful `azd up`. Sign in with an identity granted developer connection access:
 
-   ```bash
+   ```cmd
    az login
    ```
 
-   Only if the file is missing, run `azd hooks run postdeploy` to generate it. For an existing namespace instead, copy `local.settings.example.json` only if `local.settings.json` does not exist, then fill the endpoint/config names. Set `AzureWebJobs.<operation>.Disabled=false` only for selected, existing, authorized optional configs. Do not copy Azure managed-identity settings locally.
+   Only if the file is missing, run `dotnet run --file ./infra/scripts/PollingSetup.cs -- finish` to generate it. The example has a placeholder endpoint and all listeners disabled, so it is not runnable. Do not copy Azure managed-identity settings locally.
 
    Worker telemetry uses the same `ConnectorNamespace` identity settings as polling: the Function App's system-assigned identity in Azure, developer credentials locally.
 2. Start Azurite in a separate terminal:
 
-   ```bash
+   ```cmd
    azurite
    ```
 
 3. Build and start the host:
 
-   ```bash
+   ```cmd
    dotnet build
    func start
    ```
@@ -133,6 +123,6 @@ Run `azd down --purge` from this folder to clean up.
 
 ## More
 
-- [Operations to Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#microsoft-teams-connector)
+- [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md#microsoft-teams-connector)
 - [Teams connector reference and callback schemas](https://learn.microsoft.com/connectors/teams/)
 - [Connector trigger configuration](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/connector-trigger-configuration.md)

@@ -11,9 +11,9 @@
 | [OneDrive](onedriveApp/README.md) | [OneDrive for Business](https://learn.microsoft.com/connectors/onedriveforbusiness/) |
 | [Teams](teamsApp/README.md) | [Microsoft Teams](https://learn.microsoft.com/connectors/teams/) |
 | [Dataverse](dataverseApp/README.md) | [Microsoft Dataverse (Common Data Service)](https://learn.microsoft.com/connectors/commondataservice/) |
-| Planner | [Planner](https://learn.microsoft.com/connectors/planner/) |
-| Salesforce | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) |
-| Azure DevOps | [Azure DevOps (VSTS)](https://learn.microsoft.com/connectors/visualstudioteamservices/) |
+| [Planner](PlannerApp/README.md) | [Planner](https://learn.microsoft.com/connectors/planner/) |
+| [Salesforce](SalesforceApp/README.md) | [Salesforce](https://learn.microsoft.com/connectors/salesforce/) |
+| [Azure DevOps](AzureDevOpsApp/README.md) | [Azure DevOps (VSTS)](https://learn.microsoft.com/connectors/visualstudioteamservices/) |
 | [Azure Blob](azureblobApp/README.md) | [Azure Blob Storage](https://learn.microsoft.com/connectors/azureblob/) |
 | [Generic](genericApp/README.md) | [Any connector](https://learn.microsoft.com/connectors/), using raw string payloads |
 
@@ -21,11 +21,11 @@ Guides without links are work in progress. Each available sample is a self-conta
 
 ## More triggers and operations
 
-See the full [Operations to Azure Functions Signature Mapping](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) for all supported connector triggers and their .NET, Python, and TypeScript signatures.
+See the full [Connector trigger payloads for Azure Functions](https://github.com/Azure/azure-functions-connector-extension/blob/main/docs/operations-functions-match.md) for all supported connector triggers and their .NET, Python, and TypeScript signatures.
 
 ## Prerequisites
 
-- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) — 1.33.0+ for polling samples
 - [Azure CLI (`az`)](https://learn.microsoft.com/cli/azure/install-azure-cli) ≥ 2.75.0
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [`connector-namespace` Azure CLI extension](https://github.com/Azure/Connectors/tree/main/public-preview/connector-namespace-cli) — install with:
@@ -42,7 +42,15 @@ See the full [Operations to Azure Functions Signature Mapping](https://github.co
   irm https://aka.ms/connector-namespace-cli-install-ps | iex
   ```
 
-- `jq` (for bash post-deploy scripts on macOS/Linux)
+- `jq` (for webhook Bash scripts on macOS/Linux; not needed by polling setup)
+
+## Polling setup
+
+The nine connector-specific polling samples use a C# setup helper run automatically by `azd up` with the .NET 10 SDK already required by the app. No separate helper installation is needed.
+
+During deployment, complete browser sign-in and choose the triggers and source inputs when prompted. Azure Blob uses managed identity and does not require source-service OAuth consent. The scripts call the connector CLI for you; the OAuth-based polling samples use extension version 1.0.0b33.
+
+Deployment also creates a missing `local.settings.json` and preserves any existing file. Each polling README includes a .NET recovery command for generating a missing file separately. Webhook samples retain their existing setup scripts and prerequisites.
 
 ## Related .NET samples
 
