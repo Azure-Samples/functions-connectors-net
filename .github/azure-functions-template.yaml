@@ -1,0 +1,17 @@
+# This descriptor drives template package creation in the packaging pipeline.
+schemaVersion: 1
+
+identity: Azure.Functions.Templates.PollingConnectorsDotNet
+description: "Create a .NET isolated Azure Functions app that polls Office 365 or SharePoint using a managed connector, with Bicep infrastructure for deployment using azd."
+
+projects:
+  - name: Azure Functions Office 365 Polling Connector QuickStart (.NET)
+    shortName: office365-connector-trigger-csharp
+    root: office365App/polling
+    stack: dotnet
+    language: "C#"
+  - name: Azure Functions SharePoint Polling Connector QuickStart (.NET)
+    shortName: sharepoint-connector-trigger-csharp
+    root: sharepointApp/polling
+    stack: dotnet
+    language: "C#"
