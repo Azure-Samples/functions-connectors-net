@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Azure DevOps webhook"
+description: Receive Azure DevOps connector events through webhook delivery in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-azure-devops-webhook-dotnet
+---
+-->
+
 # Azure DevOps - Webhook delivery
 
 An independent .NET 10 isolated Function App using Azure.Connectors.Sdk 1.0.0 to receive Connector Namespace HTTPS callbacks. Source operations are polled by the namespace; this is **not** native Azure DevOps service-hook registration. The managed connector identifier is `visualstudioteamservices` (Azure DevOps, formerly VSTS).

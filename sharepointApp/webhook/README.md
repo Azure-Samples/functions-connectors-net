@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): SharePoint Online webhook"
+description: Receive SharePoint Online connector events through webhook delivery in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-sharepoint-webhook-dotnet
+---
+-->
+
 # SharePoint Online Webhook Triggers (.NET)
 
 Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector). The Connector Namespace delivers events to the function's public HTTPS callback. All handlers use typed payloads and log only the trigger name and item count.

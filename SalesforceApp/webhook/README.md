@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Salesforce webhook"
+description: Receive Salesforce connector events through webhook delivery in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-salesforce-webhook-dotnet
+---
+-->
+
 # Salesforce Webhook delivery
 
 This standalone .NET 10 isolated app receives Salesforce `GetOnNewItems` and `GetOnUpdatedItems` through the Connector extension callback route. **Salesforce is still polled by Connector Namespace**; this is not Salesforce native Webhook, CDC, Platform Event or outbound-message support. Both handlers use Azure.Connectors.Sdk 1.0.0 typed payloads and log only the trigger name and actual record count.

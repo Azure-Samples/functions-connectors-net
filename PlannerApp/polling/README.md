@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Planner polling"
+description: Receive Microsoft Planner connector events with polling in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-planner-polling-dotnet
+---
+-->
+
 # Planner polling quickstart
 
 The Functions host receives and acknowledges queued Connector Namespace events using its system-assigned identity. No tunnel is needed. This standalone .NET isolated app uses Azure Connectors SDK 1.0.0 and Connector extension 1.0.0.

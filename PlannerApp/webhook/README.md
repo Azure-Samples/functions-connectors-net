@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Planner webhook"
+description: Receive Microsoft Planner connector events through webhook delivery in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-planner-webhook-dotnet
+---
+-->
+
 # Planner webhook quickstart
 
 Connector Namespace polls Planner and sends the results to the Functions connector webhook endpoint. This is **namespace Webhook delivery**, not a native Planner subscription. This standalone .NET isolated app uses Azure Connectors SDK 1.0.0 and Connector extension 1.0.0.

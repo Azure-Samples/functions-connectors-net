@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Salesforce polling"
+description: Receive Salesforce connector events with polling in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-salesforce-polling-dotnet
+---
+-->
+
 # Salesforce Poll delivery
 
 This standalone .NET 10 isolated app monitors Salesforce `GetOnNewItems` and `GetOnUpdatedItems` through Connector Namespace and receives events with `[ConnectorTrigger(DeliveryMode = Poll)]`. No inbound callback or tunnel is needed. Both handlers use Azure.Connectors.Sdk 1.0.0 typed payloads and log only the trigger name and actual record count.
