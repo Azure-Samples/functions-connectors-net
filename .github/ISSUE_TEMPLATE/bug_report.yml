@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem in a .NET connector sample.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, callback keys/URLs, local.settings.json, tenant/account identifiers, or connector payloads. Redact logs and screenshots.
+        Report suspected credential exposure privately: https://www.microsoft.com/msrc
+  - type: input
+    id: sample
+    attributes:
+      label: Sample path
+      description: Include the connector and delivery folder, for example office365App/polling.
+    validations:
+      required: true
+  - type: dropdown
+    id: delivery
+    attributes:
+      label: Delivery mode
+      options:
+        - Polling
+        - Webhook
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and versions
+      description: Provide OS, .NET SDK, sample commit, and relevant azd, Azure CLI, connector extension, or Functions Core Tools versions. Do not include account/resource identifiers.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide sanitized commands and steps; indicate local or deployed execution and the trigger operation ID.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted error output
+      description: Include only the relevant error. Never paste settings files, raw payloads, or authentication output.
+      render: text

@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest a focused improvement to the .NET connector samples.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, account/resource identifiers, callback URLs, or source data.
+  - type: input
+    id: sample
+    attributes:
+      label: Connector and sample path
+      description: Name the affected polling/webhook sample, or a proposed connector and operation ID.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the developer scenario and why the current sample does not cover it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Describe the expected behavior, delivery mode, permissions, and any deployment impact.
+    validations:
+      required: true

@@ -1,6 +1,10 @@
 # Azure Functions Connector Samples (.NET)
 
+[![CI](https://github.com/Azure-Samples/functions-connectors-net/actions/workflows/ci.yml/badge.svg)](https://github.com/Azure-Samples/functions-connectors-net/actions/workflows/ci.yml)
+
 .NET samples for the [Azure Functions Connector Samples](https://github.com/Azure-Samples/functions-connectors/) repo, using the [Azure Connectors .NET SDK](https://github.com/Azure/Connectors-NET-SDK) and the [Connector trigger extension](https://github.com/Azure/azure-functions-connector-extension) to receive events from Microsoft 365, SharePoint, Teams, and other connectors.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local validation and contribution guidance, and [CHANGELOG.md](CHANGELOG.md) for notable changes. CI uses no configured secrets or Azure credentials; it does not deploy or invoke live connectors.
 
 ## Samples
 
