@@ -1,15 +1,20 @@
-## Changes
+## Summary
 
-Describe the affected sample paths, delivery modes, and behavior or documentation changes.
+<!-- What changed and why. Link related issues, for example: Fixes #123. -->
+
+## Affected samples
+
+<!-- Sample paths and delivery modes (polling/webhook), or "repo-wide". -->
 
 ## Validation
 
-List the commands run and their results. For deployment or trigger changes, describe the approved manual validation, or explicitly state what was not tested. Do not include source data or account/resource identifiers.
+<!-- Commands run and results, for example `dotnet restore` and `dotnet build` for `functions-connectors-net.slnx` (includes NuGet audit).
+Manual trigger testing: state local or Azure and the result, or "not run". Use test data only. -->
 
 ## Checklist
 
-- [ ] Ran the solution build and NuGet audit, or explained why they are not applicable.
-- [ ] Reviewed dependency-review and CodeQL results when available.
-- [ ] Updated affected sample/connector READMEs and the Unreleased changelog entry where applicable.
-- [ ] Preserved independent polling/webhook setup and stable Learn metadata where applicable.
-- [ ] Included no credentials, local settings, `.azure` environments, build outputs, raw payloads, or sensitive logs/screenshots.
+- [ ] Validation passed, or I explained above why it does not apply.
+- [ ] Each polling/webhook sample still restores, builds, and deploys independently.
+- [ ] Updated affected READMEs and the `Unreleased` section of CHANGELOG.md.
+- [ ] Kept existing Learn metadata (`urlFragment`) stable in sample READMEs.
+- [ ] Included no credentials, `local.settings.json`, `.azure` environments, build output, real payloads, or unredacted logs/screenshots.

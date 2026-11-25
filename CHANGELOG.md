@@ -1,11 +1,10 @@
 # Changelog
 
-Notable changes are recorded here. Earlier changes are available in the repository's Git history.
+Notable changes to this project are documented in this file.
 
 ## Unreleased
 
 ### Added
 
-- Repository-specific contribution guidance and issue/pull request templates.
-- GitHub Actions CI to build all .NET sample apps with SDK analyzers and audit NuGet dependencies.
-- Standard dependency-review and CodeQL security-and-quality workflows, without configured secrets or Azure credentials.
+- Contributing guide, issue forms, and pull request template.
+- GitHub Actions CI that builds all .NET sample apps and audits NuGet dependencies, plus CodeQL and dependency review workflows. CI uses no secrets.

@@ -1,41 +1,43 @@
 name: Bug report
 description: Report a reproducible problem in a .NET connector sample.
 title: "[Bug]: "
+labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: |
-        Do not include credentials, callback keys/URLs, local.settings.json, tenant/account identifiers, or connector payloads. Redact logs and screenshots.
-        Report suspected credential exposure privately: https://www.microsoft.com/msrc
+      value: Do not include credentials, connection keys, callback URLs, `local.settings.json`, tenant/subscription/resource identifiers, or real connector payloads. Redact logs and screenshots. Report security vulnerabilities privately at https://msrc.microsoft.com/report/.
   - type: input
     id: sample
     attributes:
       label: Sample path
-      description: Include the connector and delivery folder, for example office365App/polling.
+      description: Connector and delivery folder, or "repo-wide".
+      placeholder: office365App/polling
     validations:
       required: true
   - type: dropdown
-    id: delivery
+    id: stage
     attributes:
-      label: Delivery mode
+      label: Where does it fail?
       options:
-        - Polling
-        - Webhook
-        - Both
+        - Restore or build
+        - Provisioning or deployment (azd)
+        - Connection or trigger setup
+        - Event delivery or function execution
+        - Documentation
     validations:
       required: true
   - type: textarea
     id: environment
     attributes:
-      label: Environment and versions
-      description: Provide OS, .NET SDK, sample commit, and relevant azd, Azure CLI, connector extension, or Functions Core Tools versions. Do not include account/resource identifiers.
+      label: Environment
+      description: OS, .NET SDK, Azure Functions Core Tools, azd, Azure CLI, and sample commit. State whether it ran locally or in Azure.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
-      label: Reproduction steps
-      description: Provide sanitized commands and steps; indicate local or deployed execution and the trigger operation ID.
+      label: Steps to reproduce
+      description: Commands and steps using placeholders and test data.
     validations:
       required: true
   - type: textarea
@@ -48,5 +50,5 @@ body:
     id: logs
     attributes:
       label: Redacted error output
-      description: Include only the relevant error. Never paste settings files, raw payloads, or authentication output.
+      description: Only the relevant error. Never paste settings files, payloads, or authentication output.
       render: text

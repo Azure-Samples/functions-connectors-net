@@ -1,28 +1,30 @@
 name: Feature request
-description: Suggest a focused improvement to the .NET connector samples.
+description: Suggest an improvement to the .NET connector samples or docs.
 title: "[Feature]: "
+labels: [enhancement]
 body:
   - type: markdown
     attributes:
-      value: Do not include credentials, account/resource identifiers, callback URLs, or source data.
+      value: Do not include credentials, account or resource identifiers, callback URLs, or real connector data.
   - type: input
     id: sample
     attributes:
-      label: Connector and sample path
-      description: Name the affected polling/webhook sample, or a proposed connector and operation ID.
+      label: Sample or connector
+      description: Existing sample path, or a proposed connector, trigger operation, and polling/webhook mode.
+      placeholder: sharepointApp/webhook
     validations:
       required: true
   - type: textarea
     id: problem
     attributes:
-      label: Problem to solve
-      description: Explain the developer scenario and why the current sample does not cover it.
+      label: Problem or scenario
+      description: What developer scenario is missing or unclear today?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
       label: Proposed improvement
-      description: Describe the expected behavior, delivery mode, permissions, and any deployment impact.
+      description: Expected behavior or documentation change, and any permissions, deployment, or connector limitations.
     validations:
       required: true

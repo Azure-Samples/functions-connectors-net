@@ -1,35 +1,69 @@
-# Contributing
+# Contributing to Azure Functions connector samples for .NET
 
-Contributions should keep these .NET Azure Functions connector samples small, independently runnable, and focused on their documented connector operations.
+This project welcomes contributions and suggestions. Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
 
-## Prepare and validate
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
 
-Install the .NET 10 SDK. From the repository root, run:
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
-```pwsh
-dotnet restore functions-connectors-net.slnx --source https://api.nuget.org/v3/index.json -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904
-dotnet build functions-connectors-net.slnx --configuration Release --no-restore -p:EnableNETAnalyzers=true -warnaserror
-```
+- [Code of Conduct](#coc)
+- [Issues and Bugs](#issue)
+- [Feature Requests](#feature)
+- [Submission Guidelines](#submit)
 
-The solution contains all 20 polling and webhook apps, including the generic samples. Keep deployment helpers under `infra/` excluded from app compilation. Follow the affected sample's README for its setup commands; polling and webhook apps have separate configuration and deployment environments.
+## <a name="coc"></a> Code of Conduct
 
-CI builds the apps, runs the SDK analyzers, and audits direct and transitive NuGet dependencies. Separate workflows review dependency changes on PRs and run CodeQL's security-and-quality queries against the compiled C# apps. They follow the standard dependency-review pattern used by the [connector SDK](https://github.com/Azure/Connectors-NET-SDK/blob/main/.github/workflows/dependency-review.yml).
+Help us keep this project open and inclusive. Please read and follow our [Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
 
-These workflows require no configured secrets or Azure credentials. CodeQL uses GitHub's automatically generated workflow token to upload results to **Security > Code scanning**, with write permission limited to its analysis job. If CodeQL default setup is already enabled, a maintainer must switch to advanced setup before using the checked-in CodeQL workflow. GitHub's built-in secret scanning is managed separately in repository settings.
+## <a name="issue"></a> Found an Issue?
 
-CI does not deploy resources, sign in to Azure, run the Functions host, or verify live connector delivery. There are currently no automated test projects.
+If you find a bug in the source code or a mistake in the documentation, you can help us by
+[submitting an issue](#submit-issue) to the GitHub Repository. Even better, you can
+[submit a Pull Request](#submit-pr) with a fix.
 
-For a change to provisioning, authentication, or trigger handling, document the manual validation performed against an approved Azure environment and source connection, or explicitly say what was not tested. Do not create source events or enable production triggers without authorization.
+Do not report security vulnerabilities through public issues. Report them to the
+[Microsoft Security Response Center](https://msrc.microsoft.com/report/).
 
-## Keep changes safe and discoverable
+## <a name="feature"></a> Want a Feature?
 
-- Never commit `local.settings.json`, `.azure/`, credentials, tokens, callback keys, Azurite state, or build outputs. Do not log raw connector payloads or source-account details.
-- Use sanitized placeholders in examples, issues, and PRs. Redact tenant/account identifiers, resource IDs, callback URLs, and source data from logs and screenshots. Report suspected credential exposure privately through [Microsoft's security reporting guidance](https://www.microsoft.com/msrc).
-- Keep each sample README accurate for its delivery mode, prerequisites, permissions, setup, and cleanup. Update the parent connector guide if sample paths change.
-- Preserve the Learn metadata on connector-specific sample READMEs: `page_type: sample`, approved language/product slugs, descriptions under 150 characters, and unique, stable `urlFragment` values. Generic samples are intentionally not indexed.
+You can *request* a new feature by [submitting an issue](#submit-issue) to the GitHub Repository.
+If you would like to *implement* a new feature, please submit an issue with a proposal for your
+work first, to be sure that we can use it.
 
-## Submit a pull request
+- **Small features** can be crafted and directly [submitted as a Pull Request](#submit-pr).
 
-Open a focused PR against `main`. Explain the affected sample paths, behavior change, validation results, and any Azure/source permissions needed for manual verification. Update `CHANGELOG.md` under **Unreleased** for user-visible changes.
+## <a name="submit"></a> Submission Guidelines
 
-Microsoft may require a Contributor License Agreement for your contribution; follow the CLA bot's instructions. Respond to review feedback and let the original reviewer confirm that it is resolved.
+### <a name="submit-issue"></a> Submitting an Issue
+
+Before you submit an issue, search the archive, maybe your question was already answered.
+
+If your issue appears to be a bug, and hasn't been reported, open a new issue. Help us to maximize
+the effort we can spend fixing issues and adding new features by not reporting duplicate issues.
+Use the provided issue templates and do not include credentials, connection strings, or other
+sensitive data.
+
+You can file new issues by providing the above information at the corresponding repository's issues
+link: https://github.com/Azure-Samples/functions-connectors-net/issues/new/choose.
+
+### <a name="submit-pr"></a> Submitting a Pull Request (PR)
+
+Before you submit your Pull Request (PR) consider the following guidelines:
+
+- Search the repository (https://github.com/Azure-Samples/functions-connectors-net/pulls) for an open or closed PR
+  that relates to your submission. You don't want to duplicate effort.
+- Make your changes in a new git fork.
+- Commit your changes using a descriptive commit message.
+- Push your fork to GitHub.
+- In GitHub, create a pull request and complete the pull request template.
+- If we suggest changes then:
+  - Make the required updates.
+  - Rebase your fork and force push to your GitHub repository (this will update your Pull Request).
+
+That's it! Thank you for your contribution!
