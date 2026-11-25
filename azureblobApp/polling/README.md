@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Azure Blob Storage polling"
+description: Receive Azure Blob Storage connector events with polling in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-azure-blob-polling-dotnet
+---
+-->
+
 # Azure Blob Storage Polling Triggers (.NET)
 
 Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector) with `DeliveryMode = Poll`. The host receives events outbound from the Connector Namespace; no public callback or tunnel is required. The handler uses `AzureBlobOnUpdatedFilesTriggerPayload` and logs only the trigger name and item count.

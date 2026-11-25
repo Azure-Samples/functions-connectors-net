@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): OneDrive for Business webhook"
+description: Receive OneDrive for Business connector events through webhook delivery in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-onedrive-webhook-dotnet
+---
+-->
+
 # OneDrive for Business Webhook Triggers (.NET)
 
 Azure Functions sample using [Azure.Connectors.Sdk](https://www.nuget.org/packages/Azure.Connectors.Sdk) and the [Connector extension](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Connector). The Connector Namespace delivers authenticated events to the function's public HTTPS callback. Each function logs the trigger name and, for typed batches, the item count (for example, `Received OnNewFile trigger (2 items)`). No item metadata, file content, or payload length is logged. Storage is required for Functions host state and deployment.

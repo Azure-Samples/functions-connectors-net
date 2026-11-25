@@ -1,3 +1,19 @@
+<!--
+---
+name: "Azure Functions Connector Samples (.NET): Azure DevOps polling"
+description: Receive Azure DevOps connector events with polling in a .NET Azure Functions app deployed using Azure Developer CLI (azd).
+page_type: sample
+languages:
+- csharp
+- bicep
+- azdeveloper
+products:
+- azure
+- azure-functions
+urlFragment: functions-connectors-azure-devops-polling-dotnet
+---
+-->
+
 # Azure DevOps - Poll delivery
 
 An independent .NET 10 isolated Function App using Azure.Connectors.Sdk 1.0.0 to receive Connector Namespace Poll events, without a public callback or tunnel. The managed connector identifier is `visualstudioteamservices` (Azure DevOps, formerly VSTS).
